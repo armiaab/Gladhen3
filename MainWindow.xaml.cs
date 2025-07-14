@@ -13,6 +13,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Windows.Graphics.Printing.Workflow;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
@@ -432,5 +433,114 @@ public sealed partial class MainWindow : Window
         {
             Log.Error(ex, "Failed to open log directory: {Path}", logDirectory);
         }
+    }
+
+    private void MenuFlyoutItem_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+
+    private void SortByFileNameAsc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => item.FileName, true);
+        StatusTextBlock.Text = "Sorted by filename (A-Z)";
+    }
+
+    private void SortByFileNameDesc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => item.FileName, false);
+        StatusTextBlock.Text = "Sorted by filename (Z-A)";
+    }
+
+    private void SortByFilePathAsc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => item.FilePath, true);
+        StatusTextBlock.Text = "Sorted by file path (A-Z)";
+    }
+
+    private void SortByFilePathDesc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => item.FilePath, false);
+        StatusTextBlock.Text = "Sorted by file path (Z-A)";
+    }
+
+    private void SortImages<T>(Func<ImageItem, T?> keySelector, bool ascending) where T : IComparable
+    {
+        var selectedItems = ImageGridView.SelectedItems.Cast<ImageItem>().ToList();
+
+        var sortedList = ascending
+            ? ImageItems.OrderBy(keySelector).ToList()
+            : ImageItems.OrderByDescending(keySelector).ToList();
+
+        ImageItems.Clear();
+        foreach (var item in sortedList)
+            ImageItems.Add(item);
+
+        foreach (var item in selectedItems)
+        {
+            var newItem = ImageItems.FirstOrDefault(i => i.FilePath == item.FilePath);
+            if (newItem != null)
+                ImageGridView.SelectedItems.Add(newItem);
+        }
+    }
+
+    private void RemoveSelected_Click(object sender, RoutedEventArgs e)
+    {
+        if (ImageGridView.SelectedItems.Count > 0)
+        {
+            var itemsToRemove = ImageGridView.SelectedItems.Cast<ImageItem>().ToList();
+            foreach (var item in itemsToRemove)
+            {
+                ImageItems.Remove(item);
+            }
+
+            StatusTextBlock.Text = $"Removed {itemsToRemove.Count} image(s)";
+            UpdateUIState();
+        }
+        else
+        {
+            StatusTextBlock.Text = "No images selected to remove";
+        }
+    }
+
+    private void RemoveAll_Click(object sender, RoutedEventArgs e)
+    {
+        int count = ImageItems.Count;
+
+        if (count > 0)
+        {
+            ImageItems.Clear();
+            StatusTextBlock.Text = $"Removed all {count} image(s)";
+            UpdateUIState();
+        }
+        else
+        {
+            StatusTextBlock.Text = "No images to remove";
+        }
+    }
+
+    private void SortByFileDateAsc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => File.GetLastWriteTime(item.FilePath), true);
+        StatusTextBlock.Text = "Sorted by file date (oldest first)";
+    }
+
+    private void SortByFileDateDesc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => File.GetLastWriteTime(item.FilePath), false);
+        StatusTextBlock.Text = "Sorted by file date (newest first)";
+    }
+
+    private void SortByFileSizeDateAsc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => new FileInfo(item.FilePath).Length, true);
+        StatusTextBlock.Text = "Sorted by file size (smallest first)";
+    }
+
+    private void SortByFileSizeDateDesc_Click(object sender, RoutedEventArgs e)
+    {
+        SortImages(item => new FileInfo(item.FilePath).Length, false);
+        StatusTextBlock.Text = "Sorted by file size (largest first)";
     }
 }

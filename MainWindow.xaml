@@ -11,10 +11,10 @@
     mc:Ignorable="d">
 
     <Window.SystemBackdrop>
-        <MicaBackdrop />
+        <MicaBackdrop Kind="Base" />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -23,117 +23,139 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <MenuBar Grid.Row="0" Background="Transparent">
+            <MenuBarItem Title="File">
+                <MenuFlyoutItem Click="MenuFlyoutItem_Click" Text="Exit" />
+            </MenuBarItem>
+            <MenuBarItem Title="Edit">
+                <MenuFlyoutItem Click="SelectAllButton_Click" Text="Select All" />
+                <MenuFlyoutItem Click="DeselectAllButton_Click" Text="Deselect All" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Click="AddImagesButton_Click" Text="Add Images" />
+                <MenuFlyoutItem Click="RemoveSelected_Click" Text="Remove Selected" />
+                <MenuFlyoutItem Click="RemoveAll_Click" Text="Remove All" />
+            </MenuBarItem>
+            <MenuBarItem Title="Sort">
+                <MenuFlyoutItem Click="SortByFileNameAsc_Click" Text="By Filename (A-Z)" />
+                <MenuFlyoutItem Click="SortByFileNameDesc_Click" Text="By Filename (Z-A)" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Click="SortByFilePathAsc_Click" Text="By File Path (A-Z)" />
+                <MenuFlyoutItem Click="SortByFilePathDesc_Click" Text="By File Path (Z-A)" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Click="SortByFileSizeDateAsc_Click" Text="By File Size (Smallest to Largest)" />
+                <MenuFlyoutItem Click="SortByFileSizeDateDesc_Click" Text="By File Size (Largest to Smallest)" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Click="SortByFileDateAsc_Click" Text="By File Date (Oldest to Newest)" />
+                <MenuFlyoutItem Click="SortByFileDateDesc_Click" Text="By File Date (Newest to Oldest)" />
+            </MenuBarItem>
+            <MenuBarItem Title="Tools">
+                <MenuFlyoutItem Click="LogButton_Click" Text="Log" />
+            </MenuBarItem>
+        </MenuBar>
+
         <TextBlock
-            Grid.Row="0"
-            Margin="15"
-            FontSize="18"
+            Grid.Row="1"
+            Margin="24,0,0,12"
+            FontSize="28"
             FontWeight="SemiBold"
             Text="Images to Convert" />
 
-        <StackPanel
-            Grid.Row="1"
-            Margin="15,0,15,10"
-            Orientation="Horizontal">
-            <Button
-                x:Name="SelectAllButton"
-                Margin="0,0,10,0"
-                Click="SelectAllButton_Click"
-                Content="Select All" />
-            <Button
-                x:Name="DeselectAllButton"
-                Click="DeselectAllButton_Click"
-                Content="Deselect All" />
-            <Button
-                x:Name="LogButton"
-                Margin="10,0"
-                Click="LogButton_Click"
-                Content="Open Log Folder" />
-        </StackPanel>
-
-        <GridView
-            x:Name="ImageGridView"
+        <Border
             Grid.Row="2"
-            Padding="15"
-            AllowDrop="True"
-            Background="{ThemeResource AcrylicBackgroundFillColorBaseBrush}"
-            CanDragItems="True"
-            CanReorderItems="True"
-            DragItemsCompleted="ImageGridView_DragItemsCompleted"
-            DragItemsStarting="ImageGridView_DragItemsStarting"
-            DragOver="ImageGridView_DragOver"
-            Drop="ImageGridView_Drop"
-            ReorderMode="Enabled"
-            SelectionMode="Multiple">
-            <GridView.ItemTemplate>
-                <DataTemplate>
-                    <Grid
-                        Width="180"
-                        Height="180"
-                        Margin="5">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="*" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+            Margin="24,0,24,16"
+            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
 
+            <GridView
+                x:Name="ImageGridView"
+                Padding="12"
+                AllowDrop="True"
+                CanDragItems="True"
+                CanReorderItems="True"
+                DragItemsCompleted="ImageGridView_DragItemsCompleted"
+                DragItemsStarting="ImageGridView_DragItemsStarting"
+                DragOver="ImageGridView_DragOver"
+                Drop="ImageGridView_Drop"
+                ReorderMode="Enabled"
+                SelectionMode="Multiple">
+                <GridView.ItemTemplate>
+                    <DataTemplate>
                         <Border
-                            Grid.Row="0"
-                            Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
-                            CornerRadius="4">
-                            <Image
-                                Margin="5"
-                                Source="{Binding ImagePath}"
-                                Stretch="Uniform" />
+                            Width="180"
+                            Height="200"
+                            Margin="8"
+                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <Grid Margin="4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Border
+                                    Grid.Row="0"
+                                    Margin="4"
+                                    CornerRadius="6">
+                                    <Image Source="{Binding ImagePath}" Stretch="Uniform" />
+                                </Border>
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,8,0,4"
+                                    HorizontalAlignment="Center"
+                                    Text="{Binding FileName}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                            </Grid>
                         </Border>
+                    </DataTemplate>
+                </GridView.ItemTemplate>
 
-                        <TextBlock
-                            Grid.Row="1"
-                            Margin="0,5,0,0"
-                            HorizontalAlignment="Center"
-                            Text="{Binding FileName}"
-                            TextTrimming="CharacterEllipsis"
-                            TextWrapping="NoWrap" />
-                    </Grid>
-                </DataTemplate>
-            </GridView.ItemTemplate>
-
-            <GridView.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <ItemsWrapGrid Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-            </GridView.ItemsPanel>
-        </GridView>
+                <GridView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsWrapGrid Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </GridView.ItemsPanel>
+            </GridView>
+        </Border>
 
         <TextBlock
             x:Name="EmptyStateTextBlock"
             Grid.Row="2"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
-            Foreground="{ThemeResource SystemBaseMediumColor}"
+            FontSize="16"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             Text="No images to display. Use the context menu to add images or drag images here" />
 
         <StackPanel
             Grid.Row="3"
-            Padding="10,10,10,0"
+            Padding="24,0,24,12"
             HorizontalAlignment="Right"
             Orientation="Horizontal">
             <Button
-                x:Name="AddImagesButton"
-                Margin="0,0,10,0"
-                Click="AddImagesButton_Click"
-                Content="Add Images" />
-            <Button
                 x:Name="ConvertButton"
-                Margin="10,0"
+                Padding="16,8"
                 Click="ConvertButton_Click"
-                Content="Convert to PDF" />
+                Content="Convert to PDF"
+                Style="{ThemeResource AccentButtonStyle}" />
         </StackPanel>
 
-        <TextBlock
-            x:Name="StatusTextBlock"
+        <Border
             Grid.Row="4"
-            Margin="10,0,0,10"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Center"
-            Text="Ready" />
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <TextBlock
+                x:Name="StatusTextBlock"
+                Margin="24,8"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Center"
+                Text="Ready" />
+        </Border>
     </Grid>
 </Window>
