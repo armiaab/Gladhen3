@@ -14,7 +14,7 @@
 	<Identity
 	  Name="e494132c-6702-4edc-9998-bfe3154694e7"
 	  Publisher="CN=Armia Abdurohman"
-	  Version="1.0.3.0" />
+	  Version="1.0.1.0" />
 
 	<mp:PhoneIdentity PhoneProductId="e494132c-6702-4edc-9998-bfe3154694e7" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
@@ -49,63 +49,18 @@
 
 			<Extensions>
 
-				<!-- File Explorer Context Menus for Various Image Formats -->
 				<desktop4:Extension Category="windows.fileExplorerContextMenus">
 					<desktop4:FileExplorerContextMenus>
-						<!-- JPG/JPEG Files -->
 						<desktop5:ItemType Type=".jpg">
 							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
 						</desktop5:ItemType>
 						<desktop5:ItemType Type=".jpeg">
 							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
 						</desktop5:ItemType>
-						<desktop5:ItemType Type=".jfif">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- PNG Files -->
 						<desktop5:ItemType Type=".png">
 							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
 						</desktop5:ItemType>
-
-						<!-- GIF Files -->
-						<desktop5:ItemType Type=".gif">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- BMP Files -->
 						<desktop5:ItemType Type=".bmp">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- TIFF Files -->
-						<desktop5:ItemType Type=".tiff">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-						<desktop5:ItemType Type=".tif">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- WebP Files -->
-						<desktop5:ItemType Type=".webp">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- HEIF/HEIC Files -->
-						<desktop5:ItemType Type=".heic">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-						<desktop5:ItemType Type=".heif">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- ICO Files -->
-						<desktop5:ItemType Type=".ico">
-							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
-						</desktop5:ItemType>
-
-						<!-- SVG Files -->
-						<desktop5:ItemType Type=".svg">
 							<desktop5:Verb Id="Command1" Clsid="748744E1-F3A0-40BA-B7B3-938A4734EC96" />
 						</desktop5:ItemType>
 					</desktop4:FileExplorerContextMenus>

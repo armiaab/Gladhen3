@@ -1,3 +1,4 @@
+using Gladhen3.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -160,10 +161,8 @@ public sealed partial class MainWindow : Window
 
     private static bool IsImageFile(string filePath)
     {
-        string[] validExtensions = {
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
-        ".webp", ".heic", ".heif", ".svg", ".ico", ".jfif"
-    };
+        string[] validExtensions = [
+        ".jpg", ".jpeg", ".png", ".bmp"];
         var extension = Path.GetExtension(filePath).ToLower();
         return validExtensions.Contains(extension);
     }
@@ -184,9 +183,7 @@ public sealed partial class MainWindow : Window
         picker.FileTypeFilter.Add(".jpg");
         picker.FileTypeFilter.Add(".jpeg");
         picker.FileTypeFilter.Add(".png");
-        picker.FileTypeFilter.Add(".gif");
         picker.FileTypeFilter.Add(".bmp");
-        picker.FileTypeFilter.Add(".tiff");
 
         var hwnd = WindowNative.GetWindowHandle(this);
         InitializeWithWindow.Initialize(picker, hwnd);
@@ -399,11 +396,4 @@ public sealed partial class MainWindow : Window
             StatusTextBlock.Text = $"Added {imageFiles.Count} images";
         }
     }
-}
-
-public class ImageItem
-{
-    public BitmapImage? ImagePath { get; set; }
-    public string? FileName { get; set; }
-    public string? FilePath { get; set; }
 }
