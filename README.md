@@ -9,3 +9,6 @@ Gladhen 3 is winui3 application that allows you to convert your images to a sing
 
 ## Demo
 [here](https://vimeo.com/1100946157)
+
+![](Assets/dashboard.png)
+![](Assets/contextmenu.png)
