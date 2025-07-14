@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Gladhen3 (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "Gladhen3 (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

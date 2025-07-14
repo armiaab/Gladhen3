@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="Gladhen3.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Gladhen3"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    Title="Gladhen3"
+    mc:Ignorable="d">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            Grid.Row="0"
+            Margin="15"
+            FontSize="18"
+            FontWeight="SemiBold"
+            Text="Images to Convert" />
+
+        <StackPanel
+            Grid.Row="1"
+            Margin="15,0,15,10"
+            Orientation="Horizontal">
+            <Button
+                x:Name="SelectAllButton"
+                Margin="0,0,10,0"
+                Click="SelectAllButton_Click"
+                Content="Select All" />
+            <Button
+                x:Name="DeselectAllButton"
+                Click="DeselectAllButton_Click"
+                Content="Deselect All" />
+        </StackPanel>
+
+        <GridView
+            x:Name="ImageGridView"
+            Grid.Row="2"
+            Padding="15"
+            AllowDrop="True"
+            Background="{ThemeResource AcrylicBackgroundFillColorBaseBrush}"
+            CanDragItems="True"
+            CanReorderItems="True"
+            DragItemsCompleted="ImageGridView_DragItemsCompleted"
+            DragItemsStarting="ImageGridView_DragItemsStarting"
+            DragOver="ImageGridView_DragOver"
+            Drop="ImageGridView_Drop"
+            ReorderMode="Enabled"
+            SelectionMode="Multiple">
+            <GridView.ItemTemplate>
+                <DataTemplate>
+                    <Grid
+                        Width="180"
+                        Height="180"
+                        Margin="5">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <Border
+                            Grid.Row="0"
+                            Background="{ThemeResource SystemControlBackgroundBaseLowBrush}"
+                            CornerRadius="4">
+                            <Image
+                                Margin="5"
+                                Source="{Binding ImagePath}"
+                                Stretch="Uniform" />
+                        </Border>
+
+                        <TextBlock
+                            Grid.Row="1"
+                            Margin="0,5,0,0"
+                            HorizontalAlignment="Center"
+                            Text="{Binding FileName}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                    </Grid>
+                </DataTemplate>
+            </GridView.ItemTemplate>
+
+            <GridView.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <ItemsWrapGrid Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </GridView.ItemsPanel>
+        </GridView>
+
+        <TextBlock
+            x:Name="EmptyStateTextBlock"
+            Grid.Row="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Foreground="{ThemeResource SystemBaseMediumColor}"
+            Text="No images to display. Use the context menu to add images or drag images here" />
+
+        <StackPanel
+            Grid.Row="3"
+            Padding="10,10,10,0"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                x:Name="AddImagesButton"
+                Margin="0,0,10,0"
+                Click="AddImagesButton_Click"
+                Content="Add Images" />
+            <Button
+                x:Name="ConvertButton"
+                Margin="10,0"
+                Click="ConvertButton_Click"
+                Content="Convert to PDF" />
+        </StackPanel>
+
+        <TextBlock
+            x:Name="StatusTextBlock"
+            Grid.Row="4"
+            Margin="10,0,0,10"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Center"
+            Text="Ready" />
+    </Grid>
+</Window>
