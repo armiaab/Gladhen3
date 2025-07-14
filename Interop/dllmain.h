@@ -83,9 +83,7 @@ public:
                     if (extension)
                     {
                         const WCHAR* supportedExtensions[] = {
-                            L".jpg", L".jpeg", L".png", L".gif", L".bmp", L".tiff",
-                            L".tif", L".webp", L".heic", L".heif", L".svg",
-                            L".ico", L".jfif"
+                            L".jpg", L".jpeg", L".png", L".bmp"
                         };
 
                         for (int j = 0; j < sizeof(supportedExtensions) / sizeof(supportedExtensions[0]); j++)

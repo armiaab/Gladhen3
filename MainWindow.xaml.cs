@@ -13,7 +13,6 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using Windows.Graphics.Printing.Workflow;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
@@ -30,6 +29,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         ImageGridView.ItemsSource = ImageItems;
+        _ = AppSettings.LoadAsync();
 
         UpdateUIState();
     }
@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
         InitializeComponent();
 
         ImageGridView.ItemsSource = ImageItems;
+        _ = AppSettings.LoadAsync();
 
         if (paths != null && paths.Any())
         {
@@ -247,10 +248,9 @@ public sealed partial class MainWindow : Window
                             {
                                 Title = "Conversion Complete",
                                 Content = $"PDF file created successfully at:\n{outputPath}",
-                                CloseButtonText = "OK"
+                                CloseButtonText = "OK",
+                                XamlRoot = Content.XamlRoot
                             };
-
-                            dialog.XamlRoot = Content.XamlRoot;
                             await dialog.ShowAsync();
                         });
                     }
@@ -302,21 +302,51 @@ public sealed partial class MainWindow : Window
                     var imageWidth = bitmap.Width;
                     var imageHeight = bitmap.Height;
 
-                    var pointWidth = imageWidth * 72.0 / 96.0;
-                    var pointHeight = imageHeight * 72.0 / 96.0;
+                    if (AppSettings.Current.PaperSize == PdfPaperSize.Automatic)
+                    {
+                        var pointWidth = imageWidth * 72.0 / 96.0;
+                        var pointHeight = imageHeight * 72.0 / 96.0;
 
-                    page.Width = new XUnit(pointWidth);
-                    page.Height = new XUnit(pointHeight);
+                        page.Width = new XUnit(pointWidth);
+                        page.Height = new XUnit(pointHeight);
 
-                    using XGraphics gfx = XGraphics.FromPdfPage(page);
+                        using XGraphics gfx = XGraphics.FromPdfPage(page);
+                        using var xImage = XImage.FromFile(imageItem.FilePath!);
+                        gfx.DrawImage(xImage, 0, 0, pointWidth, pointHeight);
+                    }
+                    else
+                    {
+                        SetPageSize(page, AppSettings.Current.PaperSize);
 
-                    using var xImage = XImage.FromFile(imageItem.FilePath!);
+                        bool usePortrait = AppSettings.Current.Orientation == PdfPaperOrientation.Portrait ||
+                                          (AppSettings.Current.Orientation == PdfPaperOrientation.Automatic &&
+                                           imageHeight > imageWidth);
 
-                    gfx.DrawImage(xImage, 0, 0, pointWidth, pointHeight);
+                        if (!usePortrait)
+                        {
+                            var temp = page.Height.Point;
+                            page.Height = page.Width;
+                            page.Width = new XUnit(temp);
+                        }
+
+                        using XGraphics gfx = XGraphics.FromPdfPage(page);
+                        using var xImage = XImage.FromFile(imageItem.FilePath!);
+
+                        double scaleX = page.Width.Point / imageWidth;
+                        double scaleY = page.Height.Point / imageHeight;
+                        double scale = Math.Min(scaleX, scaleY);
+
+                        double width = imageWidth * scale;
+                        double height = imageHeight * scale;
+                        double x = (page.Width.Point - width) / 2;
+                        double y = (page.Height.Point - height) / 2;
+
+                        gfx.DrawImage(xImage, x, y, width, height);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Error processing image {imageItem.FileName}: {ex.Message}");
+                    Log.Logger.Error(ex, $"Error processing image: {imageItem.FilePath}");
                 }
             }
 
@@ -326,6 +356,33 @@ public sealed partial class MainWindow : Window
         {
             Log.Logger.Error(ex, $"Error converting images to PDF: {outputPath}");
             throw;
+        }
+    }
+
+    private static void SetPageSize(PdfPage page, PdfPaperSize size)
+    {
+        switch (size)
+        {
+            case PdfPaperSize.A4:
+                page.Width = XUnit.FromMillimeter(210);
+                page.Height = XUnit.FromMillimeter(297);
+                break;
+            case PdfPaperSize.Letter:
+                page.Width = XUnit.FromInch(8.5);
+                page.Height = XUnit.FromInch(11);
+                break;
+            case PdfPaperSize.Legal:
+                page.Width = XUnit.FromInch(8.5);
+                page.Height = XUnit.FromInch(14);
+                break;
+            case PdfPaperSize.A3:
+                page.Width = XUnit.FromMillimeter(297);
+                page.Height = XUnit.FromMillimeter(420);
+                break;
+            default:
+                page.Width = XUnit.FromMillimeter(210);
+                page.Height = XUnit.FromMillimeter(297);
+                break;
         }
     }
 
@@ -402,6 +459,7 @@ public sealed partial class MainWindow : Window
 
     private void Window_Closed(object sender, WindowEventArgs args)
     {
+        Log.Information("Application closed");
         Log.CloseAndFlushAsync();
     }
 
@@ -522,25 +580,67 @@ public sealed partial class MainWindow : Window
 
     private void SortByFileDateAsc_Click(object sender, RoutedEventArgs e)
     {
-        SortImages(item => File.GetLastWriteTime(item.FilePath), true);
+        SortImages(item => File.GetLastWriteTime(item.FilePath!), true);
         StatusTextBlock.Text = "Sorted by file date (oldest first)";
     }
 
     private void SortByFileDateDesc_Click(object sender, RoutedEventArgs e)
     {
-        SortImages(item => File.GetLastWriteTime(item.FilePath), false);
+        SortImages(item => File.GetLastWriteTime(item.FilePath!), false);
         StatusTextBlock.Text = "Sorted by file date (newest first)";
     }
 
     private void SortByFileSizeDateAsc_Click(object sender, RoutedEventArgs e)
     {
-        SortImages(item => new FileInfo(item.FilePath).Length, true);
+        SortImages(item => new FileInfo(item.FilePath!).Length, true);
         StatusTextBlock.Text = "Sorted by file size (smallest first)";
     }
 
     private void SortByFileSizeDateDesc_Click(object sender, RoutedEventArgs e)
     {
-        SortImages(item => new FileInfo(item.FilePath).Length, false);
+        SortImages(item => new FileInfo(item.FilePath!).Length, false);
         StatusTextBlock.Text = "Sorted by file size (largest first)";
+    }
+
+    private async void SettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "PDF Settings",
+            XamlRoot = Content.XamlRoot,
+            PrimaryButtonText = "Save",
+            CloseButtonText = "Cancel"
+        };
+
+        var panel = new StackPanel { Spacing = 10 };
+
+        panel.Children.Add(new TextBlock { Text = "Paper Size:" });
+        var paperSizeCombo = new ComboBox { Width = 200, HorizontalAlignment = HorizontalAlignment.Left };
+        paperSizeCombo.Items.Add("Automatic (Use Image Size)");
+        paperSizeCombo.Items.Add("A4");
+        paperSizeCombo.Items.Add("Letter");
+        paperSizeCombo.Items.Add("Legal");
+        paperSizeCombo.Items.Add("A3");
+        paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
+        panel.Children.Add(paperSizeCombo);
+
+        panel.Children.Add(new TextBlock { Text = "Orientation:" });
+        var orientationCombo = new ComboBox { Width = 200, HorizontalAlignment = HorizontalAlignment.Left };
+        orientationCombo.Items.Add("Automatic");
+        orientationCombo.Items.Add("Portrait");
+        orientationCombo.Items.Add("Landscape");
+        orientationCombo.SelectedIndex = (int)AppSettings.Current.Orientation;
+        panel.Children.Add(orientationCombo);
+
+        dialog.Content = panel;
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
+            AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
+            await AppSettings.SaveAsync();
+            StatusTextBlock.Text = "Settings saved";
+        }
     }
 }

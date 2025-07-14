@@ -50,6 +50,7 @@
             </MenuBarItem>
             <MenuBarItem Title="Tools">
                 <MenuFlyoutItem Click="LogButton_Click" Text="Log" />
+                <MenuFlyoutItem Click="SettingsButton_Click" Text="Settings" />
             </MenuBarItem>
         </MenuBar>
 
