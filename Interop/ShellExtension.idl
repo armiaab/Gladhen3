@@ -1,0 +1,18 @@
+// ShellExtension.idl : IDL source for ShellExtension
+//
+
+// This file will be processed by the MIDL tool to
+// produce the type library (ShellExtension.tlb) and marshalling code.
+
+import "oaidl.idl";
+import "ocidl.idl";
+
+[
+	uuid(61e6437f-c160-4be1-a712-e207f2f34b44),
+	version(1.0),
+]
+library ShellExtensionLib
+{
+	importlib("stdole2.tlb");
+};
+

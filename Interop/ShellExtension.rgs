@@ -1,0 +1,43 @@
+
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {748744E1-F3A0-40BA-B7B3-938A4734EC96} = s 'Shell Extension Example'
+		{
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			val AppID = s '{748744E1-F3A0-40BA-B7B3-938A4734EC96}'
+			TypeLib = s '{748744E1-F3A0-40BA-B7B3-938A4734EC96}'
+		}
+	}
+
+	NoRemove Directory
+	{
+		NoRemove Background
+		{
+			NoRemove shell
+			{
+				ForceRemove ShellExtensionExample
+				{
+					val MUIVerb = s 'Shell Extension Example'
+					ExplorerCommandHandler = s '{748744E1-F3A0-40BA-B7B3-938A4734EC96}'
+				}
+			}
+		}
+	}
+	
+	NoRemove Directory
+	{
+		NoRemove shell
+		{
+			ForceRemove ShellExtensionExample
+			{
+				val MUIVerb = s 'Shell Extension Example'
+				ExplorerCommandHandler = s '{748744E1-F3A0-40BA-B7B3-938A4734EC96}'
+			}
+		}
+	}
+}

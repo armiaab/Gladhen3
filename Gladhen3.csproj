@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -44,11 +44,12 @@
 		<PackageReference Include="System.Drawing.Common" Version="9.0.7" />
 	</ItemGroup>
 	<ItemGroup>
-		<Content Include="ShellExtension.dll">
-			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
-			<ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
-		</Content>
+	  <Folder Include="Interop\" />
+	</ItemGroup>
+	<ItemGroup>
+	  <None Update="ShellExtension.dll">
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	  </None>
 	</ItemGroup>
 
 	<!--

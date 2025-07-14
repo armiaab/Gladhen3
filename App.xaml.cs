@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.UI.Xaml;
+using Serilog;
+using Windows.Storage;
 
 
 namespace Gladhen3;
@@ -12,9 +15,23 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        var logFilePath = Path.Combine(
+            ApplicationData.Current.LocalFolder.Path,
+            "Logs",
+            "gladhen3-.log");
+
+        Log.Logger = new LoggerConfiguration()
+            .MinimumLevel.Debug()
+            .WriteTo.File(logFilePath,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 7,
+                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+            .CreateLogger();
+
+        Log.Information("Application started");
     }
 
-    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         var cmdArgs = Environment.GetCommandLineArgs();
         var filePaths = new List<string>();
@@ -43,7 +60,7 @@ public partial class App : Application
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Error parsing URI: {ex.Message}");
+                    Log.Error(ex, "Failed to parse gladhen2 URI: {Uri}", arg);
                 }
             }
             else if (arg != cmdArgs[0])

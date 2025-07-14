@@ -4,9 +4,11 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
+using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
@@ -95,17 +97,17 @@ public sealed partial class MainWindow : Window
             }
             catch (FileNotFoundException)
             {
-                System.Diagnostics.Debug.WriteLine($"File not found: {path}");
+                Log.Logger.Error($"File not found: {path}");
             }
             catch (UnauthorizedAccessException)
             {
-                System.Diagnostics.Debug.WriteLine($"Access denied to file: {path}");
+                Log.Logger.Error($"Access denied to file: {path}");
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"Error loading image {path}: {ex.Message}");
-                System.Diagnostics.Debug.WriteLine($"Exception type: {ex.GetType().Name}");
-                System.Diagnostics.Debug.WriteLine($"Stack trace: {ex.StackTrace}");
+                Log.Logger.Error(ex, $"Error loading image from path: {path}");
+                Log.Logger.Error(ex, $"Exception type: {ex.GetType().Name}");
+                Log.Logger.Error(ex, $"Stack trace: {ex.StackTrace}");
             }
         }
 
@@ -129,7 +131,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to create temporary copy: {ex.Message}");
+            Log.Logger.Error(ex, $"Error creating temporary copy of file: {filePath}");
             return null;
         }
     }
@@ -155,7 +157,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error adding image: {ex.Message}");
+            Log.Logger.Error(ex, $"Error adding image from file: {file.Path}");
         }
     }
 
@@ -240,7 +242,7 @@ public sealed partial class MainWindow : Window
                         DispatcherQueue.TryEnqueue(async () => {
                             StatusTextBlock.Text = "PDF creation completed";
 
-                            ContentDialog dialog = new ContentDialog
+                            var dialog = new ContentDialog
                             {
                                 Title = "Conversion Complete",
                                 Content = $"PDF file created successfully at:\n{outputPath}",
@@ -270,7 +272,7 @@ public sealed partial class MainWindow : Window
         }
         else
         {
-            ContentDialog noSelectionDialog = new()
+            var noSelectionDialog = new ContentDialog()
             {
                 Title = "No Images Selected",
                 Content = "Please select one or more images to convert.",
@@ -321,7 +323,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Error creating PDF: {ex.Message}");
+            Log.Logger.Error(ex, $"Error converting images to PDF: {outputPath}");
             throw;
         }
     }
@@ -394,6 +396,41 @@ public sealed partial class MainWindow : Window
             UpdateUIState();
 
             StatusTextBlock.Text = $"Added {imageFiles.Count} images";
+        }
+    }
+
+    private void Window_Closed(object sender, WindowEventArgs args)
+    {
+        Log.CloseAndFlushAsync();
+    }
+
+    private void LogButton_Click(object sender, RoutedEventArgs e)
+    {
+        OpenLogDirectory();
+    }
+
+    public static void OpenLogDirectory()
+    {
+        var logDirectory = Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
+        try
+        {
+            if (Directory.Exists(logDirectory))
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = logDirectory,
+                    UseShellExecute = true
+                });
+                Log.Information("Log directory opened: {Path}", logDirectory);
+            }
+            else
+            {
+                Log.Warning("Log directory does not exist: {Path}", logDirectory);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to open log directory: {Path}", logDirectory);
         }
     }
 }
