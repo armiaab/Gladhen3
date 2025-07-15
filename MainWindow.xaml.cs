@@ -1,21 +1,16 @@
 using Gladhen3.Models;
+using Gladhen3.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media.Imaging;
-using PdfSharp.Drawing;
-using PdfSharp.Pdf;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.Pickers;
-using Windows.Storage.Streams;
 using WinRT.Interop;
 
 namespace Gladhen3;
@@ -23,10 +18,14 @@ namespace Gladhen3;
 public sealed partial class MainWindow : Window
 {
     private ObservableCollection<ImageItem> ImageItems { get; set; } = [];
+    private readonly ImageService _imageService;
+    private readonly PdfService _pdfService;
 
     public MainWindow()
     {
         InitializeComponent();
+        _imageService = new ImageService();
+        _pdfService = new PdfService();
 
         ImageGridView.ItemsSource = ImageItems;
         _ = AppSettings.LoadAsync();
@@ -37,6 +36,8 @@ public sealed partial class MainWindow : Window
     public MainWindow(IEnumerable<string> paths)
     {
         InitializeComponent();
+        _imageService = new ImageService();
+        _pdfService = new PdfService();
 
         ImageGridView.ItemsSource = ImageItems;
         _ = AppSettings.LoadAsync();
@@ -48,36 +49,6 @@ public sealed partial class MainWindow : Window
         }
         else
             UpdateUIState();
-    }
-
-    private static async Task<StorageFile?> OpenFileWithTempCopyAsync(string filePath)
-    {
-        try
-        {
-            if (!File.Exists(filePath))
-                return null;
-
-            var fileName = string.Concat(Path.GetFileNameWithoutExtension(filePath), "_", Guid.NewGuid().ToString().AsSpan(0, 8), Path.GetExtension(filePath));
-
-            var tempPath = Path.Combine(Path.GetTempPath(), fileName);
-
-            File.Copy(filePath, tempPath, true);
-
-            return await StorageFile.GetFileFromPathAsync(tempPath);
-        }
-        catch (Exception ex)
-        {
-            Log.Logger.Error(ex, $"Error creating temporary copy of file: {filePath}");
-            return null;
-        }
-    }
-
-    private static bool IsImageFile(string filePath)
-    {
-        string[] validExtensions = [
-        ".jpg", ".jpeg", ".png", ".bmp"];
-        var extension = Path.GetExtension(filePath).ToLower();
-        return validExtensions.Contains(extension);
     }
 
     private void UpdateUIState()
@@ -93,10 +64,10 @@ public sealed partial class MainWindow : Window
             SuggestedStartLocation = PickerLocationId.PicturesLibrary
         };
 
-        picker.FileTypeFilter.Add(".jpg");
-        picker.FileTypeFilter.Add(".jpeg");
-        picker.FileTypeFilter.Add(".png");
-        picker.FileTypeFilter.Add(".bmp");
+        foreach (var ext in FileService.ValidImageExtensions)
+        {
+            picker.FileTypeFilter.Add(ext);
+        }
 
         var hwnd = WindowNative.GetWindowHandle(this);
         InitializeWithWindow.Initialize(picker, hwnd);
@@ -107,7 +78,9 @@ public sealed partial class MainWindow : Window
         {
             foreach (var file in files)
             {
-                await AddImageFromFileAsync(file);
+                var item = await _imageService.CreateImageItemFromFileAsync(file);
+                if (item != null)
+                    ImageItems.Add(item);
             }
 
             UpdateUIState();
@@ -130,8 +103,8 @@ public sealed partial class MainWindow : Window
                     SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
                     SuggestedFileName = "SelectedImages",
                     FileTypeChoices = {
-                    { "PDF Document", new List<string>() { ".pdf" } }
-                }
+                        { "PDF Document", new List<string>() { ".pdf" } }
+                    }
                 };
 
                 var hwnd = WindowNative.GetWindowHandle(this);
@@ -148,7 +121,7 @@ public sealed partial class MainWindow : Window
 
                         await Task.Run(() =>
                         {
-                            ConvertImagesToPdf(selectedItems, outputPath);
+                            _pdfService.ConvertImagesToPdf(selectedItems, outputPath);
                         });
 
                         DispatcherQueue.TryEnqueue(async () =>
@@ -196,108 +169,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static void ConvertImagesToPdf(List<ImageItem> images, string outputPath)
-    {
-        try
-        {
-            PdfDocument document = new();
-            document.Info.Title = "Converted Images";
-
-            foreach (var imageItem in images)
-            {
-                try
-                {
-                    using var bitmap = new Bitmap(imageItem.FilePath!);
-
-                    var page = document.AddPage();
-
-                    var imageWidth = bitmap.Width;
-                    var imageHeight = bitmap.Height;
-
-                    if (AppSettings.Current.PaperSize == PdfPaperSize.Automatic)
-                    {
-                        var pointWidth = imageWidth * 72.0 / 96.0;
-                        var pointHeight = imageHeight * 72.0 / 96.0;
-
-                        page.Width = new XUnit(pointWidth);
-                        page.Height = new XUnit(pointHeight);
-
-                        using XGraphics gfx = XGraphics.FromPdfPage(page);
-                        using var xImage = XImage.FromFile(imageItem.FilePath!);
-                        gfx.DrawImage(xImage, 0, 0, pointWidth, pointHeight);
-                    }
-                    else
-                    {
-                        SetPageSize(page, AppSettings.Current.PaperSize);
-
-                        bool usePortrait = AppSettings.Current.Orientation == PdfPaperOrientation.Portrait ||
-                                          (AppSettings.Current.Orientation == PdfPaperOrientation.Automatic &&
-                                           imageHeight > imageWidth);
-
-                        if (!usePortrait)
-                        {
-                            var temp = page.Height.Point;
-                            page.Height = page.Width;
-                            page.Width = new XUnit(temp);
-                        }
-
-                        using XGraphics gfx = XGraphics.FromPdfPage(page);
-                        using var xImage = XImage.FromFile(imageItem.FilePath!);
-
-                        double scaleX = page.Width.Point / imageWidth;
-                        double scaleY = page.Height.Point / imageHeight;
-                        double scale = Math.Min(scaleX, scaleY);
-
-                        double width = imageWidth * scale;
-                        double height = imageHeight * scale;
-                        double x = (page.Width.Point - width) / 2;
-                        double y = (page.Height.Point - height) / 2;
-
-                        gfx.DrawImage(xImage, x, y, width, height);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Logger.Error(ex, $"Error processing image: {imageItem.FilePath}");
-                }
-            }
-
-            document.Save(outputPath);
-        }
-        catch (Exception ex)
-        {
-            Log.Logger.Error(ex, $"Error converting images to PDF: {outputPath}");
-            throw;
-        }
-    }
-
-    private static void SetPageSize(PdfPage page, PdfPaperSize size)
-    {
-        switch (size)
-        {
-            case PdfPaperSize.A4:
-                page.Width = XUnit.FromMillimeter(210);
-                page.Height = XUnit.FromMillimeter(297);
-                break;
-            case PdfPaperSize.Letter:
-                page.Width = XUnit.FromInch(8.5);
-                page.Height = XUnit.FromInch(11);
-                break;
-            case PdfPaperSize.Legal:
-                page.Width = XUnit.FromInch(8.5);
-                page.Height = XUnit.FromInch(14);
-                break;
-            case PdfPaperSize.A3:
-                page.Width = XUnit.FromMillimeter(297);
-                page.Height = XUnit.FromMillimeter(420);
-                break;
-            default:
-                page.Width = XUnit.FromMillimeter(210);
-                page.Height = XUnit.FromMillimeter(297);
-                break;
-        }
-    }
-
     private void ImageGridView_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
         StatusTextBlock.Text = "Reordering images...";
@@ -307,8 +178,6 @@ public sealed partial class MainWindow : Window
     {
         if (args.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move)
         {
-            var newOrder = ImageItems.Select(item => item.FileName).ToList();
-
             DispatcherQueue.TryEnqueue(async () =>
             {
                 StatusTextBlock.Text = "Reordering complete";
@@ -354,39 +223,13 @@ public sealed partial class MainWindow : Window
 
     private void LogButton_Click(object sender, RoutedEventArgs e)
     {
-        OpenLogDirectory();
-    }
-
-    public static void OpenLogDirectory()
-    {
-        var logDirectory = Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
-        try
-        {
-            if (Directory.Exists(logDirectory))
-            {
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = logDirectory,
-                    UseShellExecute = true
-                });
-                Log.Information("Log directory opened: {Path}", logDirectory);
-            }
-            else
-            {
-                Log.Warning("Log directory does not exist: {Path}", logDirectory);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Failed to open log directory: {Path}", logDirectory);
-        }
+        FileService.OpenLogDirectory();
     }
 
     private void MenuFlyoutItem_Click(object sender, RoutedEventArgs e)
     {
         Close();
     }
-
 
     private void SortByFileNameAsc_Click(object sender, RoutedEventArgs e)
     {
@@ -533,103 +376,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task<List<ImageItem>> LoadImagesFromPaths(IEnumerable<string> paths)
-    {
-        var addedItems = new List<ImageItem>();
-        foreach (var path in paths)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(path))
-                    continue;
-
-                string normalizedPath = path;
-
-                if (path.Length >= 260 && !path.StartsWith(@"\\?\"))
-                {
-                    normalizedPath = @"\\?\" + path;
-                }
-
-                if (!File.Exists(normalizedPath))
-                {
-                    System.Diagnostics.Debug.WriteLine($"File not found: {path}");
-                    continue;
-                }
-
-                if (IsImageFile(normalizedPath))
-                {
-                    StorageFile? file = null;
-                    try
-                    {
-                        file = await StorageFile.GetFileFromPathAsync(normalizedPath);
-                    }
-                    catch (Exception ex) when (ex is ArgumentException || ex is FileNotFoundException)
-                    {
-                        try
-                        {
-                            file = await StorageFile.GetFileFromPathAsync(path);
-                        }
-                        catch
-                        {
-                            file = await OpenFileWithTempCopyAsync(path);
-                        }
-                    }
-
-                    if (file != null)
-                    {
-                        var newItem = await AddImageFromFileAsync(file);
-                        if (newItem != null)
-                            addedItems.Add(newItem);
-                    }
-                }
-            }
-            catch (FileNotFoundException)
-            {
-                Log.Logger.Error($"File not found: {path}");
-            }
-            catch (UnauthorizedAccessException)
-            {
-                Log.Logger.Error($"Access denied to file: {path}");
-            }
-            catch (Exception ex)
-            {
-                Log.Logger.Error(ex, $"Error loading image from path: {path}");
-                Log.Logger.Error(ex, $"Exception type: {ex.GetType().Name}");
-                Log.Logger.Error(ex, $"Stack trace: {ex.StackTrace}");
-            }
-        }
-
-        UpdateUIState();
-        return addedItems;
-    }
-
-    private async Task<ImageItem?> AddImageFromFileAsync(StorageFile file)
-    {
-        try
-        {
-            var bitmapImage = new BitmapImage();
-            using (IRandomAccessStream stream = await file.OpenAsync(FileAccessMode.Read))
-            {
-                await bitmapImage.SetSourceAsync(stream);
-            }
-
-            var item = new ImageItem
-            {
-                ImagePath = bitmapImage,
-                FileName = file.Name,
-                FilePath = file.Path
-            };
-
-            ImageItems.Add(item);
-            return item;
-        }
-        catch (Exception ex)
-        {
-            Log.Logger.Error(ex, $"Error adding image from file: {file.Path}");
-            return null;
-        }
-    }
-
     private void SelectNewlyAddedImages(List<ImageItem> newItems)
     {
         if (newItems.Count == 0)
@@ -646,7 +392,14 @@ public sealed partial class MainWindow : Window
 
     public async Task LoadImagesAndSelectNew(IEnumerable<string> paths)
     {
-        var newItems = await LoadImagesFromPaths(paths);
+        var newItems = await _imageService.LoadImagesFromPaths(paths);
+
+        foreach (var item in newItems)
+        {
+            ImageItems.Add(item);
+        }
+
+        UpdateUIState();
         SelectNewlyAddedImages(newItems);
     }
 
@@ -657,7 +410,7 @@ public sealed partial class MainWindow : Window
             var items = await e.DataView.GetStorageItemsAsync();
 
             var imageFiles = items.OfType<StorageFile>()
-                                  .Where(file => IsImageFile(file.Path))
+                                  .Where(file => FileService.IsImageFile(file.Path))
                                   .ToList();
 
             StatusTextBlock.Text = $"Adding {imageFiles.Count} images...";
@@ -665,9 +418,12 @@ public sealed partial class MainWindow : Window
             var newItems = new List<ImageItem>();
             foreach (var file in imageFiles)
             {
-                var newItem = await AddImageFromFileAsync(file);
+                var newItem = await _imageService.CreateImageItemFromFileAsync(file);
                 if (newItem != null)
+                {
+                    ImageItems.Add(newItem);
                     newItems.Add(newItem);
+                }
             }
 
             SelectNewlyAddedImages(newItems);
