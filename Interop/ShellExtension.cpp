@@ -104,7 +104,7 @@ STDAPI DllUnregisterServer(void)
     if (SUCCEEDED(hr))
     {
         const WCHAR* supportedExtensions[] = {
-            L".jpg", L".jpeg", L".png", L".gif", L".bmp"
+            L".jpg", L".jpeg", L".png", L".bmp"
         };
 
         for (int i = 0; i < sizeof(supportedExtensions) / sizeof(supportedExtensions[0]); i++)

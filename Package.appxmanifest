@@ -14,7 +14,7 @@
 	<Identity
 	  Name="e494132c-6702-4edc-9998-bfe3154694e7"
 	  Publisher="CN=Armia Abdurohman"
-	  Version="1.0.1.0" />
+	  Version="1.0.2.0" />
 
 	<mp:PhoneIdentity PhoneProductId="e494132c-6702-4edc-9998-bfe3154694e7" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 

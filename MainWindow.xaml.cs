@@ -107,26 +107,26 @@ public sealed partial class MainWindow : Window
                     }
                 };
 
-                var hwnd = WindowNative.GetWindowHandle(this);
-                InitializeWithWindow.Initialize(savePicker, hwnd);
+            var hwnd = WindowNative.GetWindowHandle(this);
+            InitializeWithWindow.Initialize(savePicker, hwnd);
 
-                StorageFile file = await savePicker.PickSaveFileAsync();
-                if (file != null)
+            StorageFile file = await savePicker.PickSaveFileAsync();
+            if (file != null)
+            {
+                StatusTextBlock.Text = "Creating PDF...";
+
+                try
                 {
-                    StatusTextBlock.Text = "Creating PDF...";
-
-                    try
-                    {
-                        string outputPath = file.Path;
+                    string outputPath = file.Path;
 
                         await Task.Run(() =>
                         {
                             _pdfService.ConvertImagesToPdf(selectedItems, outputPath);
                         });
 
-                        DispatcherQueue.TryEnqueue(async () =>
-                        {
-                            StatusTextBlock.Text = "PDF creation completed";
+                    DispatcherQueue.TryEnqueue(async () =>
+                    {
+                        StatusTextBlock.Text = "PDF creation completed";
 
                             var dialog = new ContentDialog
                             {
@@ -332,6 +332,11 @@ public sealed partial class MainWindow : Window
     {
         SortImages(item => new FileInfo(item.FilePath!).Length, false);
         StatusTextBlock.Text = "Sorted by file size (largest first)";
+    }
+
+    private void RegisterShellExtension_Click(object sender, RoutedEventArgs e)
+    {
+        //TODO: implement soon
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)

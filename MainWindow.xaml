@@ -25,13 +25,13 @@
 
         <MenuBar Grid.Row="0" Background="Transparent">
             <MenuBarItem Title="File">
+                <MenuFlyoutItem Click="AddImagesButton_Click" Text="Add Images" />
                 <MenuFlyoutItem Click="MenuFlyoutItem_Click" Text="Exit" />
             </MenuBarItem>
             <MenuBarItem Title="Edit">
                 <MenuFlyoutItem Click="SelectAllButton_Click" Text="Select All" />
                 <MenuFlyoutItem Click="DeselectAllButton_Click" Text="Deselect All" />
                 <MenuFlyoutSeparator />
-                <MenuFlyoutItem Click="AddImagesButton_Click" Text="Add Images" />
                 <MenuFlyoutItem Click="RemoveSelected_Click" Text="Remove Selected" />
                 <MenuFlyoutItem Click="RemoveAll_Click" Text="Remove All" />
             </MenuBarItem>
@@ -51,6 +51,7 @@
             <MenuBarItem Title="Tools">
                 <MenuFlyoutItem Click="LogButton_Click" Text="Log" />
                 <MenuFlyoutItem Click="SettingsButton_Click" Text="Settings" />
+                <MenuFlyoutItem Click="RegisterShellExtension_Click" Text="Register ShellExtension" />
             </MenuBarItem>
         </MenuBar>
 
