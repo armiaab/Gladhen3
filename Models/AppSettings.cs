@@ -53,19 +53,3 @@ public class AppSettings
         }
     }
 }
-
-public enum PdfPaperSize
-{
-    Automatic,
-    A4,
-    Letter,
-    Legal,
-    A3
-}
-
-public enum PdfPaperOrientation
-{
-    Automatic,
-    Portrait,
-    Landscape
-}

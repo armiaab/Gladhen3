@@ -44,76 +44,10 @@ public sealed partial class MainWindow : Window
         if (paths != null && paths.Any())
         {
             StatusTextBlock.Text = $"Load {paths.Select(p => Path.GetFileName(p)).Aggregate((current, next) => $"{current}, {next}")}";
-            LoadImagesFromPaths(paths);
+            _ = LoadImagesAndSelectNew(paths);
         }
-
-        UpdateUIState();
-    }
-
-    private async void LoadImagesFromPaths(IEnumerable<string> paths)
-    {
-        foreach (var path in paths)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(path))
-                    continue;
-
-                string normalizedPath = path;
-
-                if (path.Length >= 260 && !path.StartsWith(@"\\?\"))
-                {
-                    normalizedPath = @"\\?\" + path;
-                }
-
-                if (!File.Exists(normalizedPath))
-                {
-                    System.Diagnostics.Debug.WriteLine($"File not found: {path}");
-                    continue;
-                }
-
-                if (IsImageFile(normalizedPath))
-                {
-                    StorageFile? file = null;
-                    try
-                    {
-                        file = await StorageFile.GetFileFromPathAsync(normalizedPath);
-                    }
-                    catch (Exception ex) when (ex is ArgumentException || ex is FileNotFoundException)
-                    {
-                        try
-                        {
-                            file = await StorageFile.GetFileFromPathAsync(path);
-                        }
-                        catch
-                        {
-                            file = await OpenFileWithTempCopyAsync(path);
-                        }
-                    }
-
-                    if (file != null)
-                    {
-                        await AddImageFromFileAsync(file);
-                    }
-                }
-            }
-            catch (FileNotFoundException)
-            {
-                Log.Logger.Error($"File not found: {path}");
-            }
-            catch (UnauthorizedAccessException)
-            {
-                Log.Logger.Error($"Access denied to file: {path}");
-            }
-            catch (Exception ex)
-            {
-                Log.Logger.Error(ex, $"Error loading image from path: {path}");
-                Log.Logger.Error(ex, $"Exception type: {ex.GetType().Name}");
-                Log.Logger.Error(ex, $"Stack trace: {ex.StackTrace}");
-            }
-        }
-
-        UpdateUIState();
+        else
+            UpdateUIState();
     }
 
     private static async Task<StorageFile?> OpenFileWithTempCopyAsync(string filePath)
@@ -135,31 +69,6 @@ public sealed partial class MainWindow : Window
         {
             Log.Logger.Error(ex, $"Error creating temporary copy of file: {filePath}");
             return null;
-        }
-    }
-
-    private async Task AddImageFromFileAsync(StorageFile file)
-    {
-        try
-        {
-            var bitmapImage = new BitmapImage();
-            using (IRandomAccessStream stream = await file.OpenAsync(FileAccessMode.Read))
-            {
-                await bitmapImage.SetSourceAsync(stream);
-            }
-
-            var item = new ImageItem
-            {
-                ImagePath = bitmapImage,
-                FileName = file.Name,
-                FilePath = file.Path
-            };
-
-            ImageItems.Add(item);
-        }
-        catch (Exception ex)
-        {
-            Log.Logger.Error(ex, $"Error adding image from file: {file.Path}");
         }
     }
 
@@ -237,11 +146,13 @@ public sealed partial class MainWindow : Window
                     {
                         string outputPath = file.Path;
 
-                        await Task.Run(() => {
+                        await Task.Run(() =>
+                        {
                             ConvertImagesToPdf(selectedItems, outputPath);
                         });
 
-                        DispatcherQueue.TryEnqueue(async () => {
+                        DispatcherQueue.TryEnqueue(async () =>
+                        {
                             StatusTextBlock.Text = "PDF creation completed";
 
                             var dialog = new ContentDialog
@@ -256,7 +167,8 @@ public sealed partial class MainWindow : Window
                     }
                     catch (Exception ex)
                     {
-                        DispatcherQueue.TryEnqueue(() => {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
                             StatusTextBlock.Text = $"Error: {ex.Message}";
                         });
                     }
@@ -432,29 +344,6 @@ public sealed partial class MainWindow : Window
         e.DragUIOverride.Caption = "Add images";
         e.DragUIOverride.IsContentVisible = true;
         e.DragUIOverride.IsCaptionVisible = true;
-    }
-
-    private async void ImageGridView_Drop(object sender, DragEventArgs e)
-    {
-        if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
-        {
-            var items = await e.DataView.GetStorageItemsAsync();
-
-            var imageFiles = items.OfType<StorageFile>()
-                                  .Where(file => IsImageFile(file.Path))
-                                  .ToList();
-
-            StatusTextBlock.Text = $"Adding {imageFiles.Count} images...";
-
-            foreach (var file in imageFiles)
-            {
-                await AddImageFromFileAsync(file);
-            }
-
-            UpdateUIState();
-
-            StatusTextBlock.Text = $"Added {imageFiles.Count} images";
-        }
     }
 
     private void Window_Closed(object sender, WindowEventArgs args)
@@ -641,6 +530,150 @@ public sealed partial class MainWindow : Window
             AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
             await AppSettings.SaveAsync();
             StatusTextBlock.Text = "Settings saved";
+        }
+    }
+
+    private async Task<List<ImageItem>> LoadImagesFromPaths(IEnumerable<string> paths)
+    {
+        var addedItems = new List<ImageItem>();
+        foreach (var path in paths)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path))
+                    continue;
+
+                string normalizedPath = path;
+
+                if (path.Length >= 260 && !path.StartsWith(@"\\?\"))
+                {
+                    normalizedPath = @"\\?\" + path;
+                }
+
+                if (!File.Exists(normalizedPath))
+                {
+                    System.Diagnostics.Debug.WriteLine($"File not found: {path}");
+                    continue;
+                }
+
+                if (IsImageFile(normalizedPath))
+                {
+                    StorageFile? file = null;
+                    try
+                    {
+                        file = await StorageFile.GetFileFromPathAsync(normalizedPath);
+                    }
+                    catch (Exception ex) when (ex is ArgumentException || ex is FileNotFoundException)
+                    {
+                        try
+                        {
+                            file = await StorageFile.GetFileFromPathAsync(path);
+                        }
+                        catch
+                        {
+                            file = await OpenFileWithTempCopyAsync(path);
+                        }
+                    }
+
+                    if (file != null)
+                    {
+                        var newItem = await AddImageFromFileAsync(file);
+                        if (newItem != null)
+                            addedItems.Add(newItem);
+                    }
+                }
+            }
+            catch (FileNotFoundException)
+            {
+                Log.Logger.Error($"File not found: {path}");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                Log.Logger.Error($"Access denied to file: {path}");
+            }
+            catch (Exception ex)
+            {
+                Log.Logger.Error(ex, $"Error loading image from path: {path}");
+                Log.Logger.Error(ex, $"Exception type: {ex.GetType().Name}");
+                Log.Logger.Error(ex, $"Stack trace: {ex.StackTrace}");
+            }
+        }
+
+        UpdateUIState();
+        return addedItems;
+    }
+
+    private async Task<ImageItem?> AddImageFromFileAsync(StorageFile file)
+    {
+        try
+        {
+            var bitmapImage = new BitmapImage();
+            using (IRandomAccessStream stream = await file.OpenAsync(FileAccessMode.Read))
+            {
+                await bitmapImage.SetSourceAsync(stream);
+            }
+
+            var item = new ImageItem
+            {
+                ImagePath = bitmapImage,
+                FileName = file.Name,
+                FilePath = file.Path
+            };
+
+            ImageItems.Add(item);
+            return item;
+        }
+        catch (Exception ex)
+        {
+            Log.Logger.Error(ex, $"Error adding image from file: {file.Path}");
+            return null;
+        }
+    }
+
+    private void SelectNewlyAddedImages(List<ImageItem> newItems)
+    {
+        if (newItems.Count == 0)
+            return;
+
+        ImageGridView.SelectedItems.Clear();
+        foreach (var item in newItems)
+        {
+            ImageGridView.SelectedItems.Add(item);
+        }
+
+        StatusTextBlock.Text = $"Selected {newItems.Count} newly added images";
+    }
+
+    public async Task LoadImagesAndSelectNew(IEnumerable<string> paths)
+    {
+        var newItems = await LoadImagesFromPaths(paths);
+        SelectNewlyAddedImages(newItems);
+    }
+
+    private async void ImageGridView_Drop(object sender, DragEventArgs e)
+    {
+        if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+        {
+            var items = await e.DataView.GetStorageItemsAsync();
+
+            var imageFiles = items.OfType<StorageFile>()
+                                  .Where(file => IsImageFile(file.Path))
+                                  .ToList();
+
+            StatusTextBlock.Text = $"Adding {imageFiles.Count} images...";
+
+            var newItems = new List<ImageItem>();
+            foreach (var file in imageFiles)
+            {
+                var newItem = await AddImageFromFileAsync(file);
+                if (newItem != null)
+                    newItems.Add(newItem);
+            }
+
+            SelectNewlyAddedImages(newItems);
+            UpdateUIState();
+
+            StatusTextBlock.Text = $"Added {imageFiles.Count} images";
         }
     }
 }
