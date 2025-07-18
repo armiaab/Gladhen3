@@ -6,6 +6,8 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -89,23 +91,31 @@ public sealed partial class MainWindow : Window
 
     private async void ConvertButton_Click(object sender, RoutedEventArgs e)
     {
-        var selectedItems = ImageGridView.SelectedItems.Cast<ImageItem>().ToList();
-
-        if (selectedItems.Count > 0)
+        var selectedItems = ImageGridView.Items.Cast<ImageItem>().ToList();
+        if (selectedItems.Count == 0)
         {
-            var message = $"Converting {selectedItems.Count} selected images to PDF...";
-            StatusTextBlock.Text = message;
-
-            try
+            var dialog = new ContentDialog
             {
-                var savePicker = new FileSavePicker
-                {
-                    SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-                    SuggestedFileName = "SelectedImages",
-                    FileTypeChoices = {
+                Title = "Failed to convert pdf",
+                Content = "Add images to convert",
+                CloseButtonText = "OK",
+                XamlRoot = Content.XamlRoot
+            };
+            await dialog.ShowAsync();
+            return;
+        }
+        var message = $"Converting {selectedItems.Count} selected images to PDF...";
+        StatusTextBlock.Text = message;
+        try
+        {
+            var savePicker = new FileSavePicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = "SelectedImages",
+                FileTypeChoices = {
                         { "PDF Document", new List<string>() { ".pdf" } }
                     }
-                };
+            };
 
             var hwnd = WindowNative.GetWindowHandle(this);
             InitializeWithWindow.Initialize(savePicker, hwnd);
@@ -119,53 +129,41 @@ public sealed partial class MainWindow : Window
                 {
                     string outputPath = file.Path;
 
-                        await Task.Run(() =>
-                        {
-                            _pdfService.ConvertImagesToPdf(selectedItems, outputPath);
-                        });
+                    await Task.Run(() =>
+                    {
+                        _pdfService.ConvertImagesToPdf(selectedItems, outputPath);
+                    });
 
                     DispatcherQueue.TryEnqueue(async () =>
                     {
                         StatusTextBlock.Text = "PDF creation completed";
 
-                            var dialog = new ContentDialog
-                            {
-                                Title = "Conversion Complete",
-                                Content = $"PDF file created successfully at:\n{outputPath}",
-                                CloseButtonText = "OK",
-                                XamlRoot = Content.XamlRoot
-                            };
-                            await dialog.ShowAsync();
-                        });
-                    }
-                    catch (Exception ex)
-                    {
-                        DispatcherQueue.TryEnqueue(() =>
+                        var dialog = new ContentDialog
                         {
-                            StatusTextBlock.Text = $"Error: {ex.Message}";
-                        });
-                    }
+                            Title = "Conversion Complete",
+                            Content = $"PDF file created successfully at:\n{outputPath}",
+                            CloseButtonText = "OK",
+                            XamlRoot = Content.XamlRoot
+                        };
+                        await dialog.ShowAsync();
+                    });
                 }
-                else
+                catch (Exception ex)
                 {
-                    StatusTextBlock.Text = "Conversion cancelled";
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        StatusTextBlock.Text = $"Error: {ex.Message}";
+                    });
                 }
             }
-            catch (Exception ex)
+            else
             {
-                StatusTextBlock.Text = $"Error: {ex.Message}";
+                StatusTextBlock.Text = "Conversion cancelled";
             }
         }
-        else
+        catch (Exception ex)
         {
-            var noSelectionDialog = new ContentDialog()
-            {
-                Title = "No Images Selected",
-                Content = "Please select one or more images to convert.",
-                CloseButtonText = "OK",
-                XamlRoot = Content.XamlRoot
-            };
-            await noSelectionDialog.ShowAsync();
+            StatusTextBlock.Text = $"Error: {ex.Message}";
         }
     }
 
@@ -334,9 +332,100 @@ public sealed partial class MainWindow : Window
         StatusTextBlock.Text = "Sorted by file size (largest first)";
     }
 
-    private void RegisterShellExtension_Click(object sender, RoutedEventArgs e)
+    private async void RegisterShellExtension_Click(object sender, RoutedEventArgs e)
     {
-        //TODO: implement soon
+        await RegisterShellExtension();
+    }
+
+    private async Task RegisterShellExtension()
+    {
+        try
+        {
+            string dllPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ShellExtension.dll");
+
+            if (!File.Exists(dllPath))
+            {
+                StatusTextBlock.Text = "Shell extension DLL not found.";
+                Log.Error("Shell extension DLL not found at path: {Path}", dllPath);
+                return;
+            }
+
+            Log.Information("Attempting to register shell extension: {Path}", dllPath);
+
+            bool is64BitOperatingSystem = Environment.Is64BitOperatingSystem;
+            Log.Information("64-bit OS: {Is64Bit}", is64BitOperatingSystem);
+
+            var regsvr32Path = is64BitOperatingSystem ?
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86), "regsvr32.exe") :
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "regsvr32.exe");
+
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = regsvr32Path,
+                Arguments = $"\"{dllPath}\"",
+                Verb = "runas",
+                UseShellExecute = true,
+                CreateNoWindow = false
+            };
+
+            StatusTextBlock.Text = "Registering shell extension...";
+            Log.Information("Executing: {Command} {Args}", regsvr32Path, startInfo.Arguments);
+
+            using var process = Process.Start(startInfo);
+            process?.WaitForExit();
+
+            int exitCode = process?.ExitCode ?? -1;
+
+            if (exitCode == 0)
+            {
+                StatusTextBlock.Text = "Shell extension registered successfully.";
+                Log.Information("Shell extension registered successfully");
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Registration Successful",
+                    Content = "The shell extension has been registered. You can now right-click on image files to convert them to PDF.",
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                };
+
+                await dialog.ShowAsync();
+            }
+            else
+            {
+                string errorMessage = $"Failed to register shell extension (exit code: {exitCode}).";
+                StatusTextBlock.Text = errorMessage;
+                Log.Error(errorMessage);
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Registration Failed",
+                    Content = $"Could not register the shell extension.\n\nError code: {exitCode}\n\nPlease check that you're running as administrator and that the DLL is compatible with your system architecture.",
+                    CloseButtonText = "OK",
+                    XamlRoot = Content.XamlRoot
+                };
+
+                await dialog.ShowAsync();
+            }
+        }
+        catch (Win32Exception ex)
+        {
+            string message = "Failed to register shell extension. Administrative privileges required.";
+            StatusTextBlock.Text = message;
+            Log.Error(ex, message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            string message = "Access denied when trying to register shell extension.";
+            StatusTextBlock.Text = message;
+            Log.Error(ex, message);
+        }
+        catch (Exception ex)
+        {
+            string message = $"Error registering shell extension: {ex.Message}";
+            StatusTextBlock.Text = message;
+            Log.Error(ex, message);
+        }
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
