@@ -6,12 +6,11 @@ Gladhen 3 is winui3 application that allows you to convert your images to a sing
 - Context menu integration
 - Drag and drop support
 - Supports png, jpg, jpeg and bmp formats
+- Cutomize the page size and orientation
+- Reorder images before conversion
 
 ## Demo
-[video demo](https://vimeo.com/1100946157)
-
-![](Assets/dashboard.png)
-![](Assets/contextmenu.png)
+![](docs/demo.gif)
 
 ## Installation
 Currently, the application is still in development, but you can download the latest version from [Releases](https://github.com/armiaab/Gladhen3/releases).
