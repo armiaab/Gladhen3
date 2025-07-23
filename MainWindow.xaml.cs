@@ -526,4 +526,35 @@ public sealed partial class MainWindow : Window
             StatusTextBlock.Text = $"Added {imageFiles.Count} images";
         }
     }
+
+    private async void AboutButton_Click(object sender, RoutedEventArgs e)
+    {
+        var contentPanel = new StackPanel { Spacing = 8 };
+        contentPanel.Children.Add(new TextBlock
+        {
+            Text = "Gladhen3 is a modern image to PDF converter.",
+            TextWrapping = TextWrapping.Wrap
+        });
+        contentPanel.Children.Add(new TextBlock { Text = "Version: 1.0.0" });
+
+        var repoPanel = new StackPanel { Orientation = Orientation.Horizontal };
+        repoPanel.Children.Add(new TextBlock { Text = "Repository: ", VerticalAlignment = VerticalAlignment.Center });
+
+        var hyperlink = new HyperlinkButton
+        {
+            Content = "https://github.com/armiaab/Gladhen3",
+            NavigateUri = new Uri("https://github.com/armiaab/Gladhen3")
+        };
+        repoPanel.Children.Add(hyperlink);
+        contentPanel.Children.Add(repoPanel);
+
+        var dialog = new ContentDialog
+        {
+            Title = "About Gladhen3",
+            Content = contentPanel,
+            CloseButtonText = "OK",
+            XamlRoot = Content.XamlRoot
+        };
+        await dialog.ShowAsync();
+    }
 }

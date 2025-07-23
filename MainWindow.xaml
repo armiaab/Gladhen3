@@ -53,6 +53,9 @@
                 <MenuFlyoutItem Click="SettingsButton_Click" Text="Settings" />
                 <MenuFlyoutItem Click="RegisterShellExtension_Click" Text="Register ShellExtension" />
             </MenuBarItem>
+            <MenuBarItem Title="Help">
+                <MenuFlyoutItem Click="AboutButton_Click" Text="About" />
+            </MenuBarItem>
         </MenuBar>
 
         <TextBlock
