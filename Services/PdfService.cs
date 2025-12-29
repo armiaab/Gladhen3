@@ -5,7 +5,6 @@ using PdfSharp.Pdf.IO;
 using Serilog;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.IO;
 
 namespace Gladhen3.Services;
@@ -18,32 +17,43 @@ public class PdfService
     public void CreatePdfFromDocuments(List<DocumentItem> items, string outputPath)
     {
         var tempFiles = new List<string>();
+        var useCustomPageSize = AppSettings.Current.PaperSize != PdfPaperSize.Automatic;
 
         try
         {
-            var pageList = new List<(string PdfPath, int PageIndex)>();
-
-            foreach (var item in items)
+            if (useCustomPageSize)
             {
-                if (item.Type == DocumentType.Image)
+                // When custom page size is set, we need to re-render all pages
+                CreatePdfWithCustomPageSize(items, outputPath);
+            }
+            else
+            {
+                // Automatic mode: use original sizes, just merge
+                var pageList = new List<(string PdfPath, int PageIndex)>();
+
+                foreach (var item in items)
                 {
-                    var tempPath = Path.Combine(Path.GetTempPath(), $"gladhen_{Guid.NewGuid()}.pdf");
-                    CreateSingleImagePdf(item.FilePath, tempPath);
-                    tempFiles.Add(tempPath);
-                    pageList.Add((tempPath, 0));
-                }
-                else if (item.Type == DocumentType.PdfPage)
-                {
-                    var sourcePath = item.SourcePdfPath ?? item.FilePath;
-                    if (!string.IsNullOrEmpty(sourcePath))
+                    if (item.Type == DocumentType.Image)
                     {
-                        pageList.Add((sourcePath, item.PageNumber - 1));
+                        var tempPath = Path.Combine(Path.GetTempPath(), $"gladhen_{Guid.NewGuid()}.pdf");
+                        CreateSingleImagePdf(item.FilePath, tempPath);
+                        tempFiles.Add(tempPath);
+                        pageList.Add((tempPath, 0));
+                    }
+                    else if (item.Type == DocumentType.PdfPage)
+                    {
+                        var sourcePath = item.SourcePdfPath ?? item.FilePath;
+                        if (!string.IsNullOrEmpty(sourcePath))
+                        {
+                            pageList.Add((sourcePath, item.PageNumber - 1));
+                        }
                     }
                 }
+
+                MergePages(pageList, outputPath);
             }
 
-            MergePages(pageList, outputPath);
-            Log.Information("PDF created with {PageCount} pages: {OutputPath}", pageList.Count, outputPath);
+            Log.Information("PDF created with {PageCount} pages: {OutputPath}", items.Count, outputPath);
         }
         finally
         {
@@ -55,54 +65,193 @@ public class PdfService
         }
     }
 
+    /// <summary>
+    /// Creates a PDF with all pages resized to the custom page size
+    /// </summary>
+    private static void CreatePdfWithCustomPageSize(List<DocumentItem> items, string outputPath)
+    {
+        using var outputDocument = new PdfDocument();
+        outputDocument.Info.Title = "Created with Gladhen3";
+
+        var currentPdfPath = string.Empty;
+        PdfDocument? currentInputDoc = null;
+
+        try
+        {
+            foreach (var item in items)
+            {
+                if (item.Type == DocumentType.Image)
+                {
+                    // Add image with custom page size
+                    AddImageToDocument(outputDocument, item.FilePath);
+                }
+                else if (item.Type == DocumentType.PdfPage)
+                {
+                    var sourcePath = item.SourcePdfPath ?? item.FilePath;
+                    if (string.IsNullOrEmpty(sourcePath)) continue;
+
+                    // Load source PDF if different from current
+                    if (sourcePath != currentPdfPath)
+                    {
+                        currentInputDoc?.Dispose();
+                        currentInputDoc = PdfReader.Open(sourcePath, PdfDocumentOpenMode.Import);
+                        currentPdfPath = sourcePath;
+                    }
+
+                    if (currentInputDoc != null && item.PageNumber > 0 && item.PageNumber <= currentInputDoc.PageCount)
+                    {
+                        // Re-render PDF page to custom size
+                        AddPdfPageToDocument(outputDocument, currentInputDoc, item.PageNumber - 1);
+                    }
+                }
+            }
+        }
+        finally
+        {
+            currentInputDoc?.Dispose();
+        }
+
+        outputDocument.Save(outputPath);
+    }
+
+    /// <summary>
+    /// Adds an image to the document with custom page size settings
+    /// </summary>
+    private static void AddImageToDocument(PdfDocument document, string imagePath)
+    {
+        var page = document.AddPage();
+
+        using var xImage = XImage.FromFile(imagePath);
+        var imageWidthPt = xImage.PointWidth;
+        var imageHeightPt = xImage.PointHeight;
+
+        // Set the specified page size
+        SetPageSize(page, AppSettings.Current.PaperSize);
+
+        // Determine orientation
+        var isImageLandscape = imageWidthPt > imageHeightPt;
+        var usePortrait = AppSettings.Current.Orientation switch
+        {
+            PdfPaperOrientation.Portrait => true,
+            PdfPaperOrientation.Landscape => false,
+            _ => !isImageLandscape // Automatic: match image orientation
+        };
+
+        // Swap page dimensions if needed for landscape
+        if (!usePortrait)
+        {
+            (page.Width, page.Height) = (page.Height, page.Width);
+        }
+
+        using var gfx = XGraphics.FromPdfPage(page);
+
+        // Get margin from settings
+        var marginPt = AppSettings.Current.GetMarginInPoints();
+        var availableWidth = page.Width.Point - (marginPt * 2);
+        var availableHeight = page.Height.Point - (marginPt * 2);
+
+        // Calculate scale to fit within available area while maintaining aspect ratio
+        var scaleX = availableWidth / imageWidthPt;
+        var scaleY = availableHeight / imageHeightPt;
+        var scale = Math.Min(scaleX, scaleY);
+
+        // Don't scale up if image is smaller than available area
+        scale = Math.Min(scale, 1.0);
+
+        var drawWidth = imageWidthPt * scale;
+        var drawHeight = imageHeightPt * scale;
+
+        // Center the image on the page
+        var x = (page.Width.Point - drawWidth) / 2;
+        var y = (page.Height.Point - drawHeight) / 2;
+
+        gfx.DrawImage(xImage, x, y, drawWidth, drawHeight);
+    }
+
+    /// <summary>
+    /// Adds a PDF page to the document, re-rendered to custom page size
+    /// </summary>
+    private static void AddPdfPageToDocument(PdfDocument document, PdfDocument sourceDoc, int pageIndex)
+    {
+        var sourcePage = sourceDoc.Pages[pageIndex];
+        var sourceWidth = sourcePage.Width.Point;
+        var sourceHeight = sourcePage.Height.Point;
+
+        // Create new page with custom size
+        var newPage = document.AddPage();
+        SetPageSize(newPage, AppSettings.Current.PaperSize);
+
+        // Determine orientation based on source page or setting
+        var isSourceLandscape = sourceWidth > sourceHeight;
+        var usePortrait = AppSettings.Current.Orientation switch
+        {
+            PdfPaperOrientation.Portrait => true,
+            PdfPaperOrientation.Landscape => false,
+            _ => !isSourceLandscape // Automatic: match source orientation
+        };
+
+        // Swap page dimensions if needed for landscape
+        if (!usePortrait)
+        {
+            (newPage.Width, newPage.Height) = (newPage.Height, newPage.Width);
+        }
+
+        using var gfx = XGraphics.FromPdfPage(newPage);
+
+        // Get margin from settings
+        var marginPt = AppSettings.Current.GetMarginInPoints();
+        var availableWidth = newPage.Width.Point - (marginPt * 2);
+        var availableHeight = newPage.Height.Point - (marginPt * 2);
+
+        // We need to import the page first to get a form we can draw
+        // Create a temporary document to extract the page as a form
+        using var tempDoc = new PdfDocument();
+        var importedPage = tempDoc.AddPage(sourcePage);
+
+        // Create XPdfForm from the source file and page
+        var sourcePath = sourceDoc.FullPath;
+        if (!string.IsNullOrEmpty(sourcePath))
+        {
+            using var form = XPdfForm.FromFile(sourcePath);
+            form.PageIndex = pageIndex;
+
+            // Calculate scale to fit within available area while maintaining aspect ratio
+            var scaleX = availableWidth / sourceWidth;
+            var scaleY = availableHeight / sourceHeight;
+            var scale = Math.Min(scaleX, scaleY);
+
+            // Don't scale up if source is smaller than available area
+            scale = Math.Min(scale, 1.0);
+
+            var drawWidth = sourceWidth * scale;
+            var drawHeight = sourceHeight * scale;
+
+            // Center the content on the page
+            var x = (newPage.Width.Point - drawWidth) / 2;
+            var y = (newPage.Height.Point - drawHeight) / 2;
+
+            gfx.DrawImage(form, x, y, drawWidth, drawHeight);
+        }
+    }
+
     private static void CreateSingleImagePdf(string imagePath, string outputPath)
     {
         using var document = new PdfDocument();
         var page = document.AddPage();
-        using var bitmap = new Bitmap(imagePath);
 
-        var imageWidth = bitmap.Width;
-        var imageHeight = bitmap.Height;
+        // Load image using PDFsharp's XImage
+        using var xImage = XImage.FromFile(imagePath);
 
-        if (AppSettings.Current.PaperSize == PdfPaperSize.Automatic)
-        {
-            var pointWidth = imageWidth * 72.0 / 96.0;
-            var pointHeight = imageHeight * 72.0 / 96.0;
-            page.Width = new XUnit(pointWidth);
-            page.Height = new XUnit(pointHeight);
+        // Get image dimensions in points (PDFsharp uses 72 DPI internally)
+        var imageWidthPt = xImage.PointWidth;
+        var imageHeightPt = xImage.PointHeight;
 
-            using var gfx = XGraphics.FromPdfPage(page);
-            using var xImage = XImage.FromFile(imagePath);
-            gfx.DrawImage(xImage, 0, 0, pointWidth, pointHeight);
-        }
-        else
-        {
-            SetPageSize(page, AppSettings.Current.PaperSize);
+        // Use image's natural size in points (Automatic mode)
+        page.Width = new XUnit(imageWidthPt);
+        page.Height = new XUnit(imageHeightPt);
 
-            var usePortrait = AppSettings.Current.Orientation == PdfPaperOrientation.Portrait ||
-                (AppSettings.Current.Orientation == PdfPaperOrientation.Automatic && imageHeight > imageWidth);
-
-            if (!usePortrait)
-            {
-                var temp = page.Height.Point;
-                page.Height = page.Width;
-                page.Width = new XUnit(temp);
-            }
-
-            using var gfx = XGraphics.FromPdfPage(page);
-            using var xImage = XImage.FromFile(imagePath);
-
-            var scaleX = page.Width.Point / imageWidth;
-            var scaleY = page.Height.Point / imageHeight;
-            var scale = Math.Min(scaleX, scaleY);
-
-            var width = imageWidth * scale;
-            var height = imageHeight * scale;
-            var x = (page.Width.Point - width) / 2;
-            var y = (page.Height.Point - height) / 2;
-
-            gfx.DrawImage(xImage, x, y, width, height);
-        }
+        using var gfx = XGraphics.FromPdfPage(page);
+        gfx.DrawImage(xImage, 0, 0, imageWidthPt, imageHeightPt);
 
         document.Save(outputPath);
     }

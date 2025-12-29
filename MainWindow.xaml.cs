@@ -824,9 +824,34 @@ public sealed partial class MainWindow : Window
                 }
                 else
                 {
-                    // Reset to fit view
-                    scrollViewer.ChangeView(null, null, 1f);
-                    zoomText.Text = "100%";
+                    // Calculate zoom to fit image in container
+                    // Container is 500px height, width varies but typically ~700px
+                    var containerWidth = imageContainer.ActualWidth > 0 ? imageContainer.ActualWidth : 700;
+                    var containerHeight = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
+
+                    var imageWidth = bitmap.PixelWidth;
+                    var imageHeight = bitmap.PixelHeight;
+
+                    if (imageWidth > 0 && imageHeight > 0)
+                    {
+                        // Calculate the zoom factor needed to fit the image
+                        var zoomX = containerWidth / imageWidth;
+                        var zoomY = containerHeight / imageHeight;
+                        var fitZoom = (float)Math.Min(zoomX, zoomY);
+
+                        // Clamp to valid range and cap at 1.0 (don't zoom in past 100%)
+                        fitZoom = Math.Clamp(fitZoom, 0.1f, 1.0f);
+
+                        // Apply the calculated zoom
+                        scrollViewer.ChangeView(0, 0, fitZoom);
+                        zoomText.Text = $"{(int)(fitZoom * 100)}%";
+                    }
+                    else
+                    {
+                        // Fallback to 100%
+                        scrollViewer.ChangeView(0, 0, 1f);
+                        zoomText.Text = "100%";
+                    }
                 }
             }
             catch (Exception ex)
@@ -884,7 +909,22 @@ public sealed partial class MainWindow : Window
 
         fitButton.Click += (s, args) =>
         {
-            scrollViewer.ChangeView(0, 0, 1f);
+            // Calculate zoom to fit
+            var containerWidth = imageContainer.ActualWidth > 0 ? imageContainer.ActualWidth : 700;
+            var containerHeight = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
+
+            if (image.Source is BitmapImage bmp && bmp.PixelWidth > 0 && bmp.PixelHeight > 0)
+            {
+                var zoomX = containerWidth / bmp.PixelWidth;
+                var zoomY = containerHeight / bmp.PixelHeight;
+                var fitZoom = (float)Math.Min(zoomX, zoomY);
+                fitZoom = Math.Clamp(fitZoom, 0.1f, 1.0f);
+                scrollViewer.ChangeView(0, 0, fitZoom);
+            }
+            else
+            {
+                scrollViewer.ChangeView(0, 0, 1f);
+            }
         };
 
         // Keyboard navigation
@@ -1105,13 +1145,14 @@ public sealed partial class MainWindow : Window
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        var panel = new StackPanel { Spacing = 12 };
+        var panel = new StackPanel { Spacing = 16 };
 
+        // Paper Size section
         panel.Children.Add(new TextBlock
-        {
-            Text = "Paper Size (for images):",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
+   {
+      Text = "Paper Size (for images):",
+         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+    });
 
         var paperSizeCombo = new ComboBox { Width = 220 };
         paperSizeCombo.Items.Add("Automatic (Use Image Size)");
@@ -1120,37 +1161,67 @@ public sealed partial class MainWindow : Window
         paperSizeCombo.Items.Add("Legal");
         paperSizeCombo.Items.Add("A3");
         paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
-        panel.Children.Add(paperSizeCombo);
+      panel.Children.Add(paperSizeCombo);
 
+    // Orientation section
         panel.Children.Add(new TextBlock
-        {
-            Text = "Orientation:",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 8, 0, 0)
-        });
+  {
+ Text = "Orientation:",
+          FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+    Margin = new Thickness(0, 4, 0, 0)
+  });
 
         var orientationCombo = new ComboBox { Width = 220 };
         orientationCombo.Items.Add("Automatic");
         orientationCombo.Items.Add("Portrait");
-        orientationCombo.Items.Add("Landscape");
+     orientationCombo.Items.Add("Landscape");
         orientationCombo.SelectedIndex = (int)AppSettings.Current.Orientation;
-        panel.Children.Add(orientationCombo);
+     panel.Children.Add(orientationCombo);
+
+  // Margin section
+        panel.Children.Add(new TextBlock
+  {
+            Text = "Page Margins:",
+     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+       Margin = new Thickness(0, 4, 0, 0)
+ });
+
+        var marginCombo = new ComboBox { Width = 220 };
+        marginCombo.Items.Add("None (0\")");
+  marginCombo.Items.Add("Narrow (0.25\")");
+  marginCombo.Items.Add("Normal (0.5\")");
+        marginCombo.Items.Add("Wide (1\")");
+        marginCombo.Items.Add("Extra Wide (1.5\")");
+     marginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
+      panel.Children.Add(marginCombo);
+
+        // Info text
+        var infoText = new TextBlock
+        {
+   Text = "Note: Margins only apply when using a specific page size (not Automatic).",
+       FontSize = 12,
+       Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, 8, 0, 0)
+        };
+        panel.Children.Add(infoText);
 
         var dialog = new ContentDialog
-        {
-            Title = "PDF Settings",
+     {
+         Title = "PDF Settings",
             Content = panel,
-            PrimaryButtonText = "Save",
+     PrimaryButtonText = "Save",
             CloseButtonText = "Cancel",
-            XamlRoot = Content.XamlRoot
+       XamlRoot = Content.XamlRoot
         };
 
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
+       AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
             AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
-            await AppSettings.SaveAsync();
-            StatusTextBlock.Text = "Settings saved";
+     AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
+        await AppSettings.SaveAsync();
+          StatusTextBlock.Text = "Settings saved";
         }
     }
 

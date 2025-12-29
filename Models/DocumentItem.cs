@@ -7,7 +7,7 @@ namespace Gladhen3.Models;
 
 public enum DocumentType
 {
-  Image,
+    Image,
     PdfPage
 }
 
@@ -18,20 +18,20 @@ public class DocumentItem : INotifyPropertyChanged
     public string FileName { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
     public DocumentType Type { get; set; }
-    
+
     public BitmapImage? Thumbnail
     {
         get => _thumbnail;
-     set
+        set
         {
             if (_thumbnail != value)
-       {
-    _thumbnail = value;
+            {
+                _thumbnail = value;
                 OnPropertyChanged();
             }
         }
-  }
-    
+    }
+
     public int PageNumber { get; set; } = 1;
     public int TotalPages { get; set; } = 1;
     public string FileSize { get; set; } = string.Empty;

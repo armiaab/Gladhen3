@@ -145,7 +145,7 @@
                     CornerRadius="4"
                     ToolTipService.ToolTip="Select Mode (Ctrl+E)"
                     Unchecked="SelectModeToggle_Unchecked">
-                    <FontIcon FontSize="14" Glyph="&#xE762;" />
+                    <FontIcon FontSize="13" Glyph="&#xE762;" />
                 </ToggleButton>
 
                 <Border
@@ -161,7 +161,7 @@
                     CornerRadius="4"
                     IsChecked="True"
                     ToolTipService.ToolTip="Thumbnails">
-                    <FontIcon FontSize="14" Glyph="&#xF0E2;" />
+                    <FontIcon FontSize="13" Glyph="&#xF0E2;" />
                 </ToggleButton>
                 <ToggleButton
                     x:Name="ListViewToggle"
@@ -170,7 +170,7 @@
                     Checked="ListViewToggle_Checked"
                     CornerRadius="4"
                     ToolTipService.ToolTip="List">
-                    <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+                    <FontIcon FontSize="13" Glyph="&#xE8FD;" />
                 </ToggleButton>
             </StackPanel>
         </Grid>

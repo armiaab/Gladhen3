@@ -10,11 +10,28 @@ public class AppSettings
 {
     public PdfPaperSize PaperSize { get; set; } = PdfPaperSize.Automatic;
     public PdfPaperOrientation Orientation { get; set; } = PdfPaperOrientation.Automatic;
+    public PdfPageMargin Margin { get; set; } = PdfPageMargin.None;
 
     private const string SettingsFileName = "appSettings.json";
     private static AppSettings _current = new();
 
     public static AppSettings Current => _current;
+
+    /// <summary>
+    /// Gets the margin in points (72 points = 1 inch)
+    /// </summary>
+    public double GetMarginInPoints()
+    {
+        return Margin switch
+        {
+            PdfPageMargin.None => 0,
+            PdfPageMargin.Narrow => 18, // 0.25 inch
+            PdfPageMargin.Normal => 36,      // 0.5 inch
+            PdfPageMargin.Wide => 72,     // 1 inch
+            PdfPageMargin.ExtraWide => 108,  // 1.5 inch
+            _ => 36
+        };
+    }
 
     public static async Task LoadAsync()
     {

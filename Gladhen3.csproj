@@ -56,7 +56,6 @@
 		<PackageReference Include="System.Drawing.Common" Version="9.0.7" />
 	</ItemGroup>
 	<ItemGroup>
-	  <Folder Include="Helpers\" />
 	  <Folder Include="Interop\" />
 	</ItemGroup>
 	
