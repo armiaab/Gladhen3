@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
 		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -11,10 +11,17 @@
 		<UseWinUI>true</UseWinUI>
 		<EnableMsixTooling>true</EnableMsixTooling>
 		<Nullable>enable</Nullable>
+		<!-- Application icon for exe and shell extension -->
+		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
 	</PropertyGroup>
-	<ItemGroup>
-	  <Content Remove="Assets\contextmenu.png" />
-	</ItemGroup>
+
+	<!-- ShellExtension DLL path based on platform and configuration -->
+	<PropertyGroup>
+		<ShellExtensionDllPath Condition="'$(Platform)' == 'x64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
+		<ShellExtensionDllPath Condition="'$(Platform)' == 'x86'">$(SolutionDir)Win32\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
+		<ShellExtensionDllPath Condition="'$(Platform)' == 'ARM64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
+		<ShellExtensionDllPathFallback>$(SolutionDir)ShellExtension.dll</ShellExtensionDllPathFallback>
+	</PropertyGroup>
 
 	<ItemGroup>
 		<Content Include="Assets\SplashScreen.scale-200.png" />
@@ -22,8 +29,10 @@
 		<Content Include="Assets\Square150x150Logo.scale-200.png" />
 		<Content Include="Assets\Square44x44Logo.scale-200.png" />
 		<Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" />
-		<Content Include="Assets\StoreLogo.png" />
 		<Content Include="Assets\Wide310x150Logo.scale-200.png" />
+		<Content Include="Assets\app.ico">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
 	</ItemGroup>
 
 	<ItemGroup>
@@ -47,10 +56,18 @@
 		<PackageReference Include="System.Drawing.Common" Version="9.0.7" />
 	</ItemGroup>
 	<ItemGroup>
+	  <Folder Include="Helpers\" />
 	  <Folder Include="Interop\" />
 	</ItemGroup>
+	
+	<!-- Reference ShellExtension.dll from build output or fallback to root -->
 	<ItemGroup>
-	  <None Update="ShellExtension.dll">
+	  <None Include="$(ShellExtensionDllPath)" Condition="Exists('$(ShellExtensionDllPath)')">
+	    <Link>ShellExtension.dll</Link>
+	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+	</None>
+	  <None Include="$(ShellExtensionDllPathFallback)" Condition="!Exists('$(ShellExtensionDllPath)') And Exists('$(ShellExtensionDllPathFallback)')">
+	    <Link>ShellExtension.dll</Link>
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	</ItemGroup>
@@ -80,4 +97,18 @@
 		<AppxBundle>Never</AppxBundle>
 		<HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
 	</PropertyGroup>
+
+	<!-- Copy ShellExtension.dll from C++ build output to Gladhen3 output -->
+	<Target Name="CopyShellExtensionDll" AfterTargets="Build">
+		<PropertyGroup>
+			<ShellExtensionSource Condition="'$(Platform)' == 'x64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionSource>
+			<ShellExtensionSource Condition="'$(Platform)' == 'x86'">$(SolutionDir)Win32\$(Configuration)\ShellExtension.dll</ShellExtensionSource>
+			<ShellExtensionSource Condition="'$(Platform)' == 'ARM64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionSource>
+			<ShellExtensionFallback>$(SolutionDir)ShellExtension.dll</ShellExtensionFallback>
+		</PropertyGroup>
+		<!-- Copy from C++ build output if exists -->
+		<Copy SourceFiles="$(ShellExtensionSource)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(ShellExtensionSource)')" />
+		<!-- Fallback: copy from solution root if C++ build output doesn't exist -->
+		<Copy SourceFiles="$(ShellExtensionFallback)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="!Exists('$(ShellExtensionSource)') And Exists('$(ShellExtensionFallback)')" />
+	</Target>
 </Project>

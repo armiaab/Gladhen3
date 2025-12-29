@@ -5,6 +5,7 @@
 
 #define IDS_PROJNAME                    100
 #define IDR_SHELLEXTENSION              101
+#define IDR_MERGEPDFEXTENSION        102
 
 // Next default values for new objects
 //
