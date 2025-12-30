@@ -158,6 +158,7 @@
                     Width="36"
                     Height="36"
                     Checked="GridViewToggle_Checked"
+                    Unchecked="GridViewToggle_Unchecked"
                     CornerRadius="4"
                     IsChecked="True"
                     ToolTipService.ToolTip="Thumbnails">
@@ -168,6 +169,7 @@
                     Width="36"
                     Height="36"
                     Checked="ListViewToggle_Checked"
+                    Unchecked="ListViewToggle_Unchecked"
                     CornerRadius="4"
                     ToolTipService.ToolTip="List">
                     <FontIcon FontSize="13" Glyph="&#xE8FD;" />

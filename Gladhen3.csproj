@@ -69,6 +69,7 @@
 	    <Link>ShellExtension.dll</Link>
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
+	  <None Include=".github\workflows\build-and-release.yml" />
 	</ItemGroup>
 
 	<!--

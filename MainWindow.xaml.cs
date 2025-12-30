@@ -453,10 +453,28 @@ public sealed partial class MainWindow : Window
         UpdateViewToggle();
     }
 
+    private void GridViewToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        // Prevent unchecking - re-check if this was the active view
+        if (_isGridView && GridViewToggle != null)
+        {
+            GridViewToggle.IsChecked = true;
+        }
+    }
+
     private void ListViewToggle_Checked(object sender, RoutedEventArgs e)
     {
         _isGridView = false;
         UpdateViewToggle();
+    }
+
+    private void ListViewToggle_Unchecked(object sender, RoutedEventArgs e)
+    {
+        // Prevent unchecking - re-check if this was the active view
+        if (!_isGridView && ListViewToggle != null)
+        {
+            ListViewToggle.IsChecked = true;
+        }
     }
 
     private void SwitchToGridView_Click(object sender, RoutedEventArgs e)
