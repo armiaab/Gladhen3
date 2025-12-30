@@ -4,7 +4,7 @@ on:
   push:
     branches: [master, main]
     tags:
-      - "v*"
+      - 'v*'
   pull_request:
     branches: [master, main]
   workflow_dispatch:
@@ -35,13 +35,13 @@ jobs:
           echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
 
       - name: Restore
-        run: dotnet restore Gladhen3.csproj
+        run: dotnet restore Gladhen3.csproj -r win-x64
 
       - name: Build
         run: dotnet build Gladhen3.csproj -c Release -p:Platform=x64 --no-restore
 
       - name: Publish
-        run: dotnet publish Gladhen3.csproj -c Release -p:Platform=x64 --self-contained true -o publish
+        run: dotnet publish Gladhen3.csproj -c Release -r win-x64 --self-contained true -o publish
 
       - name: Create ZIP
         shell: pwsh
