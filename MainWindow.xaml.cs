@@ -49,7 +49,7 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            var hwnd = WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
 
@@ -315,8 +315,6 @@ public sealed partial class MainWindow : Window
             try
             {
                 BitmapImage? thumbnail = null;
-
-                // Load thumbnail on background/IO thread conceptually, but BitmapImage needs UI thread
                 if (item.Type == DocumentType.Image)
                 {
                     thumbnail = await LoadImageThumbnailAsync(item.FilePath);
@@ -326,7 +324,6 @@ public sealed partial class MainWindow : Window
                     thumbnail = await LoadPdfThumbnailAsync(item);
                 }
 
-                // Update on UI thread
                 if (thumbnail != null)
                 {
                     item.Thumbnail = thumbnail;
@@ -455,7 +452,6 @@ public sealed partial class MainWindow : Window
 
     private void GridViewToggle_Unchecked(object sender, RoutedEventArgs e)
     {
-        // Prevent unchecking - re-check if this was the active view
         if (_isGridView && GridViewToggle != null)
         {
             GridViewToggle.IsChecked = true;
@@ -498,33 +494,27 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            // Don't preview in select mode
             if (_isSelectMode) return;
 
-            // Check if we have items
             if (_documentItems.Count == 0) return;
 
-            // Find the item that was double-clicked by traversing up the visual tree
             var element = e.OriginalSource as FrameworkElement;
             DocumentItem? clickedItem = null;
 
             while (element != null)
             {
-                // Check if this element has a DocumentItem as DataContext
                 if (element.DataContext is DocumentItem item)
                 {
                     clickedItem = item;
                     break;
                 }
 
-                // Stop if we've reached the GridView/ListView itself (not inside an item)
                 if (element == DocumentGridView || element == DocumentListView)
                     break;
 
                 element = element.Parent as FrameworkElement;
             }
 
-            // Only open preview if we actually clicked on a document item with valid data
             if (clickedItem != null && !string.IsNullOrEmpty(clickedItem.FilePath))
             {
                 await ShowPreviewDialogAsync(clickedItem);
@@ -555,17 +545,15 @@ public sealed partial class MainWindow : Window
             MaxWidth = 1000
         };
 
-        // Main layout grid
         var mainGrid = new Grid();
         mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Footer
 
-        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Left nav
-        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Content
-        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Right nav
+        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-        // Image container with background
         var imageContainer = new Border
         {
             Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorSecondaryBrush"],
@@ -599,7 +587,6 @@ public sealed partial class MainWindow : Window
         Grid.SetRow(imageContainer, 1);
         Grid.SetColumn(imageContainer, 1);
 
-        // Navigation buttons with subtle style
         var prevButton = new Button
         {
             Content = new FontIcon { Glyph = "\uE76B", FontSize = 16 },
@@ -626,7 +613,6 @@ public sealed partial class MainWindow : Window
         Grid.SetRow(nextButton, 1);
         Grid.SetColumn(nextButton, 2);
 
-        // Header with title and actions
         var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -702,7 +688,6 @@ public sealed partial class MainWindow : Window
         headerGrid.Children.Add(titleText);
         headerGrid.Children.Add(headerActions);
 
-        // Footer with file info and page indicator
         var footerGrid = new Grid { Margin = new Thickness(0, 12, 0, 0) };
         footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -748,7 +733,6 @@ public sealed partial class MainWindow : Window
         footerGrid.Children.Add(fileInfoPanel);
         footerGrid.Children.Add(pageIndicator);
 
-        // Add all to main grid
         mainGrid.Children.Add(headerGrid);
         mainGrid.Children.Add(prevButton);
         mainGrid.Children.Add(imageContainer);
@@ -758,7 +742,6 @@ public sealed partial class MainWindow : Window
         dialog.Content = mainGrid;
         dialog.CloseButtonText = "Close";
 
-        // Loading indicator
         var loadingRing = new ProgressRing
         {
             IsActive = false,
@@ -768,14 +751,12 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        // Update zoom text when zoom changes
         scrollViewer.ViewChanged += (s, args) =>
         {
             var zoomPercent = (int)(scrollViewer.ZoomFactor * 100);
             zoomText.Text = $"{zoomPercent}%";
         };
 
-        // Function to load and display item
         async Task LoadItemAsync(int index)
         {
             if (index < 0 || index >= _documentItems.Count) return;
@@ -783,18 +764,15 @@ public sealed partial class MainWindow : Window
             var item = _documentItems[index];
             currentIndex = index;
 
-            // Update UI
             titleText.Text = item.DisplayName;
             filePathText.Text = item.FilePath;
             pageText.Text = $"{index + 1} / {_documentItems.Count}";
 
-            // Update nav button states
             prevButton.IsEnabled = index > 0;
             nextButton.IsEnabled = index < _documentItems.Count - 1;
             prevButton.Opacity = index > 0 ? 0.8 : 0.3;
             nextButton.Opacity = index < _documentItems.Count - 1 ? 0.8 : 0.3;
 
-            // File details
             if (File.Exists(item.FilePath))
             {
                 var fileInfo = new FileInfo(item.FilePath);
@@ -804,7 +782,6 @@ public sealed partial class MainWindow : Window
                 fileDetailsText.Text = details;
             }
 
-            // Load image
             image.Source = null;
             scrollViewer.Content = loadingRing;
             loadingRing.IsActive = true;
@@ -852,21 +829,17 @@ public sealed partial class MainWindow : Window
 
                     if (imageWidth > 0 && imageHeight > 0)
                     {
-                        // Calculate the zoom factor needed to fit the image
                         var zoomX = containerWidth / imageWidth;
                         var zoomY = containerHeight / imageHeight;
                         var fitZoom = (float)Math.Min(zoomX, zoomY);
 
-                        // Clamp to valid range and cap at 1.0 (don't zoom in past 100%)
                         fitZoom = Math.Clamp(fitZoom, 0.1f, 1.0f);
 
-                        // Apply the calculated zoom
                         scrollViewer.ChangeView(0, 0, fitZoom);
                         zoomText.Text = $"{(int)(fitZoom * 100)}%";
                     }
                     else
                     {
-                        // Fallback to 100%
                         scrollViewer.ChangeView(0, 0, 1f);
                         zoomText.Text = "100%";
                     }
@@ -950,31 +923,31 @@ public sealed partial class MainWindow : Window
         {
             switch (args.Key)
             {
-                case Windows.System.VirtualKey.Left:
+                case VirtualKey.Left:
                     if (currentIndex > 0)
                     {
                         await LoadItemAsync(currentIndex - 1);
                         args.Handled = true;
                     }
                     break;
-                case Windows.System.VirtualKey.Right:
+                case VirtualKey.Right:
                     if (currentIndex < _documentItems.Count - 1)
                     {
                         await LoadItemAsync(currentIndex + 1);
                         args.Handled = true;
                     }
                     break;
-                case Windows.System.VirtualKey.Add:
+                case VirtualKey.Add:
                     var zoomIn = Math.Min(scrollViewer.ZoomFactor * 1.25f, 5f);
                     scrollViewer.ChangeView(null, null, zoomIn);
                     args.Handled = true;
                     break;
-                case Windows.System.VirtualKey.Subtract:
+                case VirtualKey.Subtract:
                     var zoomOut = Math.Max(scrollViewer.ZoomFactor / 1.25f, 0.1f);
                     scrollViewer.ChangeView(null, null, zoomOut);
                     args.Handled = true;
                     break;
-                case Windows.System.VirtualKey.Number0:
+                case VirtualKey.Number0:
                     scrollViewer.ChangeView(0, 0, 1f);
                     args.Handled = true;
                     break;
@@ -1004,7 +977,6 @@ public sealed partial class MainWindow : Window
             using var page = pdfDocument.GetPage((uint)(item.PageNumber - 1));
             using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
 
-            // Render at higher resolution (600px width instead of 200px)
             var options = new Windows.Data.Pdf.PdfPageRenderOptions
             {
                 DestinationWidth = 800,
@@ -1165,12 +1137,11 @@ public sealed partial class MainWindow : Window
     {
         var panel = new StackPanel { Spacing = 16 };
 
-        // Paper Size section
         panel.Children.Add(new TextBlock
-   {
-      Text = "Paper Size (for images):",
-         FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-    });
+        {
+            Text = "Paper Size (for images):",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
+        });
 
         var paperSizeCombo = new ComboBox { Width = 220 };
         paperSizeCombo.Items.Add("Automatic (Use Image Size)");
@@ -1179,67 +1150,64 @@ public sealed partial class MainWindow : Window
         paperSizeCombo.Items.Add("Legal");
         paperSizeCombo.Items.Add("A3");
         paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
-      panel.Children.Add(paperSizeCombo);
+        panel.Children.Add(paperSizeCombo);
 
-    // Orientation section
         panel.Children.Add(new TextBlock
-  {
- Text = "Orientation:",
-          FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-    Margin = new Thickness(0, 4, 0, 0)
-  });
+        {
+            Text = "Orientation:",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
 
         var orientationCombo = new ComboBox { Width = 220 };
         orientationCombo.Items.Add("Automatic");
         orientationCombo.Items.Add("Portrait");
-     orientationCombo.Items.Add("Landscape");
+        orientationCombo.Items.Add("Landscape");
         orientationCombo.SelectedIndex = (int)AppSettings.Current.Orientation;
-     panel.Children.Add(orientationCombo);
+        panel.Children.Add(orientationCombo);
 
-  // Margin section
         panel.Children.Add(new TextBlock
-  {
+        {
             Text = "Page Margins:",
-     FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-       Margin = new Thickness(0, 4, 0, 0)
- });
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
 
         var marginCombo = new ComboBox { Width = 220 };
         marginCombo.Items.Add("None (0\")");
-  marginCombo.Items.Add("Narrow (0.25\")");
-  marginCombo.Items.Add("Normal (0.5\")");
+        marginCombo.Items.Add("Narrow (0.25\")");
+        marginCombo.Items.Add("Normal (0.5\")");
         marginCombo.Items.Add("Wide (1\")");
         marginCombo.Items.Add("Extra Wide (1.5\")");
-     marginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
-      panel.Children.Add(marginCombo);
+        marginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
+        panel.Children.Add(marginCombo);
 
-        // Info text
         var infoText = new TextBlock
         {
-   Text = "Note: Margins only apply when using a specific page size (not Automatic).",
-       FontSize = 12,
-       Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            Text = "Note: Margins only apply when using a specific page size (not Automatic).",
+            FontSize = 12,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
             TextWrapping = TextWrapping.Wrap,
-        Margin = new Thickness(0, 8, 0, 0)
+            Margin = new Thickness(0, 8, 0, 0)
         };
         panel.Children.Add(infoText);
 
         var dialog = new ContentDialog
-     {
-         Title = "PDF Settings",
+        {
+            Title = "PDF Settings",
             Content = panel,
-     PrimaryButtonText = "Save",
+            PrimaryButtonText = "Save",
             CloseButtonText = "Cancel",
-       XamlRoot = Content.XamlRoot
+            XamlRoot = Content.XamlRoot
         };
 
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-       AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
+            AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
             AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
-     AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
-        await AppSettings.SaveAsync();
-          StatusTextBlock.Text = "Settings saved";
+            AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
+            await AppSettings.SaveAsync();
+            StatusTextBlock.Text = "Settings saved";
         }
     }
 

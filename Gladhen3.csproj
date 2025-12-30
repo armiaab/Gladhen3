@@ -56,6 +56,7 @@
 		<PackageReference Include="System.Drawing.Common" Version="9.0.7" />
 	</ItemGroup>
 	<ItemGroup>
+	  <Folder Include=".github\workflows\" />
 	  <Folder Include="Interop\" />
 	</ItemGroup>
 	
@@ -69,7 +70,6 @@
 	    <Link>ShellExtension.dll</Link>
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
-	  <None Include=".github\workflows\build-and-release.yml" />
 	</ItemGroup>
 
 	<!--
