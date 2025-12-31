@@ -6,5 +6,6 @@ public enum PdfPaperSize
     A4,
     Letter,
     Legal,
-    A3
+    A3,
+    Custom
 }

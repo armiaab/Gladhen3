@@ -135,7 +135,7 @@ public class PdfService
 
     /// <summary>
     /// Adds an image to the document with XImage caching for reuse
- /// </summary>
+    /// </summary>
     private void AddImageToDocumentOptimized(PdfDocument document, string imagePath)
     {
         var page = document.AddPage();
@@ -146,22 +146,22 @@ public class PdfService
         var imageHeightPt = xImage.PointHeight;
 
         // Set the specified page size
-     SetPageSize(page, AppSettings.Current.PaperSize);
+        SetPageSize(page, AppSettings.Current.PaperSize);
 
- // Determine orientation
+        // Determine orientation
         var isImageLandscape = imageWidthPt > imageHeightPt;
         var usePortrait = AppSettings.Current.Orientation switch
-     {
-     PdfPaperOrientation.Portrait => true,
+        {
+            PdfPaperOrientation.Portrait => true,
             PdfPaperOrientation.Landscape => false,
-     _ => !isImageLandscape // Automatic: match image orientation
+            _ => !isImageLandscape // Automatic: match image orientation
         };
 
         // Swap page dimensions if needed for landscape
-  if (!usePortrait)
+        if (!usePortrait)
         {
-          (page.Width, page.Height) = (page.Height, page.Width);
-     }
+            (page.Width, page.Height) = (page.Height, page.Width);
+        }
 
         using var gfx = XGraphics.FromPdfPage(page);
 
@@ -170,15 +170,15 @@ public class PdfService
         var availableWidth = page.Width.Point - (marginPt * 2);
         var availableHeight = page.Height.Point - (marginPt * 2);
 
-    // Calculate scale to fit within available area while maintaining aspect ratio
+        // Calculate scale to fit within available area while maintaining aspect ratio
         var scaleX = availableWidth / imageWidthPt;
-  var scaleY = availableHeight / imageHeightPt;
+        var scaleY = availableHeight / imageHeightPt;
         var scale = Math.Min(Math.Min(scaleX, scaleY), 1.0); // Don't scale up
 
         var drawWidth = imageWidthPt * scale;
- var drawHeight = imageHeightPt * scale;
+        var drawHeight = imageHeightPt * scale;
 
-    // Center the image on the page
+        // Center the image on the page
         var x = (page.Width.Point - drawWidth) / 2;
         var y = (page.Height.Point - drawHeight) / 2;
 
@@ -193,50 +193,50 @@ public class PdfService
         // Get or create cached XPdfForm
         var form = GetOrCreateXPdfForm(sourcePath);
         form.PageIndex = pageIndex;
-        
+
         var sourceWidth = form.PointWidth;
         var sourceHeight = form.PointHeight;
 
-    // Create new page with custom size
+        // Create new page with custom size
         var newPage = document.AddPage();
         SetPageSize(newPage, AppSettings.Current.PaperSize);
 
-  // Determine orientation based on source page or setting
+        // Determine orientation based on source page or setting
         var isSourceLandscape = sourceWidth > sourceHeight;
         var usePortrait = AppSettings.Current.Orientation switch
         {
-    PdfPaperOrientation.Portrait => true,
-  PdfPaperOrientation.Landscape => false,
+            PdfPaperOrientation.Portrait => true,
+            PdfPaperOrientation.Landscape => false,
             _ => !isSourceLandscape // Automatic: match source orientation
         };
 
         // Swap page dimensions if needed for landscape
         if (!usePortrait)
-     {
-        (newPage.Width, newPage.Height) = (newPage.Height, newPage.Width);
-    }
+        {
+            (newPage.Width, newPage.Height) = (newPage.Height, newPage.Width);
+        }
 
         using var gfx = XGraphics.FromPdfPage(newPage);
 
         // Get margin and calculate drawing area
-      var marginPt = AppSettings.Current.GetMarginInPoints();
-      var availableWidth = newPage.Width.Point - (marginPt * 2);
+        var marginPt = AppSettings.Current.GetMarginInPoints();
+        var availableWidth = newPage.Width.Point - (marginPt * 2);
         var availableHeight = newPage.Height.Point - (marginPt * 2);
 
         // Calculate scale to fit within available area while maintaining aspect ratio
         var scaleX = availableWidth / sourceWidth;
-    var scaleY = availableHeight / sourceHeight;
+        var scaleY = availableHeight / sourceHeight;
         var scale = Math.Min(Math.Min(scaleX, scaleY), 1.0); // Don't scale up
 
         var drawWidth = sourceWidth * scale;
-var drawHeight = sourceHeight * scale;
+        var drawHeight = sourceHeight * scale;
 
         // Center the content on the page
         var x = (newPage.Width.Point - drawWidth) / 2;
- var y = (newPage.Height.Point - drawHeight) / 2;
+        var y = (newPage.Height.Point - drawHeight) / 2;
 
-gfx.DrawImage(form, x, y, drawWidth, drawHeight);
-  }
+        gfx.DrawImage(form, x, y, drawWidth, drawHeight);
+    }
 
     /// <summary>
     /// Gets a cached XImage or creates a new one
@@ -246,26 +246,26 @@ gfx.DrawImage(form, x, y, drawWidth, drawHeight);
         if (_imageCache.TryGetValue(imagePath, out var cachedImage))
         {
             return cachedImage;
- }
+        }
 
         var xImage = XImage.FromFile(imagePath);
         _imageCache[imagePath] = xImage;
-      return xImage;
+        return xImage;
     }
 
- /// <summary>
+    /// <summary>
     /// Gets a cached XPdfForm or creates a new one
     /// </summary>
     private XPdfForm GetOrCreateXPdfForm(string pdfPath)
-{
+    {
         if (_pdfFormCache.TryGetValue(pdfPath, out var cachedForm))
         {
             return cachedForm;
-  }
+        }
 
         var form = XPdfForm.FromFile(pdfPath);
         _pdfFormCache[pdfPath] = form;
-    return form;
+        return form;
     }
 
     /// <summary>
@@ -273,17 +273,17 @@ gfx.DrawImage(form, x, y, drawWidth, drawHeight);
     /// </summary>
     private void ClearCaches()
     {
- foreach (var image in _imageCache.Values)
+        foreach (var image in _imageCache.Values)
         {
-   try { image.Dispose(); }
-   catch { /* Ignore disposal errors */ }
-   }
+            try { image.Dispose(); }
+            catch { /* Ignore disposal errors */ }
+        }
         _imageCache.Clear();
 
         foreach (var form in _pdfFormCache.Values)
         {
-          try { form.Dispose(); }
-     catch { /* Ignore disposal errors */ }
+            try { form.Dispose(); }
+            catch { /* Ignore disposal errors */ }
         }
         _pdfFormCache.Clear();
     }
@@ -293,25 +293,25 @@ gfx.DrawImage(form, x, y, drawWidth, drawHeight);
     /// </summary>
     private static void CreateSingleImagePdfOptimized(string imagePath, string outputPath)
     {
-      using var document = new PdfDocument();
-     var page = document.AddPage();
+        using var document = new PdfDocument();
+        var page = document.AddPage();
 
         // Load image using PDFsharp's XImage
         using var xImage = XImage.FromFile(imagePath);
 
-   // Get image dimensions in points (PDFsharp uses 72 DPI internally)
+        // Get image dimensions in points (PDFsharp uses 72 DPI internally)
         var imageWidthPt = xImage.PointWidth;
         var imageHeightPt = xImage.PointHeight;
 
-      // Use image's natural size in points (Automatic mode)
-      page.Width = new XUnit(imageWidthPt);
+        // Use image's natural size in points (Automatic mode)
+        page.Width = new XUnit(imageWidthPt);
         page.Height = new XUnit(imageHeightPt);
 
-    using var gfx = XGraphics.FromPdfPage(page);
+        using var gfx = XGraphics.FromPdfPage(page);
         gfx.DrawImage(xImage, 0, 0, imageWidthPt, imageHeightPt);
 
         document.Save(outputPath);
-  }
+    }
 
     /// <summary>
     /// Merges PDF pages with optimized document handling
@@ -322,62 +322,67 @@ gfx.DrawImage(form, x, y, drawWidth, drawHeight);
         outputDocument.Info.Title = "Created with Gladhen3";
 
         // Cache for open PDF documents to avoid reopening same file
-      var documentCache = new Dictionary<string, PdfDocument>(StringComparer.OrdinalIgnoreCase);
+        var documentCache = new Dictionary<string, PdfDocument>(StringComparer.OrdinalIgnoreCase);
 
-      try
+        try
         {
-       foreach (var (pdfPath, pageIndex) in pageList)
+            foreach (var (pdfPath, pageIndex) in pageList)
             {
-   // Get or open PDF document
-         if (!documentCache.TryGetValue(pdfPath, out var inputDoc))
-     {
-        inputDoc = PdfReader.Open(pdfPath, PdfDocumentOpenMode.Import);
-       documentCache[pdfPath] = inputDoc;
-         }
+                // Get or open PDF document
+                if (!documentCache.TryGetValue(pdfPath, out var inputDoc))
+                {
+                    inputDoc = PdfReader.Open(pdfPath, PdfDocumentOpenMode.Import);
+                    documentCache[pdfPath] = inputDoc;
+                }
 
-      if (pageIndex >= 0 && pageIndex < inputDoc.PageCount)
-          {
-          outputDocument.AddPage(inputDoc.Pages[pageIndex]);
-           }
-      }
+                if (pageIndex >= 0 && pageIndex < inputDoc.PageCount)
+                {
+                    outputDocument.AddPage(inputDoc.Pages[pageIndex]);
+                }
+            }
         }
         finally
         {
-       // Dispose all cached documents
+            // Dispose all cached documents
             foreach (var doc in documentCache.Values)
             {
-      try { doc.Dispose(); }
+                try { doc.Dispose(); }
                 catch { /* Ignore disposal errors */ }
             }
         }
 
-      outputDocument.Save(outputPath);
+        outputDocument.Save(outputPath);
     }
 
     private static void SetPageSize(PdfPage page, PdfPaperSize size)
     {
-  switch (size)
+        switch (size)
         {
-   case PdfPaperSize.A4:
-      page.Width = XUnit.FromMillimeter(210);
-      page.Height = XUnit.FromMillimeter(297);
+            case PdfPaperSize.A4:
+                page.Width = XUnit.FromMillimeter(210);
+                page.Height = XUnit.FromMillimeter(297);
                 break;
-     case PdfPaperSize.Letter:
-      page.Width = XUnit.FromInch(8.5);
-       page.Height = XUnit.FromInch(11);
-       break;
-      case PdfPaperSize.Legal:
+            case PdfPaperSize.Letter:
                 page.Width = XUnit.FromInch(8.5);
-    page.Height = XUnit.FromInch(14);
-         break;
+                page.Height = XUnit.FromInch(11);
+                break;
+            case PdfPaperSize.Legal:
+                page.Width = XUnit.FromInch(8.5);
+                page.Height = XUnit.FromInch(14);
+                break;
             case PdfPaperSize.A3:
-         page.Width = XUnit.FromMillimeter(297);
-      page.Height = XUnit.FromMillimeter(420);
-break;
-        default:
-         page.Width = XUnit.FromMillimeter(210);
-  page.Height = XUnit.FromMillimeter(297);
-          break;
+                page.Width = XUnit.FromMillimeter(297);
+                page.Height = XUnit.FromMillimeter(420);
+                break;
+            case PdfPaperSize.Custom:
+                // Use custom dimensions from settings (already in points)
+                page.Width = new XUnit(AppSettings.Current.GetCustomWidthInPoints());
+                page.Height = new XUnit(AppSettings.Current.GetCustomHeightInPoints());
+                break;
+            default:
+                page.Width = XUnit.FromMillimeter(210);
+                page.Height = XUnit.FromMillimeter(297);
+                break;
         }
     }
 }

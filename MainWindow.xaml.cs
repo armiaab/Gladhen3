@@ -1203,12 +1203,146 @@ public sealed partial class MainWindow : Window
 
         var paperSizeCombo = new ComboBox { Width = 220 };
         paperSizeCombo.Items.Add("Automatic (Use Image Size)");
-        paperSizeCombo.Items.Add("A4");
-        paperSizeCombo.Items.Add("Letter");
-        paperSizeCombo.Items.Add("Legal");
-        paperSizeCombo.Items.Add("A3");
+        paperSizeCombo.Items.Add("A4 (210 × 297 mm)");
+        paperSizeCombo.Items.Add("Letter (8.5 × 11 in)");
+        paperSizeCombo.Items.Add("Legal (8.5 × 14 in)");
+        paperSizeCombo.Items.Add("A3 (297 × 420 mm)");
+        paperSizeCombo.Items.Add("Custom...");
         paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
         panel.Children.Add(paperSizeCombo);
+
+        // Custom size panel (initially hidden)
+        var customSizePanel = new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 0),
+            Visibility = AppSettings.Current.PaperSize == PdfPaperSize.Custom ? Visibility.Visible : Visibility.Collapsed
+        };
+
+        // Unit selector
+        var unitPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        unitPanel.Children.Add(new TextBlock
+        {
+            Text = "Unit:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 50
+        });
+
+        var unitCombo = new ComboBox { Width = 120 };
+        unitCombo.Items.Add("Millimeters (mm)");
+        unitCombo.Items.Add("Inches (in)");
+        unitCombo.Items.Add("Points (pt)");
+        unitCombo.SelectedIndex = AppSettings.Current.CustomSizeUnit;
+        unitPanel.Children.Add(unitCombo);
+        customSizePanel.Children.Add(unitPanel);
+
+        // Width input
+        var widthPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        widthPanel.Children.Add(new TextBlock
+        {
+            Text = "Width:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 50
+        });
+
+        var widthBox = new NumberBox
+        {
+            Value = AppSettings.Current.CustomWidth,
+            Minimum = 1,
+            Maximum = 10000,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Width = 120,
+            SmallChange = 1,
+            LargeChange = 10
+        };
+        widthPanel.Children.Add(widthBox);
+
+        var widthUnitLabel = new TextBlock
+        {
+            Text = AppSettings.Current.GetUnitName(),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        widthPanel.Children.Add(widthUnitLabel);
+        customSizePanel.Children.Add(widthPanel);
+
+        // Height input
+        var heightPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        heightPanel.Children.Add(new TextBlock
+        {
+            Text = "Height:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 50
+        });
+
+        var heightBox = new NumberBox
+        {
+            Value = AppSettings.Current.CustomHeight,
+            Minimum = 1,
+            Maximum = 10000,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+            Width = 120,
+            SmallChange = 1,
+            LargeChange = 10
+        };
+        heightPanel.Children.Add(heightBox);
+
+        var heightUnitLabel = new TextBlock
+        {
+            Text = AppSettings.Current.GetUnitName(),
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        heightPanel.Children.Add(heightUnitLabel);
+        customSizePanel.Children.Add(heightPanel);
+
+        // Preset buttons for common sizes
+        var presetPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
+        presetPanel.Children.Add(new TextBlock
+        {
+            Text = "Presets:",
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 12,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
+        });
+
+        var presetA4 = new Button { Content = "A4", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
+        var presetLetter = new Button { Content = "Letter", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
+        var presetA5 = new Button { Content = "A5", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
+        var preset4x6 = new Button { Content = "4×6\"", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
+
+        presetA4.Click += (s, args) => { unitCombo.SelectedIndex = 0; widthBox.Value = 210; heightBox.Value = 297; };
+        presetLetter.Click += (s, args) => { unitCombo.SelectedIndex = 1; widthBox.Value = 8.5; heightBox.Value = 11; };
+        presetA5.Click += (s, args) => { unitCombo.SelectedIndex = 0; widthBox.Value = 148; heightBox.Value = 210; };
+        preset4x6.Click += (s, args) => { unitCombo.SelectedIndex = 1; widthBox.Value = 4; heightBox.Value = 6; };
+
+        presetPanel.Children.Add(presetA4);
+        presetPanel.Children.Add(presetLetter);
+        presetPanel.Children.Add(presetA5);
+        presetPanel.Children.Add(preset4x6);
+        customSizePanel.Children.Add(presetPanel);
+
+        panel.Children.Add(customSizePanel);
+
+        // Update unit labels when unit changes
+        unitCombo.SelectionChanged += (s, args) =>
+      {
+          var unitName = unitCombo.SelectedIndex switch
+          {
+              0 => "mm",
+              1 => "in",
+              2 => "pt",
+              _ => "mm"
+          };
+          widthUnitLabel.Text = unitName;
+          heightUnitLabel.Text = unitName;
+      };
+
+        // Show/hide custom size panel based on selection
+        paperSizeCombo.SelectionChanged += (s, args) =>
+    {
+        customSizePanel.Visibility = paperSizeCombo.SelectedIndex == 5
+        ? Visibility.Visible
+       : Visibility.Collapsed;
+    };
 
         panel.Children.Add(new TextBlock
         {
@@ -1264,6 +1398,15 @@ public sealed partial class MainWindow : Window
             AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
             AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
             AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
+
+            // Save custom size settings
+            if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
+            {
+                AppSettings.Current.CustomSizeUnit = unitCombo.SelectedIndex;
+                AppSettings.Current.CustomWidth = widthBox.Value;
+                AppSettings.Current.CustomHeight = heightBox.Value;
+            }
+
             await AppSettings.SaveAsync();
             StatusTextBlock.Text = "Settings saved";
         }
