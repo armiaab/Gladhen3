@@ -21,6 +21,12 @@
 		<ShellExtensionDllPath Condition="'$(Platform)' == 'ARM64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
 		<ShellExtensionDllPathFallback>$(SolutionDir)ShellExtension.dll</ShellExtensionDllPathFallback>
 	</PropertyGroup>
+	<ItemGroup>
+	  <Compile Remove=".github\**" />
+	  <EmbeddedResource Remove=".github\**" />
+	  <None Remove=".github\**" />
+	  <Page Remove=".github\**" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<Content Include="Assets\SplashScreen.scale-200.png" />
@@ -55,7 +61,6 @@
 		<PackageReference Include="System.Drawing.Common" Version="8.0.10" />
 	</ItemGroup>
 	<ItemGroup>
-	  <Folder Include=".github\workflows\" />
 	  <Folder Include="Interop\" />
 	</ItemGroup>
 	
@@ -108,4 +113,7 @@
 		<!-- Fallback: copy from solution root if C++ build output doesn't exist -->
 		<Copy SourceFiles="$(ShellExtensionFallback)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="!Exists('$(ShellExtensionSource)') And Exists('$(ShellExtensionFallback)')" />
 	</Target>
+	<ItemGroup>
+	  <PRIResource Remove=".github\**" />
+	</ItemGroup>
 </Project>

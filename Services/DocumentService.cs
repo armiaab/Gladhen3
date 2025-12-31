@@ -3,10 +3,12 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using PdfSharp.Pdf.IO;
 using Serilog;
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Data.Pdf;
@@ -17,21 +19,46 @@ namespace Gladhen3.Services;
 
 public class DocumentService
 {
+    // Use static readonly arrays to avoid repeated allocations
     private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif"];
     private static readonly string[] PdfExtensions = [".pdf"];
+    private static readonly string[] AllExtensions = [.. ImageExtensions, .. PdfExtensions];
+    private static readonly string[] Sizes = ["B", "KB", "MB", "GB"];
 
+    /// <summary>
+    /// Maximum degree of parallelism for file loading operations
+    /// </summary>
+    private const int MaxDegreeOfParallelism = 4;
+
+    /// <summary>
+    /// Thumbnail width for rendering
+    /// </summary>
+    private const uint ThumbnailWidth = 200;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsImageFile(string path)
     {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        return Array.Exists(ImageExtensions, e => e == ext);
+        var ext = Path.GetExtension(path);
+        if (ext.Length == 0) return false;
+
+        // Use Span to avoid string allocation for comparison
+        ReadOnlySpan<char> extSpan = ext.AsSpan();
+        foreach (var imageExt in ImageExtensions)
+        {
+            if (extSpan.Equals(imageExt.AsSpan(), StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsPdfFile(string path)
     {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        return Array.Exists(PdfExtensions, e => e == ext);
+        var ext = Path.GetExtension(path);
+        return ext.Length > 0 && ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsSupportedFile(string path)
     {
         return IsImageFile(path) || IsPdfFile(path);
@@ -42,7 +69,8 @@ public class DocumentService
     /// </summary>
     public async Task<List<DocumentItem>> CreateDocumentItemsAsync(string filePath, bool loadThumbnails = true)
     {
-        var items = new List<DocumentItem>();
+        // Pre-allocate list with expected capacity
+        var items = new List<DocumentItem>(1);
 
         try
         {
@@ -89,7 +117,7 @@ public class DocumentService
     /// </summary>
     public async Task<List<DocumentItem>> CreateDocumentItemsAsync(StorageFile file, bool loadThumbnails = true)
     {
-        var items = new List<DocumentItem>();
+        var items = new List<DocumentItem>(1);
 
         try
         {
@@ -129,144 +157,230 @@ public class DocumentService
     }
 
     /// <summary>
-    /// Batch load multiple files with progress reporting
+    /// Batch load multiple files with progress reporting using parallel processing
     /// </summary>
     public async Task<List<DocumentItem>> CreateDocumentItemsBatchAsync(
      IReadOnlyList<StorageFile> files,
         IProgress<(int current, int total, string fileName)>? progress = null,
-CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default)
     {
-        var allItems = new List<DocumentItem>();
         var total = files.Count;
+        var processedCount = 0;
 
-        for (int i = 0; i < files.Count; i++)
+        // Use array instead of ConcurrentBag for better cache locality
+        var results = new (int Index, List<DocumentItem> Items)[total];
+
+        // Process files in parallel with controlled concurrency
+        await Parallel.ForEachAsync(
+        Enumerable.Range(0, total),
+  new ParallelOptions
+  {
+      MaxDegreeOfParallelism = MaxDegreeOfParallelism,
+      CancellationToken = cancellationToken
+  },
+            async (index, ct) =>
+          {
+              var file = files[index];
+
+              // Create items without thumbnails first for speed
+              var items = await CreateDocumentItemsAsync(file, loadThumbnails: false);
+              results[index] = (index, items);
+
+              // Report progress (thread-safe increment)
+              var current = Interlocked.Increment(ref processedCount);
+              progress?.Report((current, total, file.Name));
+          });
+
+        // Calculate total items for pre-allocation
+        var totalItems = 0;
+        foreach (var result in results)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            totalItems += result.Items?.Count ?? 0;
+        }
 
-            var file = files[i];
-            progress?.Report((i + 1, total, file.Name));
-
-            // Create items without thumbnails first for speed
-            var items = await CreateDocumentItemsAsync(file, loadThumbnails: false);
-            allItems.AddRange(items);
+        // Sort results by original index and flatten - pre-allocate capacity
+        var allItems = new List<DocumentItem>(totalItems);
+        for (var i = 0; i < results.Length; i++)
+        {
+            if (results[i].Items != null)
+            {
+                allItems.AddRange(results[i].Items);
+            }
         }
 
         return allItems;
     }
 
     /// <summary>
-    /// Load thumbnails for items that don't have them (can be called after initial load)
+    /// Load thumbnails for items that don't have them using parallel processing
     /// </summary>
     public async Task LoadThumbnailsAsync(
-  IList<DocumentItem> items,
-        IProgress<int>? progress = null,
-        CancellationToken cancellationToken = default)
+    IList<DocumentItem> items,
+    IProgress<int>? progress = null,
+     CancellationToken cancellationToken = default)
     {
-        var count = 0;
-        foreach (var item in items)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
+      var processedCount = 0;
+   
+        // Group PDF pages by source file to avoid opening same PDF multiple times
+   var pdfGroups = items
+            .Where(i => i.Type == DocumentType.PdfPage && i.Thumbnail == null)
+       .GroupBy(i => i.SourcePdfPath ?? i.FilePath)
+     .ToList();
+        
+ var imageItems = items
+   .Where(i => i.Type == DocumentType.Image && i.Thumbnail == null)
+.ToList();
 
-            if (item.Thumbnail == null)
+        // Process images in parallel
+    await Parallel.ForEachAsync(
+      imageItems,
+     new ParallelOptions
             {
-                try
-                {
-                    if (item.Type == DocumentType.Image)
-                    {
-                        item.Thumbnail = await LoadImageThumbnailAsync(item.FilePath);
-                    }
-                    else if (item.Type == DocumentType.PdfPage)
-                    {
-                        item.Thumbnail = await LoadPdfPageThumbnailAsync(item);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
-                }
-            }
-
-            count++;
-            progress?.Report(count);
-        }
+    MaxDegreeOfParallelism = MaxDegreeOfParallelism,
+        CancellationToken = cancellationToken
+     },
+ async (item, ct) =>
+    {
+    try
+     {
+   item.Thumbnail = await LoadImageThumbnailAsync(item.FilePath);
     }
+          catch (Exception ex)
+   {
+     Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
+        }
+        
+     var count = Interlocked.Increment(ref processedCount);
+     progress?.Report(count);
+});
+
+    // Process PDF groups in parallel (one PDF file at a time per thread)
+await Parallel.ForEachAsync(
+  pdfGroups,
+       new ParallelOptions
+            {
+         MaxDegreeOfParallelism = MaxDegreeOfParallelism,
+        CancellationToken = cancellationToken
+   },
+   async (group, ct) =>
+     {
+    try
+       {
+        var sourcePath = group.Key;
+        if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+    return;
+
+     var file = await StorageFile.GetFileFromPathAsync(sourcePath);
+      var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+
+  foreach (var item in group)
+      {
+      ct.ThrowIfCancellationRequested();
+ 
+           if (item.PageNumber >= 1 && item.PageNumber <= pdfDocument.PageCount)
+{
+    item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, item.PageNumber - 1);
+         }
+     
+         var count = Interlocked.Increment(ref processedCount);
+  progress?.Report(count);
+ }
+   }
+       catch (Exception ex)
+    {
+   Log.Warning(ex, "Error loading PDF thumbnails for: {Path}", group.Key);
+  
+         // Still increment progress for failed items
+      foreach (var _ in group)
+    {
+  var count = Interlocked.Increment(ref processedCount);
+    progress?.Report(count);
+   }
+     }
+     });
+  }
 
     private async Task<List<DocumentItem>> CreatePdfPageItemsAsync(string pdfPath, string fileName, string fileSize, bool loadThumbnails)
-    {
-        var items = new List<DocumentItem>();
-
+  {
         try
-        {
-            var file = await StorageFile.GetFileFromPathAsync(pdfPath);
-            var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
-            var pageCount = (int)pdfDocument.PageCount;
+   {
+        var file = await StorageFile.GetFileFromPathAsync(pdfPath);
+       var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+ var pageCount = (int)pdfDocument.PageCount;
 
-            for (var i = 0; i < pageCount; i++)
-            {
-                var item = new DocumentItem
-                {
-                    FileName = fileName,
-                    FilePath = pdfPath,
-                    SourcePdfPath = pdfPath,
-                    Type = DocumentType.PdfPage,
-                    PageNumber = i + 1,
-                    TotalPages = pageCount,
-                    FileSize = fileSize
-                };
+     // Pre-allocate list with exact capacity
+ var items = new List<DocumentItem>(pageCount);
 
-                if (loadThumbnails)
-                {
-                    item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, i);
-                }
+       for (var i = 0; i < pageCount; i++)
+      {
+     var item = new DocumentItem
+   {
+     FileName = fileName,
+    FilePath = pdfPath,
+     SourcePdfPath = pdfPath,
+            Type = DocumentType.PdfPage,
+         PageNumber = i + 1,
+       TotalPages = pageCount,
+       FileSize = fileSize
+    };
 
-                items.Add(item);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error creating PDF page items: {Path}", pdfPath);
+          if (loadThumbnails)
+   {
+      item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, i);
+   }
 
-            // Fallback: create items without thumbnails
-            var pageCount = GetPdfPageCountFallback(pdfPath);
-            for (var i = 0; i < pageCount; i++)
-            {
-                items.Add(new DocumentItem
-                {
-                    FileName = fileName,
-                    FilePath = pdfPath,
-                    SourcePdfPath = pdfPath,
-                    Type = DocumentType.PdfPage,
-                    PageNumber = i + 1,
-                    TotalPages = pageCount,
-                    FileSize = fileSize
-                });
-            }
-        }
-
-        return items;
+     items.Add(item);
     }
+
+ return items;
+ }
+    catch (Exception ex)
+        {
+  Log.Error(ex, "Error creating PDF page items: {Path}", pdfPath);
+
+  // Fallback: create items without thumbnails
+    var pageCount = GetPdfPageCountFallback(pdfPath);
+   var items = new List<DocumentItem>(pageCount);
+   
+       for (var i = 0; i < pageCount; i++)
+            {
+ items.Add(new DocumentItem
+                {
+    FileName = fileName,
+  FilePath = pdfPath,
+      SourcePdfPath = pdfPath,
+     Type = DocumentType.PdfPage,
+    PageNumber = i + 1,
+           TotalPages = pageCount,
+ FileSize = fileSize
+ });
+          }
+
+ return items;
+      }
+}
 
     private static async Task<BitmapImage?> LoadPdfPageThumbnailAsync(DocumentItem item)
     {
         try
         {
-            var sourcePath = item.SourcePdfPath ?? item.FilePath;
-            if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
-                return null;
+    var sourcePath = item.SourcePdfPath ?? item.FilePath;
+      if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+  return null;
 
-            var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-            var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+  var file = await StorageFile.GetFileFromPathAsync(sourcePath);
+      var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
 
-            if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
-                return null;
+        if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
+     return null;
 
-            return await RenderPdfPageThumbnailAsync(pdfDocument, item.PageNumber - 1);
+   return await RenderPdfPageThumbnailAsync(pdfDocument, item.PageNumber - 1);
         }
         catch (Exception ex)
-        {
-            Log.Error(ex, "Error loading PDF page thumbnail");
-            return null;
-        }
+   {
+    Log.Error(ex, "Error loading PDF page thumbnail");
+ return null;
+}
     }
 
     private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(PdfDocument pdfDocument, int pageIndex)
@@ -276,10 +390,12 @@ CancellationToken cancellationToken = default)
             using var page = pdfDocument.GetPage((uint)pageIndex);
             using var stream = new InMemoryRandomAccessStream();
 
+            // Calculate height maintaining aspect ratio
+            var aspectRatio = page.Size.Height / page.Size.Width;
             var options = new PdfPageRenderOptions
             {
-                DestinationWidth = 200,
-                DestinationHeight = (uint)(200 * page.Size.Height / page.Size.Width)
+                DestinationWidth = ThumbnailWidth,
+                DestinationHeight = (uint)(ThumbnailWidth * aspectRatio)
             };
 
             await page.RenderToStreamAsync(stream, options);
@@ -297,15 +413,46 @@ CancellationToken cancellationToken = default)
 
     public async Task<List<DocumentItem>> LoadDocumentsFromPathsAsync(IEnumerable<string> paths)
     {
-        var items = new List<DocumentItem>();
         var pathList = paths.Where(p => IsSupportedFile(p) && File.Exists(p)).ToList();
 
-        foreach (var path in pathList)
+        if (pathList.Count == 0)
+            return [];
+
+        // Use array instead of ConcurrentBag for better memory layout
+        var results = new (int Index, List<DocumentItem> Items)[pathList.Count];
+
+        // Process paths in parallel with controlled concurrency
+        await Parallel.ForEachAsync(
+   Enumerable.Range(0, pathList.Count),
+  new ParallelOptions
+  {
+      MaxDegreeOfParallelism = MaxDegreeOfParallelism
+  },
+async (index, ct) =>
+            {
+                var path = pathList[index];
+                var items = await CreateDocumentItemsAsync(path, loadThumbnails: false);
+                results[index] = (index, items);
+            });
+
+        // Calculate total items for pre-allocation
+        var totalItems = 0;
+        foreach (var result in results)
         {
-            items.AddRange(await CreateDocumentItemsAsync(path, loadThumbnails: false));
+            totalItems += result.Items?.Count ?? 0;
         }
 
-        return items;
+        // Flatten results maintaining order - pre-allocate capacity
+        var allItems = new List<DocumentItem>(totalItems);
+        for (var i = 0; i < results.Length; i++)
+        {
+            if (results[i].Items != null)
+            {
+                allItems.AddRange(results[i].Items);
+            }
+        }
+
+        return allItems;
     }
 
     private static async Task<BitmapImage?> LoadImageThumbnailAsync(string filePath)
@@ -315,7 +462,7 @@ CancellationToken cancellationToken = default)
             var file = await StorageFile.GetFileFromPathAsync(filePath);
             using var stream = await file.OpenAsync(FileAccessMode.Read);
 
-            var bitmap = new BitmapImage { DecodePixelWidth = 200 };
+            var bitmap = new BitmapImage { DecodePixelWidth = (int)ThumbnailWidth };
             await bitmap.SetSourceAsync(stream);
             return bitmap;
         }
@@ -340,28 +487,22 @@ CancellationToken cancellationToken = default)
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static string FormatFileSize(ulong bytes)
     {
-        string[] sizes = ["B", "KB", "MB", "GB"];
         var len = (double)bytes;
         var order = 0;
 
-        while (len >= 1024 && order < sizes.Length - 1)
+        while (len >= 1024 && order < Sizes.Length - 1)
         {
             order++;
             len /= 1024;
         }
 
-        return $"{len:0.##} {sizes[order]}";
+        return $"{len:0.##} {Sizes[order]}";
     }
 
-    public static string[] GetAllSupportedExtensions()
-    {
-        var extensions = new List<string>();
-        extensions.AddRange(ImageExtensions);
-        extensions.AddRange(PdfExtensions);
-        return [.. extensions];
-    }
+    public static string[] GetAllSupportedExtensions() => AllExtensions;
 
     public static string[] GetImageExtensions() => ImageExtensions;
 

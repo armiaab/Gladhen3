@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -302,40 +303,133 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Loads thumbnails in background without blocking UI. Uses DispatcherQueue for UI updates.
+    /// Loads thumbnails in background without blocking UI using parallel processing.
+    /// Optimized with PDF document caching and controlled concurrency.
     /// </summary>
     private async Task LoadThumbnailsInBackgroundAsync(IList<DocumentItem> items)
     {
-        var dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        if (items.Count == 0) return;
 
+        // Group PDF pages by source file to avoid opening same PDF multiple times
+        var pdfGroups = new Dictionary<string, List<DocumentItem>>(StringComparer.OrdinalIgnoreCase);
+        var imageItems = new List<DocumentItem>();
+
+        // Single pass categorization to avoid multiple LINQ iterations
         foreach (var item in items)
         {
             if (item.Thumbnail != null) continue;
 
-            try
+            if (item.Type == DocumentType.Image)
             {
-                BitmapImage? thumbnail = null;
-                if (item.Type == DocumentType.Image)
+                imageItems.Add(item);
+            }
+            else if (item.Type == DocumentType.PdfPage)
+            {
+                var key = item.SourcePdfPath ?? item.FilePath;
+                if (!string.IsNullOrEmpty(key))
                 {
-                    thumbnail = await LoadImageThumbnailAsync(item.FilePath);
-                }
-                else if (item.Type == DocumentType.PdfPage)
-                {
-                    thumbnail = await LoadPdfThumbnailAsync(item);
-                }
-
-                if (thumbnail != null)
-                {
-                    item.Thumbnail = thumbnail;
+                    if (!pdfGroups.TryGetValue(key, out var list))
+                    {
+                        list = new List<DocumentItem>();
+                        pdfGroups[key] = list;
+                    }
+                    list.Add(item);
                 }
             }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
-            }
+        }
 
-            // Yield to allow UI to remain responsive
-            await Task.Delay(1);
+        // Process images and PDFs concurrently with controlled parallelism
+        const int maxParallelism = 6;
+        using var semaphore = new SemaphoreSlim(maxParallelism);
+
+        var tasks = new List<Task>(imageItems.Count + pdfGroups.Count);
+
+        // Queue image thumbnail tasks
+        foreach (var item in imageItems)
+        {
+            tasks.Add(LoadImageThumbnailWithSemaphoreAsync(item, semaphore));
+        }
+
+        // Queue PDF thumbnail tasks (one task per PDF file)
+        foreach (var kvp in pdfGroups)
+        {
+            tasks.Add(LoadPdfGroupThumbnailsWithSemaphoreAsync(kvp.Key, kvp.Value, semaphore));
+        }
+
+        // Wait for all tasks to complete
+        await Task.WhenAll(tasks);
+    }
+
+    private static async Task LoadImageThumbnailWithSemaphoreAsync(DocumentItem item, SemaphoreSlim semaphore)
+    {
+        await semaphore.WaitAsync();
+        try
+        {
+            var thumbnail = await LoadImageThumbnailAsync(item.FilePath);
+            if (thumbnail != null)
+            {
+                item.Thumbnail = thumbnail;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    private static async Task LoadPdfGroupThumbnailsWithSemaphoreAsync(string sourcePath, List<DocumentItem> items, SemaphoreSlim semaphore)
+    {
+        await semaphore.WaitAsync();
+        try
+        {
+            if (!File.Exists(sourcePath)) return;
+
+            var file = await StorageFile.GetFileFromPathAsync(sourcePath);
+            var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+
+            // Pre-allocate render options to reuse
+            const uint thumbnailWidth = 200;
+
+            foreach (var item in items)
+            {
+                if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
+                    continue;
+
+                try
+                {
+                    using var page = pdfDocument.GetPage((uint)(item.PageNumber - 1));
+                    using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+
+                    var aspectRatio = page.Size.Height / page.Size.Width;
+                    var options = new Windows.Data.Pdf.PdfPageRenderOptions
+                    {
+                        DestinationWidth = thumbnailWidth,
+                        DestinationHeight = (uint)(thumbnailWidth * aspectRatio)
+                    };
+
+                    await page.RenderToStreamAsync(stream, options);
+
+                    var bitmap = new BitmapImage();
+                    await bitmap.SetSourceAsync(stream);
+                    item.Thumbnail = bitmap;
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Error loading PDF page thumbnail: {Path} page {Page}", sourcePath, item.PageNumber);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error loading PDF thumbnails for: {Path}", sourcePath);
+        }
+        finally
+        {
+            semaphore.Release();
         }
     }
 
@@ -353,42 +447,6 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading image thumbnail: {Path}", filePath);
-            return null;
-        }
-    }
-
-    private static async Task<BitmapImage?> LoadPdfThumbnailAsync(DocumentItem item)
-    {
-        try
-        {
-            var sourcePath = item.SourcePdfPath ?? item.FilePath;
-            if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
-                return null;
-
-            var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-            var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-
-            if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
-                return null;
-
-            using var page = pdfDocument.GetPage((uint)(item.PageNumber - 1));
-            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-
-            var options = new Windows.Data.Pdf.PdfPageRenderOptions
-            {
-                DestinationWidth = 200,
-                DestinationHeight = (uint)(200 * page.Size.Height / page.Size.Width)
-            };
-
-            await page.RenderToStreamAsync(stream, options);
-
-            var bitmap = new BitmapImage();
-            await bitmap.SetSourceAsync(stream);
-            return bitmap;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Error loading PDF thumbnail");
             return null;
         }
     }
@@ -1221,7 +1279,7 @@ public sealed partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap
         });
 
-        panel.Children.Add(new TextBlock { Text = "Version: 1.0.3" });
+        panel.Children.Add(new TextBlock { Text = "Version: 1.0.5" });
 
         var linkPanel = new StackPanel { Orientation = Orientation.Horizontal };
         linkPanel.Children.Add(new TextBlock { Text = "Repository: ", VerticalAlignment = VerticalAlignment.Center });
