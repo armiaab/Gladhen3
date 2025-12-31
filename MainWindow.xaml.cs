@@ -16,6 +16,7 @@ using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.System;
 using WinRT.Interop;
+using System.Runtime.InteropServices;
 
 namespace Gladhen3;
 
@@ -468,10 +469,30 @@ public sealed partial class MainWindow : Window
             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
             SuggestedFileName = "Document"
         };
-        savePicker.FileTypeChoices.Add("PDF Document", [".pdf"]);
+        savePicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
 
         InitializeWithWindow.Initialize(savePicker, WindowNative.GetWindowHandle(this));
-        var file = await savePicker.PickSaveFileAsync();
+
+        StorageFile file;
+        try
+        {
+            file = await savePicker.PickSaveFileAsync();
+        }
+        catch (COMException comEx)
+        {
+            // The COMException from the file picker can be opaque; log and show friendly message
+            Log.Warning(comEx, "Save file picker failed (COMException)");
+            await ShowDialogAsync("Save Failed", "Unable to open the save dialog. This can happen if the system file picker failed. Try again or restart the app.");
+            StatusTextBlock.Text = "Save cancelled";
+            return;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Save file picker failed");
+            await ShowDialogAsync("Save Failed", $"Unable to open the save dialog: {ex.Message}");
+            StatusTextBlock.Text = "Save cancelled";
+            return;
+        }
 
         if (file == null)
         {
@@ -479,22 +500,133 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        try
-        {
-            StatusTextBlock.Text = "Creating PDF...";
-            var items = _documentItems.ToList();
-            var outputPath = file.Path;
+        var items = _documentItems.ToList();
+        var outputPath = file.Path;
 
-            await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
+        StatusTextBlock.Text = "Creating PDF...";
 
-            StatusTextBlock.Text = "PDF created successfully";
-            await ShowDialogAsync("Success", $"PDF saved to:\n{outputPath}");
-        }
-        catch (Exception ex)
+        while (true)
         {
-            StatusTextBlock.Text = $"Error: {ex.Message}";
-            Log.Error(ex, "Error creating PDF");
-            await ShowDialogAsync("Error", $"Failed to create PDF:\n{ex.Message}");
+            try
+            {
+                await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
+
+                StatusTextBlock.Text = "PDF created successfully";
+                await ShowDialogAsync("Success", $"PDF saved to:\n{outputPath}");
+                break;
+            }
+            catch (IOException ex)
+            {
+                Log.Warning(ex, "I/O error while saving PDF: {Path}", outputPath);
+
+                var dialog = new ContentDialog
+                {
+                    Title = "File in Use",
+                    Content = $"Cannot save to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and retry, or choose a different location.",
+                    PrimaryButtonText = "Retry",
+                    SecondaryButtonText = "Choose Location",
+                    CloseButtonText = "Cancel",
+                    XamlRoot = Content.XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+                if (result == ContentDialogResult.Primary)
+                {
+                    // Retry
+                    continue;
+                }
+                else if (result == ContentDialogResult.Secondary)
+                {
+                    // Choose different location
+                    var newPicker = new FileSavePicker
+                    {
+                        SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                        SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
+                    };
+                    newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+                    InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
+
+                    try
+                    {
+                        var newFile = await newPicker.PickSaveFileAsync();
+                        if (newFile == null)
+                        {
+                            StatusTextBlock.Text = "Cancelled";
+                            return;
+                        }
+                        outputPath = newFile.Path;
+                        continue;
+                    }
+                    catch (COMException comEx)
+                    {
+                        Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
+                        await ShowDialogAsync("Save Failed", "Unable to open the save dialog. Try again or restart the app.");
+                        StatusTextBlock.Text = "Save cancelled";
+                        return;
+                    }
+                }
+                else
+                {
+                    StatusTextBlock.Text = "Cancelled";
+                    return;
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                Log.Warning(ex, "Access denied while saving PDF: {Path}", outputPath);
+
+                var dialog = new ContentDialog
+                {
+                    Title = "Access Denied",
+                    Content = $"Access denied saving to '{Path.GetFileName(outputPath)}'. Check permissions or choose a different location.",
+                    PrimaryButtonText = "Choose Location",
+                    CloseButtonText = "Cancel",
+                    XamlRoot = Content.XamlRoot
+                };
+
+                var result = await dialog.ShowAsync();
+                if (result == ContentDialogResult.Primary)
+                {
+                    var newPicker = new FileSavePicker
+                    {
+                        SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                        SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
+                    };
+                    newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+                    InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
+
+                    try
+                    {
+                        var newFile = await newPicker.PickSaveFileAsync();
+                        if (newFile == null)
+                        {
+                            StatusTextBlock.Text = "Cancelled";
+                            return;
+                        }
+                        outputPath = newFile.Path;
+                        continue;
+                    }
+                    catch (COMException comEx)
+                    {
+                        Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
+                        await ShowDialogAsync("Save Failed", "Unable to save the pdf file, the file is used by another process");
+                        StatusTextBlock.Text = "Save cancelled";
+                        return;
+                    }
+                }
+                else
+                {
+                    StatusTextBlock.Text = "Cancelled";
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusTextBlock.Text = $"Error: {ex.Message}";
+                Log.Error(ex, "Error creating PDF");
+                await ShowDialogAsync("Error", $"Failed to create PDF:\n{ex.Message}");
+                return;
+            }
         }
     }
 
@@ -524,7 +656,6 @@ public sealed partial class MainWindow : Window
 
     private void ListViewToggle_Unchecked(object sender, RoutedEventArgs e)
     {
-        // Prevent unchecking - re-check if this was the active view
         if (!_isGridView && ListViewToggle != null)
         {
             ListViewToggle.IsChecked = true;
@@ -1012,7 +1143,6 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        // Load initial item
         await LoadItemAsync(startIndex);
 
         await dialog.ShowAsync();

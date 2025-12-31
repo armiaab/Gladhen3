@@ -67,14 +67,12 @@ public partial class App : Application
 
         if (!createdNew)
         {
-            // Another instance is running - send files to it and exit
             Log.Information("Another instance is running, sending files to existing instance");
             SendFilesToExistingInstance(filePaths);
             Environment.Exit(0);
             return;
         }
 
-        // This is the first instance - start the pipe server
         StartPipeServer();
 
         _mainWindow = filePaths.Count > 0 ? new MainWindow(filePaths) : new MainWindow();
@@ -265,7 +263,6 @@ public partial class App : Application
         _mutex?.Dispose();
     }
 
-    // Native methods
     private const int SW_RESTORE = 9;
 
     [DllImport("user32.dll")]

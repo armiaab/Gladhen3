@@ -20,7 +20,15 @@ namespace Gladhen3.Services;
 public class DocumentService
 {
     // Use static readonly arrays to avoid repeated allocations
-    private static readonly string[] ImageExtensions = [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif"];
+    // Extended to support more image formats that Windows can decode
+    private static readonly string[] ImageExtensions = [
+  ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif",
+        ".webp", ".heic", ".heif",  // Modern formats
+   ".ico", ".wdp", ".hdp",     // Windows formats (HD Photo / JPEG XR)
+        ".jxr",             // JPEG XR
+        ".dds",   // DirectDraw Surface
+        ".raw", ".cr2", ".nef", ".arw", ".dng"  // RAW camera formats (limited support)
+    ];
     private static readonly string[] PdfExtensions = [".pdf"];
     private static readonly string[] AllExtensions = [.. ImageExtensions, .. PdfExtensions];
     private static readonly string[] Sizes = ["B", "KB", "MB", "GB"];
@@ -219,168 +227,145 @@ public class DocumentService
     IProgress<int>? progress = null,
      CancellationToken cancellationToken = default)
     {
-      var processedCount = 0;
-   
+        var processedCount = 0;
+
         // Group PDF pages by source file to avoid opening same PDF multiple times
-   var pdfGroups = items
-            .Where(i => i.Type == DocumentType.PdfPage && i.Thumbnail == null)
-       .GroupBy(i => i.SourcePdfPath ?? i.FilePath)
-     .ToList();
-        
- var imageItems = items
-   .Where(i => i.Type == DocumentType.Image && i.Thumbnail == null)
-.ToList();
+        var pdfGroups = items
+                 .Where(i => i.Type == DocumentType.PdfPage && i.Thumbnail == null)
+            .GroupBy(i => i.SourcePdfPath ?? i.FilePath)
+          .ToList();
+
+        var imageItems = items
+          .Where(i => i.Type == DocumentType.Image && i.Thumbnail == null)
+       .ToList();
 
         // Process images in parallel
-    await Parallel.ForEachAsync(
-      imageItems,
-     new ParallelOptions
+        await Parallel.ForEachAsync(
+          imageItems,
+         new ParallelOptions
+         {
+             MaxDegreeOfParallelism = MaxDegreeOfParallelism,
+             CancellationToken = cancellationToken
+         },
+     async (item, ct) =>
+        {
+            try
             {
-    MaxDegreeOfParallelism = MaxDegreeOfParallelism,
-        CancellationToken = cancellationToken
-     },
- async (item, ct) =>
-    {
-    try
-     {
-   item.Thumbnail = await LoadImageThumbnailAsync(item.FilePath);
+                item.Thumbnail = await LoadImageThumbnailAsync(item.FilePath);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
+            }
+
+            var count = Interlocked.Increment(ref processedCount);
+            progress?.Report(count);
+        });
+
+        // Process PDF groups in parallel (one PDF file at a time per thread)
+        await Parallel.ForEachAsync(
+          pdfGroups,
+               new ParallelOptions
+               {
+                   MaxDegreeOfParallelism = MaxDegreeOfParallelism,
+                   CancellationToken = cancellationToken
+               },
+           async (group, ct) =>
+             {
+                 try
+                 {
+                     var sourcePath = group.Key;
+                     if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
+                         return;
+
+                     var file = await StorageFile.GetFileFromPathAsync(sourcePath);
+                     var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+
+                     foreach (var item in group)
+                     {
+                         ct.ThrowIfCancellationRequested();
+
+                         if (item.PageNumber >= 1 && item.PageNumber <= pdfDocument.PageCount)
+                         {
+                             item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, item.PageNumber - 1);
+                         }
+
+                         var count = Interlocked.Increment(ref processedCount);
+                         progress?.Report(count);
+                     }
+                 }
+                 catch (Exception ex)
+                 {
+                     Log.Warning(ex, "Error loading PDF thumbnails for: {Path}", group.Key);
+
+                     // Still increment progress for failed items
+                     foreach (var _ in group)
+                     {
+                         var count = Interlocked.Increment(ref processedCount);
+                         progress?.Report(count);
+                     }
+                 }
+             });
     }
-          catch (Exception ex)
-   {
-     Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
-        }
-        
-     var count = Interlocked.Increment(ref processedCount);
-     progress?.Report(count);
-});
-
-    // Process PDF groups in parallel (one PDF file at a time per thread)
-await Parallel.ForEachAsync(
-  pdfGroups,
-       new ParallelOptions
-            {
-         MaxDegreeOfParallelism = MaxDegreeOfParallelism,
-        CancellationToken = cancellationToken
-   },
-   async (group, ct) =>
-     {
-    try
-       {
-        var sourcePath = group.Key;
-        if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
-    return;
-
-     var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-      var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
-
-  foreach (var item in group)
-      {
-      ct.ThrowIfCancellationRequested();
- 
-           if (item.PageNumber >= 1 && item.PageNumber <= pdfDocument.PageCount)
-{
-    item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, item.PageNumber - 1);
-         }
-     
-         var count = Interlocked.Increment(ref processedCount);
-  progress?.Report(count);
- }
-   }
-       catch (Exception ex)
-    {
-   Log.Warning(ex, "Error loading PDF thumbnails for: {Path}", group.Key);
-  
-         // Still increment progress for failed items
-      foreach (var _ in group)
-    {
-  var count = Interlocked.Increment(ref processedCount);
-    progress?.Report(count);
-   }
-     }
-     });
-  }
 
     private async Task<List<DocumentItem>> CreatePdfPageItemsAsync(string pdfPath, string fileName, string fileSize, bool loadThumbnails)
-  {
-        try
-   {
-        var file = await StorageFile.GetFileFromPathAsync(pdfPath);
-       var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
- var pageCount = (int)pdfDocument.PageCount;
-
-     // Pre-allocate list with exact capacity
- var items = new List<DocumentItem>(pageCount);
-
-       for (var i = 0; i < pageCount; i++)
-      {
-     var item = new DocumentItem
-   {
-     FileName = fileName,
-    FilePath = pdfPath,
-     SourcePdfPath = pdfPath,
-            Type = DocumentType.PdfPage,
-         PageNumber = i + 1,
-       TotalPages = pageCount,
-       FileSize = fileSize
-    };
-
-          if (loadThumbnails)
-   {
-      item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, i);
-   }
-
-     items.Add(item);
-    }
-
- return items;
- }
-    catch (Exception ex)
-        {
-  Log.Error(ex, "Error creating PDF page items: {Path}", pdfPath);
-
-  // Fallback: create items without thumbnails
-    var pageCount = GetPdfPageCountFallback(pdfPath);
-   var items = new List<DocumentItem>(pageCount);
-   
-       for (var i = 0; i < pageCount; i++)
-            {
- items.Add(new DocumentItem
-                {
-    FileName = fileName,
-  FilePath = pdfPath,
-      SourcePdfPath = pdfPath,
-     Type = DocumentType.PdfPage,
-    PageNumber = i + 1,
-           TotalPages = pageCount,
- FileSize = fileSize
- });
-          }
-
- return items;
-      }
-}
-
-    private static async Task<BitmapImage?> LoadPdfPageThumbnailAsync(DocumentItem item)
     {
         try
         {
-    var sourcePath = item.SourcePdfPath ?? item.FilePath;
-      if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
-  return null;
+            var file = await StorageFile.GetFileFromPathAsync(pdfPath);
+            var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+            var pageCount = (int)pdfDocument.PageCount;
 
-  var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-      var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+            // Pre-allocate list with exact capacity
+            var items = new List<DocumentItem>(pageCount);
 
-        if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
-     return null;
+            for (var i = 0; i < pageCount; i++)
+            {
+                var item = new DocumentItem
+                {
+                    FileName = fileName,
+                    FilePath = pdfPath,
+                    SourcePdfPath = pdfPath,
+                    Type = DocumentType.PdfPage,
+                    PageNumber = i + 1,
+                    TotalPages = pageCount,
+                    FileSize = fileSize
+                };
 
-   return await RenderPdfPageThumbnailAsync(pdfDocument, item.PageNumber - 1);
+                if (loadThumbnails)
+                {
+                    item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, i);
+                }
+
+                items.Add(item);
+            }
+
+            return items;
         }
         catch (Exception ex)
-   {
-    Log.Error(ex, "Error loading PDF page thumbnail");
- return null;
-}
+        {
+            Log.Error(ex, "Error creating PDF page items: {Path}", pdfPath);
+
+            // Fallback: create items without thumbnails
+            var pageCount = GetPdfPageCountFallback(pdfPath);
+            var items = new List<DocumentItem>(pageCount);
+
+            for (var i = 0; i < pageCount; i++)
+            {
+                items.Add(new DocumentItem
+                {
+                    FileName = fileName,
+                    FilePath = pdfPath,
+                    SourcePdfPath = pdfPath,
+                    Type = DocumentType.PdfPage,
+                    PageNumber = i + 1,
+                    TotalPages = pageCount,
+                    FileSize = fileSize
+                });
+            }
+
+            return items;
+        }
     }
 
     private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(PdfDocument pdfDocument, int pageIndex)
