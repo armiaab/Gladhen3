@@ -609,7 +609,7 @@ public sealed partial class MainWindow : Window
                     catch (COMException comEx)
                     {
                         Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                        await ShowDialogAsync("Save Failed", "Unable to save the pdf file, the file is used by another process");
+                        await ShowDialogAsync("Save Failed", "Unable to save the pdf file, the file is used by another process. Please close the file in the other application and try again.");
                         StatusTextBlock.Text = "Save cancelled";
                         return;
                     }

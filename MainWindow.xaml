@@ -158,10 +158,10 @@
                     Width="36"
                     Height="36"
                     Checked="GridViewToggle_Checked"
-                    Unchecked="GridViewToggle_Unchecked"
                     CornerRadius="4"
                     IsChecked="True"
-                    ToolTipService.ToolTip="Thumbnails">
+                    ToolTipService.ToolTip="Thumbnails"
+                    Unchecked="GridViewToggle_Unchecked">
                     <FontIcon FontSize="13" Glyph="&#xF0E2;" />
                 </ToggleButton>
                 <ToggleButton
@@ -169,9 +169,9 @@
                     Width="36"
                     Height="36"
                     Checked="ListViewToggle_Checked"
-                    Unchecked="ListViewToggle_Unchecked"
                     CornerRadius="4"
-                    ToolTipService.ToolTip="List">
+                    ToolTipService.ToolTip="List"
+                    Unchecked="ListViewToggle_Unchecked">
                     <FontIcon FontSize="13" Glyph="&#xE8FD;" />
                 </ToggleButton>
             </StackPanel>
