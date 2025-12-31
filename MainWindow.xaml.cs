@@ -1424,7 +1424,6 @@ public sealed partial class MainWindow : Window
         heightPanel.Children.Add(heightUnitLabel);
         customSizePanel.Children.Add(heightPanel);
 
-        // Preset buttons for common sizes
         var presetPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
         presetPanel.Children.Add(new TextBlock
         {
@@ -1452,27 +1451,59 @@ public sealed partial class MainWindow : Window
 
         panel.Children.Add(customSizePanel);
 
-        // Update unit labels when unit changes
+        int previousUnitIndex = unitCombo.SelectedIndex;
+
         unitCombo.SelectionChanged += (s, args) =>
-      {
-          var unitName = unitCombo.SelectedIndex switch
-          {
-              0 => "mm",
-              1 => "in",
-              2 => "pt",
-              _ => "mm"
-          };
-          widthUnitLabel.Text = unitName;
-          heightUnitLabel.Text = unitName;
-      };
+        {
+            var unitName = unitCombo.SelectedIndex switch
+            {
+                0 => "mm",
+                1 => "in",
+                2 => "pt",
+                _ => "mm"
+            };
+            widthUnitLabel.Text = unitName;
+            heightUnitLabel.Text = unitName;
+
+            var mmPerInch = 25.4;
+            var ptPerInch = 72.0;
+
+            double ConvertValue(double value, int fromUnit, int toUnit)
+            {
+                if (fromUnit == toUnit) return value;
+                double valueInMm = fromUnit switch
+                {
+                    0 => value, // mm
+                    1 => value * mmPerInch, // in -> mm
+                    2 => value * (mmPerInch / ptPerInch), // pt -> mm
+                    _ => value
+                };
+                // Convert mm to target
+                return toUnit switch
+                {
+                    0 => valueInMm, // mm
+                    1 => valueInMm / mmPerInch, // mm -> in
+                    2 => valueInMm * (ptPerInch / mmPerInch), // mm -> pt
+                    _ => valueInMm
+                };
+            }
+
+            var newUnitIndex = unitCombo.SelectedIndex;
+            if (newUnitIndex != previousUnitIndex)
+            {
+                widthBox.Value = ConvertValue(widthBox.Value, previousUnitIndex, newUnitIndex);
+                heightBox.Value = ConvertValue(heightBox.Value, previousUnitIndex, newUnitIndex);
+                previousUnitIndex = newUnitIndex;
+            }
+        };
 
         // Show/hide custom size panel based on selection
         paperSizeCombo.SelectionChanged += (s, args) =>
-    {
-        customSizePanel.Visibility = paperSizeCombo.SelectedIndex == 5
-        ? Visibility.Visible
-       : Visibility.Collapsed;
-    };
+        {
+            customSizePanel.Visibility = paperSizeCombo.SelectedIndex == 5
+            ? Visibility.Visible
+           : Visibility.Collapsed;
+        };
 
         panel.Children.Add(new TextBlock
         {
@@ -1529,7 +1560,6 @@ public sealed partial class MainWindow : Window
             AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
             AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
 
-            // Save custom size settings
             if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
             {
                 AppSettings.Current.CustomSizeUnit = unitCombo.SelectedIndex;
