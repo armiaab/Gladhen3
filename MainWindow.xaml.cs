@@ -55,7 +55,6 @@ public sealed partial class MainWindow : Window
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
 
-            // Set the icon from the app's assets
             appWindow.SetIcon("Assets/Square44x44Logo.png");
         }
         catch (Exception ex)
@@ -1333,10 +1332,10 @@ public sealed partial class MainWindow : Window
 
         var paperSizeCombo = new ComboBox { Width = 220 };
         paperSizeCombo.Items.Add("Automatic (Use Image Size)");
-        paperSizeCombo.Items.Add("A4 (210 × 297 mm)");
-        paperSizeCombo.Items.Add("Letter (8.5 × 11 in)");
-        paperSizeCombo.Items.Add("Legal (8.5 × 14 in)");
-        paperSizeCombo.Items.Add("A3 (297 × 420 mm)");
+        paperSizeCombo.Items.Add("A4 (210 ×297 mm)");
+        paperSizeCombo.Items.Add("Letter (8.5 ×11 in)");
+        paperSizeCombo.Items.Add("Legal (8.5 ×14 in)");
+        paperSizeCombo.Items.Add("A3 (297 ×420 mm)");
         paperSizeCombo.Items.Add("Custom...");
         paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
         panel.Children.Add(paperSizeCombo);
@@ -1349,7 +1348,6 @@ public sealed partial class MainWindow : Window
             Visibility = AppSettings.Current.PaperSize == PdfPaperSize.Custom ? Visibility.Visible : Visibility.Collapsed
         };
 
-        // Unit selector
         var unitPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         unitPanel.Children.Add(new TextBlock
         {
@@ -1366,7 +1364,7 @@ public sealed partial class MainWindow : Window
         unitPanel.Children.Add(unitCombo);
         customSizePanel.Children.Add(unitPanel);
 
-        // Width input
+        var unitMarginPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var widthPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         widthPanel.Children.Add(new TextBlock
         {
@@ -1393,7 +1391,7 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
         widthPanel.Children.Add(widthUnitLabel);
-        customSizePanel.Children.Add(widthPanel);
+        unitMarginPanel.Children.Add(widthPanel);
 
         // Height input
         var heightPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -1422,7 +1420,9 @@ public sealed partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
         heightPanel.Children.Add(heightUnitLabel);
-        customSizePanel.Children.Add(heightPanel);
+        unitMarginPanel.Children.Add(heightPanel);
+
+        customSizePanel.Children.Add(unitMarginPanel);
 
         var presetPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
         presetPanel.Children.Add(new TextBlock
@@ -1501,8 +1501,8 @@ public sealed partial class MainWindow : Window
         paperSizeCombo.SelectionChanged += (s, args) =>
         {
             customSizePanel.Visibility = paperSizeCombo.SelectedIndex == 5
-            ? Visibility.Visible
-           : Visibility.Collapsed;
+                ? Visibility.Visible
+                : Visibility.Collapsed;
         };
 
         panel.Children.Add(new TextBlock
@@ -1532,8 +1532,131 @@ public sealed partial class MainWindow : Window
         marginCombo.Items.Add("Normal (0.5\")");
         marginCombo.Items.Add("Wide (1\")");
         marginCombo.Items.Add("Extra Wide (1.5\")");
+        marginCombo.Items.Add("Custom...");
         marginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
         panel.Children.Add(marginCombo);
+
+        // Custom margin panel (initially hidden)
+        var customMarginPanel = new StackPanel
+        {
+            Spacing = 8,
+            Margin = new Thickness(0, 8, 0, 0),
+            Visibility = AppSettings.Current.Margin == (PdfPageMargin)5 ? Visibility.Visible : Visibility.Collapsed
+        };
+
+        // Margin unit selector
+        var marginUnitPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        marginUnitPanel.Children.Add(new TextBlock
+        {
+            Text = "Unit:",
+            VerticalAlignment = VerticalAlignment.Center,
+            Width = 50
+        });
+        var marginUnitCombo = new ComboBox { Width = 120 };
+        marginUnitCombo.Items.Add("Millimeters (mm)");
+        marginUnitCombo.Items.Add("Inches (in)");
+        marginUnitCombo.Items.Add("Points (pt)");
+        marginUnitCombo.SelectedIndex = AppSettings.Current.CustomMarginUnit;
+        marginUnitPanel.Children.Add(marginUnitCombo);
+        customMarginPanel.Children.Add(marginUnitPanel);
+
+        // Margin input grid
+        var marginGrid = new Grid { ColumnSpacing = 8, RowSpacing = 4 };
+        for (int i = 0; i < 4; i++) marginGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var leftMarginBox = new NumberBox
+        {
+            Header = "Left",
+            Value = AppSettings.Current.CustomMarginLeft,
+            Minimum = 0,
+            Maximum = 100,
+            Width = 100,
+            SmallChange = 0.1,
+            LargeChange = 0.5
+        };
+        var rightMarginBox = new NumberBox
+        {
+            Header = "Right",
+            Value = AppSettings.Current.CustomMarginRight,
+            Minimum = 0,
+            Maximum = 100,
+            Width = 100,
+            SmallChange = 0.1,
+            LargeChange = 0.5
+        };
+        var topMarginBox = new NumberBox
+        {
+            Header = "Top",
+            Value = AppSettings.Current.CustomMarginTop,
+            Minimum = 0,
+            Maximum = 100,
+            Width = 100,
+            SmallChange = 0.1,
+            LargeChange = 0.5
+        };
+        var bottomMarginBox = new NumberBox
+        {
+            Header = "Bottom",
+            Value = AppSettings.Current.CustomMarginBottom,
+            Minimum = 0,
+            Maximum = 100,
+            Width = 100,
+            SmallChange = 0.1,
+            LargeChange = 0.5
+        };
+
+        marginGrid.Children.Add(leftMarginBox);
+        Grid.SetColumn(leftMarginBox, 0);
+        marginGrid.Children.Add(topMarginBox);
+        Grid.SetColumn(topMarginBox, 1);
+        marginGrid.Children.Add(rightMarginBox);
+        Grid.SetColumn(rightMarginBox, 2);
+        marginGrid.Children.Add(bottomMarginBox);
+        Grid.SetColumn(bottomMarginBox, 3);
+
+        customMarginPanel.Children.Add(marginGrid);
+        panel.Children.Add(customMarginPanel);
+
+        int previousMarginUnit = marginUnitCombo.SelectedIndex;
+        marginUnitCombo.SelectionChanged += (s, args) =>
+        {
+            var mmPerInch = 25.4;
+            var ptPerInch = 72.0;
+            double ConvertValue(double value, int fromUnit, int toUnit)
+            {
+                if (fromUnit == toUnit) return value;
+                double valueInMm = fromUnit switch
+                {
+                    0 => value, // mm
+                    1 => value * mmPerInch, // in -> mm
+                    2 => value * (mmPerInch / ptPerInch), // pt -> mm
+                    _ => value
+                };
+                return toUnit switch
+                {
+                    0 => valueInMm, // mm
+                    1 => valueInMm / mmPerInch, // mm -> in
+                    2 => valueInMm * (ptPerInch / mmPerInch), // mm -> pt
+                    _ => valueInMm
+                };
+            }
+            var newUnit = marginUnitCombo.SelectedIndex;
+            if (newUnit != previousMarginUnit)
+            {
+                leftMarginBox.Value = ConvertValue(leftMarginBox.Value, previousMarginUnit, newUnit);
+                rightMarginBox.Value = ConvertValue(rightMarginBox.Value, previousMarginUnit, newUnit);
+                topMarginBox.Value = ConvertValue(topMarginBox.Value, previousMarginUnit, newUnit);
+                bottomMarginBox.Value = ConvertValue(bottomMarginBox.Value, previousMarginUnit, newUnit);
+                previousMarginUnit = newUnit;
+            }
+        };
+
+        marginCombo.SelectionChanged += (s, args) =>
+        {
+            customMarginPanel.Visibility = marginCombo.SelectedIndex == 5
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        };
 
         var infoText = new TextBlock
         {
@@ -1565,6 +1688,14 @@ public sealed partial class MainWindow : Window
                 AppSettings.Current.CustomSizeUnit = unitCombo.SelectedIndex;
                 AppSettings.Current.CustomWidth = widthBox.Value;
                 AppSettings.Current.CustomHeight = heightBox.Value;
+            }
+            if (AppSettings.Current.Margin == (PdfPageMargin)5)
+            {
+                AppSettings.Current.CustomMarginUnit = marginUnitCombo.SelectedIndex;
+                AppSettings.Current.CustomMarginLeft = leftMarginBox.Value;
+                AppSettings.Current.CustomMarginRight = rightMarginBox.Value;
+                AppSettings.Current.CustomMarginTop = topMarginBox.Value;
+                AppSettings.Current.CustomMarginBottom = bottomMarginBox.Value;
             }
 
             await AppSettings.SaveAsync();

@@ -28,6 +28,11 @@ public class AppSettings
     public int CustomSizeUnit { get; set; } = 0; // Default: millimeters
 
     private const string SettingsFileName = "appSettings.json";
+    public int CustomMarginUnit { get; set; } = 1; // 0: mm, 1: in, 2: pt
+    public double CustomMarginLeft { get; set; } = 0.5;
+    public double CustomMarginRight { get; set; } = 0.5;
+    public double CustomMarginTop { get; set; } = 0.5;
+    public double CustomMarginBottom { get; set; } = 0.5;
     private static AppSettings _current = new();
 
     public static AppSettings Current => _current;

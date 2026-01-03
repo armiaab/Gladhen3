@@ -6,5 +6,6 @@ public enum PdfPageMargin
     Narrow,
     Normal,
     Wide,
-    ExtraWide
+    ExtraWide,
+    Custom
 }
