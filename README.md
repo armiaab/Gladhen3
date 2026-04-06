@@ -18,5 +18,4 @@ Gladhen 3 is winui3 application that allows you to convert your images to a sing
 ![Main Window](./docs/mainmenu.png)
 
 ## Installation
-Currently, the application is still in development, but you can download the latest version from [Releases](https://github.com/armiaab/Gladhen3/releases).
-To install the application, run the install.ps1 file and follow the instructions.
+https://apps.microsoft.com/detail/9PKH3VS88B8Q?hl=en-us&gl=US&ocid=pdpshare
