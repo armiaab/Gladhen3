@@ -28,6 +28,9 @@ public class AppSettings
     public int CustomSizeUnit { get; set; } = 0; // Default: millimeters
 
     private const string SettingsFileName = "appSettings.json";
+
+    private const double MmToPoints   = 72.0 / 25.4;
+    private const double InchToPoints = 72.0;
     public int CustomMarginUnit { get; set; } = 1; // 0: mm, 1: in, 2: pt
     public double CustomMarginLeft { get; set; } = 0.5;
     public double CustomMarginRight { get; set; } = 0.5;
@@ -56,30 +59,24 @@ public class AppSettings
     /// <summary>
     /// Gets custom width in points (72 points = 1 inch)
     /// </summary>
-    public double GetCustomWidthInPoints()
+    public double GetCustomWidthInPoints() => CustomSizeUnit switch
     {
-        return CustomSizeUnit switch
-        {
-            0 => CustomWidth * 72.0 / 25.4, // mm to points
-            1 => CustomWidth * 72.0,         // inches to points
-            2 => CustomWidth,    // already in points
-            _ => CustomWidth * 72.0 / 25.4
-        };
-    }
+        0 => CustomWidth * MmToPoints,
+        1 => CustomWidth * InchToPoints,
+        2 => CustomWidth,
+        _ => CustomWidth * MmToPoints
+    };
 
     /// <summary>
     /// Gets custom height in points (72 points = 1 inch)
     /// </summary>
-    public double GetCustomHeightInPoints()
+    public double GetCustomHeightInPoints() => CustomSizeUnit switch
     {
-        return CustomSizeUnit switch
-        {
-            0 => CustomHeight * 72.0 / 25.4, // mm to points
-            1 => CustomHeight * 72.0,         // inches to points
-            2 => CustomHeight,// already in points
-            _ => CustomHeight * 72.0 / 25.4
-        };
-    }
+        0 => CustomHeight * MmToPoints,
+        1 => CustomHeight * InchToPoints,
+        2 => CustomHeight,
+        _ => CustomHeight * MmToPoints
+    };
 
     /// <summary>
     /// Gets the unit name for display

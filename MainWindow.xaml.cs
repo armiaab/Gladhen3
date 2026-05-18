@@ -1007,30 +1007,7 @@ public sealed partial class MainWindow : Window
                 }
                 else
                 {
-                    // Calculate zoom to fit image in container
-                    // Container is 500px height, width varies but typically ~700px
-                    var containerWidth = imageContainer.ActualWidth > 0 ? imageContainer.ActualWidth : 700;
-                    var containerHeight = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
-
-                    var imageWidth = bitmap.PixelWidth;
-                    var imageHeight = bitmap.PixelHeight;
-
-                    if (imageWidth > 0 && imageHeight > 0)
-                    {
-                        var zoomX = containerWidth / imageWidth;
-                        var zoomY = containerHeight / imageHeight;
-                        var fitZoom = (float)Math.Min(zoomX, zoomY);
-
-                        fitZoom = Math.Clamp(fitZoom, 0.1f, 1.0f);
-
-                        scrollViewer.ChangeView(0, 0, fitZoom);
-                        zoomText.Text = $"{(int)(fitZoom * 100)}%";
-                    }
-                    else
-                    {
-                        scrollViewer.ChangeView(0, 0, 1f);
-                        zoomText.Text = "100%";
-                    }
+                    ApplyFitZoom();
                 }
             }
             catch (Exception ex)
@@ -1045,6 +1022,16 @@ public sealed partial class MainWindow : Window
                     Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
                 };
             }
+        }
+
+        void ApplyFitZoom()
+        {
+            if (image.Source is not BitmapImage bmp || bmp.PixelWidth == 0 || bmp.PixelHeight == 0) return;
+            var cw = imageContainer.ActualWidth  > 0 ? imageContainer.ActualWidth  : 700;
+            var ch = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
+            var fitZoom = (float)Math.Clamp(Math.Min(cw / bmp.PixelWidth, ch / bmp.PixelHeight), 0.05f, 5f);
+            scrollViewer.ChangeView(0, 0, fitZoom);
+            zoomText.Text = $"{(int)(fitZoom * 100)}%";
         }
 
         // Event handlers
@@ -1086,25 +1073,7 @@ public sealed partial class MainWindow : Window
             scrollViewer.ChangeView(null, null, newZoom);
         };
 
-        fitButton.Click += (s, args) =>
-        {
-            // Calculate zoom to fit
-            var containerWidth = imageContainer.ActualWidth > 0 ? imageContainer.ActualWidth : 700;
-            var containerHeight = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
-
-            if (image.Source is BitmapImage bmp && bmp.PixelWidth > 0 && bmp.PixelHeight > 0)
-            {
-                var zoomX = containerWidth / bmp.PixelWidth;
-                var zoomY = containerHeight / bmp.PixelHeight;
-                var fitZoom = (float)Math.Min(zoomX, zoomY);
-                fitZoom = Math.Clamp(fitZoom, 0.1f, 1.0f);
-                scrollViewer.ChangeView(0, 0, fitZoom);
-            }
-            else
-            {
-                scrollViewer.ChangeView(0, 0, 1f);
-            }
-        };
+        fitButton.Click += (s, args) => ApplyFitZoom();
 
         // Keyboard navigation
         dialog.KeyDown += async (s, args) =>
@@ -1141,6 +1110,9 @@ public sealed partial class MainWindow : Window
                     break;
             }
         };
+
+        // Re-apply fit when the dialog finishes its first layout pass
+        dialog.Opened += (s, e) => ApplyFitZoom();
 
         await LoadItemAsync(startIndex);
 

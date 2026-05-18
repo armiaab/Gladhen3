@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml.Media.Imaging;
+﻿using Microsoft.UI.Xaml.Media.Imaging;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -14,6 +14,9 @@ public enum DocumentType
 public class DocumentItem : INotifyPropertyChanged
 {
     private BitmapImage? _thumbnail;
+    private string? _fileExtension;
+    private string? _displayName;
+    private string? _pageInfo;
 
     public string FileName { get; set; } = string.Empty;
     public string FilePath { get; set; } = string.Empty;
@@ -37,17 +40,25 @@ public class DocumentItem : INotifyPropertyChanged
     public string FileSize { get; set; } = string.Empty;
     public string? SourcePdfPath { get; set; }
 
-    public string FileExtension => Path.GetExtension(FilePath).ToLowerInvariant();
+    // Cached: FilePath never changes after construction.
+    public string FileExtension => _fileExtension ??= Path.GetExtension(FilePath).ToLowerInvariant();
 
-    public string TypeIcon => Type == DocumentType.PdfPage ? "\uEA90" : "\uEB9F";
+    // Segoe MDL2 Assets glyphs (EA90 = PDF, EB9F = Photo).
+    public string TypeIcon => Type == DocumentType.PdfPage ? "" : "";
 
-    public string DisplayName => Type == DocumentType.PdfPage && TotalPages > 1
-        ? $"{FileName} (Page {PageNumber}/{TotalPages})"
-        : FileName;
+    // Cached: FileName / PageNumber / TotalPages are set once at construction.
+    public string DisplayName => _displayName ??= ComputeDisplayName();
+    public string PageInfo    => _pageInfo    ??= ComputePageInfo();
 
-    public string PageInfo => Type == DocumentType.PdfPage && TotalPages > 1
-        ? $"Page {PageNumber} of {TotalPages}"
-  : string.Empty;
+    private string ComputeDisplayName() =>
+        Type == DocumentType.PdfPage && TotalPages > 1
+            ? $"{FileName} (Page {PageNumber}/{TotalPages})"
+            : FileName;
+
+    private string ComputePageInfo() =>
+        Type == DocumentType.PdfPage && TotalPages > 1
+            ? $"Page {PageNumber} of {TotalPages}"
+            : string.Empty;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

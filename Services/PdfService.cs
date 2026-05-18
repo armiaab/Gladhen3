@@ -634,50 +634,32 @@ public class PdfService
         }
     }
 
+    // Precomputed standard page sizes (portrait, in points) – avoids per-call XUnit conversions.
+    private static class PageDimensions
+    {
+        public static readonly (double W, double H) A4     = (XUnit.FromMillimeter(210).Point, XUnit.FromMillimeter(297).Point);
+        public static readonly (double W, double H) Letter = (XUnit.FromInch(8.5).Point,       XUnit.FromInch(11).Point);
+        public static readonly (double W, double H) Legal  = (XUnit.FromInch(8.5).Point,       XUnit.FromInch(14).Point);
+        public static readonly (double W, double H) A3     = (XUnit.FromMillimeter(297).Point, XUnit.FromMillimeter(420).Point);
+    }
+
     /// <summary>
     /// Gets page dimensions in portrait orientation (width &lt; height).
     /// Returns (shorterDimension, longerDimension) so caller can swap for landscape.
     /// </summary>
     private static (double Width, double Height) GetPageDimensionsInPortrait(PdfPaperSize size)
     {
-        double width, height;
-
-        switch (size)
+        var (w, h) = size switch
         {
-            case PdfPaperSize.A4:
-                width = XUnit.FromMillimeter(210).Point;
-                height = XUnit.FromMillimeter(297).Point;
-                break;
-            case PdfPaperSize.Letter:
-                width = XUnit.FromInch(8.5).Point;
-                height = XUnit.FromInch(11).Point;
-                break;
-            case PdfPaperSize.Legal:
-                width = XUnit.FromInch(8.5).Point;
-                height = XUnit.FromInch(14).Point;
-                break;
-            case PdfPaperSize.A3:
-                width = XUnit.FromMillimeter(297).Point;
-                height = XUnit.FromMillimeter(420).Point;
-                break;
-            case PdfPaperSize.Custom:
-                width = AppSettings.Current.GetCustomWidthInPoints();
-                height = AppSettings.Current.GetCustomHeightInPoints();
-                break;
-            default:
-                width = XUnit.FromMillimeter(210).Point;
-                height = XUnit.FromMillimeter(297).Point;
-                break;
-        }
-
-        // Ensure we always return portrait orientation (width < height)
-        // This normalizes user input so orientation setting works correctly
-        if (width > height)
-        {
-            return (height, width); // Swap to make it portrait
-        }
-
-        return (width, height);
+            PdfPaperSize.A4     => PageDimensions.A4,
+            PdfPaperSize.Letter => PageDimensions.Letter,
+            PdfPaperSize.Legal  => PageDimensions.Legal,
+            PdfPaperSize.A3     => PageDimensions.A3,
+            PdfPaperSize.Custom => (AppSettings.Current.GetCustomWidthInPoints(),
+                                    AppSettings.Current.GetCustomHeightInPoints()),
+            _                   => PageDimensions.A4
+        };
+        return w > h ? (h, w) : (w, h); // normalise to portrait
     }
 
     /// <summary>

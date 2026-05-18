@@ -1,6 +1,7 @@
 ﻿using Microsoft.UI.Xaml;
 using Serilog;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
@@ -118,51 +119,50 @@ public partial class App : Application
             try
             {
                 await using var server = new NamedPipeServerStream(
-                          PipeName,
-                   PipeDirection.In,
-             NamedPipeServerStream.MaxAllowedServerInstances,
-               PipeTransmissionMode.Byte,
-                  PipeOptions.Asynchronous);
+                    PipeName,
+                    PipeDirection.In,
+                    NamedPipeServerStream.MaxAllowedServerInstances,
+                    PipeTransmissionMode.Byte,
+                    PipeOptions.Asynchronous);
 
                 await server.WaitForConnectionAsync(cancellationToken);
 
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
-                // Read length
+                // Read 4-byte length prefix.
                 var lengthBuffer = new byte[4];
                 var bytesRead = await server.ReadAsync(lengthBuffer.AsMemory(0, 4), cancellationToken);
-
-                if (bytesRead < 4)
-                    continue;
+                if (bytesRead < 4) continue;
 
                 var messageLength = BitConverter.ToInt32(lengthBuffer, 0);
+                if (messageLength <= 0 || messageLength > 1024 * 1024) continue; // Max 1 MB
 
-                if (messageLength <= 0 || messageLength > 1024 * 1024) // Max 1MB
-                    continue;
-
-                // Read message
-                var messageBuffer = new byte[messageLength];
-                bytesRead = await server.ReadAsync(messageBuffer.AsMemory(0, messageLength), cancellationToken);
-
-                if (bytesRead < messageLength)
-                    continue;
-
-                var message = Encoding.UTF8.GetString(messageBuffer);
-                var receivedPaths = message.Split('|', StringSplitOptions.RemoveEmptyEntries)
-                      .Where(File.Exists)
-               .ToList();
-
-                if (receivedPaths.Count > 0)
+                // Rent a pooled buffer to avoid per-message heap allocations.
+                var messageBuffer = ArrayPool<byte>.Shared.Rent(messageLength);
+                try
                 {
-                    Log.Information("Received {Count} file(s) from another instance", receivedPaths.Count);
+                    bytesRead = await server.ReadAsync(messageBuffer.AsMemory(0, messageLength), cancellationToken);
+                    if (bytesRead < messageLength) continue;
 
-                    // Dispatch to UI thread
-                    _mainWindow?.DispatcherQueue.TryEnqueue(() =>
-                            {
-                                AddFilesToMainWindow(receivedPaths);
-                                BringWindowToFront();
-                            });
+                    var message = Encoding.UTF8.GetString(messageBuffer, 0, messageLength);
+                    var receivedPaths = message.Split('|', StringSplitOptions.RemoveEmptyEntries)
+                                               .Where(File.Exists)
+                                               .ToList();
+
+                    if (receivedPaths.Count > 0)
+                    {
+                        Log.Information("Received {Count} file(s) from another instance", receivedPaths.Count);
+                        _mainWindow?.DispatcherQueue.TryEnqueue(() =>
+                        {
+                            AddFilesToMainWindow(receivedPaths);
+                            BringWindowToFront();
+                        });
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(messageBuffer);
                 }
             }
             catch (OperationCanceledException)
@@ -265,9 +265,11 @@ public partial class App : Application
 
     private const int SW_RESTORE = 9;
 
-    [DllImport("user32.dll")]
-    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(IntPtr hWnd);
 
-    [DllImport("user32.dll")]
-    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool ShowWindow(IntPtr hWnd, int nCmdShow);
 }

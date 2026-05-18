@@ -4,7 +4,7 @@ using PdfSharp.Pdf.IO;
 using Serilog;
 using System;
 using System.Buffers;
-using System.Collections.Concurrent;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -19,19 +19,21 @@ namespace Gladhen3.Services;
 
 public class DocumentService
 {
-    // Use static readonly arrays to avoid repeated allocations
-    // Extended to support more image formats that Windows can decode
     private static readonly string[] ImageExtensions = [
-  ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif",
-        ".webp", ".heic", ".heif",  // Modern formats
-   ".ico", ".wdp", ".hdp",     // Windows formats (HD Photo / JPEG XR)
-        ".jxr",             // JPEG XR
-        ".dds",   // DirectDraw Surface
-        ".raw", ".cr2", ".nef", ".arw", ".dng"  // RAW camera formats (limited support)
+        ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif",
+        ".webp", ".heic", ".heif",
+        ".ico", ".wdp", ".hdp",
+        ".jxr",
+        ".dds",
+        ".raw", ".cr2", ".nef", ".arw", ".dng"
     ];
     private static readonly string[] PdfExtensions = [".pdf"];
     private static readonly string[] AllExtensions = [.. ImageExtensions, .. PdfExtensions];
     private static readonly string[] Sizes = ["B", "KB", "MB", "GB"];
+
+    // O(1) set lookup instead of O(n) linear scan for hot-path extension checks.
+    private static readonly FrozenSet<string> _imageExtSet =
+        ImageExtensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Maximum degree of parallelism for file loading operations
@@ -47,16 +49,7 @@ public class DocumentService
     public static bool IsImageFile(string path)
     {
         var ext = Path.GetExtension(path);
-        if (ext.Length == 0) return false;
-
-        // Use Span to avoid string allocation for comparison
-        ReadOnlySpan<char> extSpan = ext.AsSpan();
-        foreach (var imageExt in ImageExtensions)
-        {
-            if (extSpan.Equals(imageExt.AsSpan(), StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
-        return false;
+        return ext.Length > 0 && _imageExtSet.Contains(ext);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

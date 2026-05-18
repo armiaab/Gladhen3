@@ -12,6 +12,7 @@
 		<Nullable>enable</Nullable>
 		<!-- Application icon for exe and shell extension -->
 		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<!-- ShellExtension DLL path based on platform and configuration -->
