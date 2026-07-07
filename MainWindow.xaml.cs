@@ -244,11 +244,8 @@ public sealed partial class MainWindow : Window
             var items = await _documentService.CreateDocumentItemsBatchAsync(files, progress);
 
             // Add items immediately so user sees them
-            foreach (var item in items)
-            {
-                _documentItems.Add(item);
-                addedCount++;
-            }
+            await AddItemsInBatchesAsync(items);
+            addedCount = items.Count;
 
             UpdateUIState();
 
@@ -278,8 +275,7 @@ public sealed partial class MainWindow : Window
             var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
             // Add items immediately
-            foreach (var item in newItems)
-                _documentItems.Add(item);
+            await AddItemsInBatchesAsync(newItems);
 
             UpdateUIState();
 
@@ -299,6 +295,22 @@ public sealed partial class MainWindow : Window
         {
             Log.Error(ex, "Error loading documents");
             StatusTextBlock.Text = $"Error: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Adds items to the bound collection in chunks, yielding to the dispatcher between
+    /// chunks so large batches (multi-hundred-page PDFs) render progressively instead of
+    /// blocking the UI thread until every item is added.
+    /// </summary>
+    private async Task AddItemsInBatchesAsync(IReadOnlyList<DocumentItem> items)
+    {
+        const int batchSize = 100;
+        for (var i = 0; i < items.Count; i++)
+        {
+            _documentItems.Add(items[i]);
+            if ((i + 1) % batchSize == 0)
+                await Task.Delay(1);
         }
     }
 
@@ -503,7 +515,9 @@ public sealed partial class MainWindow : Window
         var outputPath = file.Path;
 
         StatusTextBlock.Text = "Creating PDF...";
-
+        SaveButton.IsEnabled = false;
+        try
+        {
         while (true)
         {
             try
@@ -627,6 +641,11 @@ public sealed partial class MainWindow : Window
                 return;
             }
         }
+        } // while
+        finally
+        {
+            SaveButton.IsEnabled = true;
+        }
     }
 
     #endregion
@@ -726,6 +745,8 @@ public sealed partial class MainWindow : Window
     private async Task ShowPreviewDialogAtIndexAsync(int startIndex)
     {
         var currentIndex = startIndex;
+        // Cache loaded PDFs for the dialog's lifetime so Next/Prev doesn't re-open the file
+        var pdfCache = new Dictionary<string, Windows.Data.Pdf.PdfDocument>(StringComparer.OrdinalIgnoreCase);
         var dialog = new ContentDialog
         {
             XamlRoot = Content.XamlRoot,
@@ -987,7 +1008,7 @@ public sealed partial class MainWindow : Window
                 }
                 else if (item.Type == DocumentType.PdfPage)
                 {
-                    bitmap = await RenderPdfPageHighResAsync(item);
+                    bitmap = await RenderPdfPageHighResAsync(item, pdfCache);
                     bitmap ??= item.Thumbnail;
                 }
 
@@ -1119,7 +1140,8 @@ public sealed partial class MainWindow : Window
         await dialog.ShowAsync();
     }
 
-    private static async Task<BitmapImage?> RenderPdfPageHighResAsync(DocumentItem item)
+    private static async Task<BitmapImage?> RenderPdfPageHighResAsync(
+        DocumentItem item, Dictionary<string, Windows.Data.Pdf.PdfDocument> pdfCache)
     {
         try
         {
@@ -1127,8 +1149,12 @@ public sealed partial class MainWindow : Window
             if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
                 return null;
 
-            var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-            var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+            if (!pdfCache.TryGetValue(sourcePath, out var pdfDocument))
+            {
+                var file = await StorageFile.GetFileFromPathAsync(sourcePath);
+                pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+                pdfCache[sourcePath] = pdfDocument;
+            }
 
             if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
                 return null;
@@ -1256,12 +1282,17 @@ public sealed partial class MainWindow : Window
     private void SortDocuments<T>(Func<DocumentItem, T?> keySelector, bool ascending) where T : IComparable
     {
         var sorted = ascending
-      ? _documentItems.OrderBy(keySelector).ToList()
+            ? _documentItems.OrderBy(keySelector).ToList()
             : _documentItems.OrderByDescending(keySelector).ToList();
 
-        _documentItems.Clear();
-        foreach (var item in sorted)
-            _documentItems.Add(item);
+        // Reorder in place with Move so the views recycle item containers,
+        // instead of Clear + re-Add which rebuilds every container in both views.
+        for (var target = 0; target < sorted.Count; target++)
+        {
+            var current = _documentItems.IndexOf(sorted[target]);
+            if (current != target)
+                _documentItems.Move(current, target);
+        }
     }
 
     private void SortByFileNameAsc_Click(object sender, RoutedEventArgs e)
@@ -1640,6 +1671,31 @@ public sealed partial class MainWindow : Window
         };
         panel.Children.Add(infoText);
 
+        // ── Image Compression ────────────────────────────────────────────────────
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Image Compression:",
+            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+
+        var compressionCombo = new ComboBox { Width = 220 };
+        compressionCombo.Items.Add("None (Original Quality)");
+        compressionCombo.Items.Add("Low (JPEG 85%)");
+        compressionCombo.Items.Add("Medium (JPEG 65%)");
+        compressionCombo.Items.Add("High (JPEG 40%)");
+        compressionCombo.SelectedIndex = (int)AppSettings.Current.ImageCompression;
+        panel.Children.Add(compressionCombo);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Note: Compression re-encodes all images to JPEG. Higher compression means smaller file size but lower quality.",
+            FontSize = 12,
+            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+
         var dialog = new ContentDialog
         {
             Title = "PDF Settings",
@@ -1654,6 +1710,7 @@ public sealed partial class MainWindow : Window
             AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
             AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
             AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
+            AppSettings.Current.ImageCompression = (PdfImageCompression)compressionCombo.SelectedIndex;
 
             if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
             {
@@ -1685,7 +1742,7 @@ public sealed partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap
         });
 
-        panel.Children.Add(new TextBlock { Text = "Version: 1.0.5" });
+        panel.Children.Add(new TextBlock { Text = "Version: 1.0.8" });
 
         var linkPanel = new StackPanel { Orientation = Orientation.Horizontal };
         linkPanel.Children.Add(new TextBlock { Text = "Repository: ", VerticalAlignment = VerticalAlignment.Center });
@@ -1753,8 +1810,7 @@ public sealed partial class MainWindow : Window
             var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
             // Add items immediately
-            foreach (var item in newItems)
-                _documentItems.Add(item);
+            await AddItemsInBatchesAsync(newItems);
 
             UpdateUIState();
 

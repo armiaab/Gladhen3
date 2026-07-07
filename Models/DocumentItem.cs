@@ -1,4 +1,6 @@
-﻿using Microsoft.UI.Xaml.Media.Imaging;
+﻿#if !UNIT_TEST
+using Microsoft.UI.Xaml.Media.Imaging;
+#endif
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -13,7 +15,11 @@ public enum DocumentType
 
 public class DocumentItem : INotifyPropertyChanged
 {
+#if !UNIT_TEST
     private BitmapImage? _thumbnail;
+#else
+    private object? _thumbnail;
+#endif
     private string? _fileExtension;
     private string? _displayName;
     private string? _pageInfo;
@@ -22,7 +28,11 @@ public class DocumentItem : INotifyPropertyChanged
     public string FilePath { get; set; } = string.Empty;
     public DocumentType Type { get; set; }
 
+#if !UNIT_TEST
     public BitmapImage? Thumbnail
+#else
+    public object? Thumbnail
+#endif
     {
         get => _thumbnail;
         set

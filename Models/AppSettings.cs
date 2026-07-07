@@ -2,7 +2,9 @@
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
+#if !UNIT_TEST
 using Windows.Storage;
+#endif
 
 namespace Gladhen3.Models;
 
@@ -11,6 +13,7 @@ public class AppSettings
     public PdfPaperSize PaperSize { get; set; } = PdfPaperSize.Automatic;
     public PdfPaperOrientation Orientation { get; set; } = PdfPaperOrientation.Automatic;
     public PdfPageMargin Margin { get; set; } = PdfPageMargin.None;
+    public PdfImageCompression ImageCompression { get; set; } = PdfImageCompression.None;
 
     /// <summary>
     /// Custom page width in the selected unit (default: millimeters)
@@ -39,6 +42,8 @@ public class AppSettings
     private static AppSettings _current = new();
 
     public static AppSettings Current => _current;
+
+    internal static void ReplaceForTesting(AppSettings settings) => _current = settings;
 
     /// <summary>
     /// Gets the margin in points (72 points = 1 inch)
@@ -92,6 +97,7 @@ public class AppSettings
         };
     }
 
+#if !UNIT_TEST
     public static async Task LoadAsync()
     {
         try
@@ -128,4 +134,5 @@ public class AppSettings
             Serilog.Log.Logger.Error(ex, "Failed to save settings");
         }
     }
+#endif
 }

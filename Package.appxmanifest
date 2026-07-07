@@ -11,15 +11,15 @@
   IgnorableNamespaces="uap rescap">
 
 	<Identity
-	  Name="e494132c-6702-4edc-9998-bfe3154694e7"
-	  Publisher="CN=Armia Abdurohman"
-	  Version="1.0.5.0" />
+	  Name="ArmiaAbdurohman.1346810EA0DDE"
+	  Publisher="CN=A0A549FD-9B84-4D9B-B51B-4918A04A4635"
+	  Version="1.0.11.0" />
 
-	<mp:PhoneIdentity PhoneProductId="e494132c-6702-4edc-9998-bfe3154694e7" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+	<mp:PhoneIdentity PhoneProductId="6388dfda-8b9a-4f4b-b1e2-a715ee67231b" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
 	<Properties>
-		<DisplayName>Gladhen3</DisplayName>
-		<PublisherDisplayName>armia</PublisherDisplayName>
+		<DisplayName>gladhen3</DisplayName>
+		<PublisherDisplayName>Armia Abdurohman</PublisherDisplayName>
 		<Logo>Assets\StoreLogo.png</Logo>
 	</Properties>
 
@@ -37,7 +37,7 @@
 		Executable="$targetnametoken$.exe"
 		  EntryPoint="$targetentrypoint$">
 			<uap:VisualElements
-			  DisplayName="Gladhen3"
+			  DisplayName="gladhen3"
 			  Description="Convert images to PDF and merge PDF files"
 			  BackgroundColor="transparent"
 			  Square150x150Logo="Assets\Square150x150Logo.png"

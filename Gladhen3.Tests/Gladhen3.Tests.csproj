@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <!-- UNIT_TEST disables WinUI/WinRT-specific code paths in linked source files -->
+    <DefineConstants>$(DefineConstants);UNIT_TEST</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="14.14.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="PDFsharp" Version="6.2.4" />
+    <PackageReference Include="Serilog" Version="4.3.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.9" />
+  </ItemGroup>
+
+  <!-- Link source files directly; UNIT_TEST guards remove WinUI dependencies -->
+  <ItemGroup>
+    <Compile Include="..\Models\AppSettings.cs" Link="Models\AppSettings.cs" />
+    <Compile Include="..\Models\DocumentItem.cs" Link="Models\DocumentItem.cs" />
+    <Compile Include="..\Models\PdfImageCompression.cs" Link="Models\PdfImageCompression.cs" />
+    <Compile Include="..\Models\PdfPageMargin.cs" Link="Models\PdfPageMargin.cs" />
+    <Compile Include="..\Models\PdfPaperOrientation.cs" Link="Models\PdfPaperOrientation.cs" />
+    <Compile Include="..\Models\PdfPaperSize.cs" Link="Models\PdfPaperSize.cs" />
+    <Compile Include="..\Services\PdfService.cs" Link="Services\PdfService.cs" />
+  </ItemGroup>
+
+</Project>
