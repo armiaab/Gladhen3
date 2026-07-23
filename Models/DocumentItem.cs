@@ -50,15 +50,12 @@ public class DocumentItem : INotifyPropertyChanged
     public string FileSize { get; set; } = string.Empty;
     public string? SourcePdfPath { get; set; }
 
-    // Cached: FilePath never changes after construction.
     public string FileExtension => _fileExtension ??= Path.GetExtension(FilePath).ToLowerInvariant();
 
-    // Segoe MDL2 Assets glyphs (EA90 = PDF, EB9F = Photo).
     public string TypeIcon => Type == DocumentType.PdfPage ? "" : "";
 
-    // Cached: FileName / PageNumber / TotalPages are set once at construction.
     public string DisplayName => _displayName ??= ComputeDisplayName();
-    public string PageInfo    => _pageInfo    ??= ComputePageInfo();
+    public string PageInfo => _pageInfo ??= ComputePageInfo();
 
     private string ComputeDisplayName() =>
         Type == DocumentType.PdfPage && TotalPages > 1

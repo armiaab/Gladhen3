@@ -63,7 +63,6 @@ public partial class App : Application
         var filePaths = new List<string>();
         ParseCommandLine(filePaths);
 
-        // Try to acquire the mutex
         _mutex = new Mutex(true, MutexName, out bool createdNew);
 
         if (!createdNew)
@@ -85,12 +84,11 @@ public partial class App : Application
         try
         {
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
-            client.Connect(3000); // 3 second timeout
+            client.Connect(2000);
 
             var message = string.Join("|", filePaths);
             var bytes = Encoding.UTF8.GetBytes(message);
 
-            // Write length first, then data
             var lengthBytes = BitConverter.GetBytes(bytes.Length);
             client.Write(lengthBytes, 0, lengthBytes.Length);
             client.Write(bytes, 0, bytes.Length);
@@ -130,7 +128,6 @@ public partial class App : Application
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
-                // Read 4-byte length prefix.
                 var lengthBuffer = new byte[4];
                 var bytesRead = await server.ReadAsync(lengthBuffer.AsMemory(0, 4), cancellationToken);
                 if (bytesRead < 4) continue;
@@ -138,7 +135,6 @@ public partial class App : Application
                 var messageLength = BitConverter.ToInt32(lengthBuffer, 0);
                 if (messageLength <= 0 || messageLength > 1024 * 1024) continue; // Max 1 MB
 
-                // Rent a pooled buffer to avoid per-message heap allocations.
                 var messageBuffer = ArrayPool<byte>.Shared.Rent(messageLength);
                 try
                 {
@@ -201,7 +197,6 @@ public partial class App : Application
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_mainWindow);
 
-            // Restore if minimized and bring to front
             ShowWindow(hwnd, SW_RESTORE);
             SetForegroundWindow(hwnd);
         }

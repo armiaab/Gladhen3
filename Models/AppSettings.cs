@@ -14,27 +14,15 @@ public class AppSettings
     public PdfPaperOrientation Orientation { get; set; } = PdfPaperOrientation.Automatic;
     public PdfPageMargin Margin { get; set; } = PdfPageMargin.None;
     public PdfImageCompression ImageCompression { get; set; } = PdfImageCompression.None;
-
-    /// <summary>
-    /// Custom page width in the selected unit (default: millimeters)
-    /// </summary>
-    public double CustomWidth { get; set; } = 210; // Default A4 width in mm
-
-    /// <summary>
-    /// Custom page height in the selected unit (default: millimeters)
-    /// </summary>
-    public double CustomHeight { get; set; } = 297; // Default A4 height in mm
-
-    /// <summary>
-    /// Unit for custom page size: 0 = millimeters, 1 = inches, 2 = points
-    /// </summary>
-    public int CustomSizeUnit { get; set; } = 0; // Default: millimeters
+    public double CustomWidth { get; set; } = 210;
+    public double CustomHeight { get; set; } = 297;
+    public int CustomSizeUnit { get; set; } = 0;
 
     private const string SettingsFileName = "appSettings.json";
 
-    private const double MmToPoints   = 72.0 / 25.4;
+    private const double MmToPoints = 72.0 / 25.4;
     private const double InchToPoints = 72.0;
-    public int CustomMarginUnit { get; set; } = 1; // 0: mm, 1: in, 2: pt
+    public MarginUnit CustomMarginUnit { get; set; } = MarginUnit.Mm;
     public double CustomMarginLeft { get; set; } = 0.5;
     public double CustomMarginRight { get; set; } = 0.5;
     public double CustomMarginTop { get; set; } = 0.5;
@@ -45,9 +33,6 @@ public class AppSettings
 
     internal static void ReplaceForTesting(AppSettings settings) => _current = settings;
 
-    /// <summary>
-    /// Gets the margin in points (72 points = 1 inch)
-    /// </summary>
     public double GetMarginInPoints()
     {
         return Margin switch

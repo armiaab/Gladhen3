@@ -31,7 +31,6 @@ public class DocumentService
     private static readonly string[] AllExtensions = [.. ImageExtensions, .. PdfExtensions];
     private static readonly string[] Sizes = ["B", "KB", "MB", "GB"];
 
-    // O(1) set lookup instead of O(n) linear scan for hot-path extension checks.
     private static readonly FrozenSet<string> _imageExtSet =
         ImageExtensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
@@ -70,7 +69,6 @@ public class DocumentService
     /// </summary>
     public async Task<List<DocumentItem>> CreateDocumentItemsAsync(string filePath, bool loadThumbnails = true)
     {
-        // Pre-allocate list with expected capacity
         var items = new List<DocumentItem>(1);
 
         try
@@ -168,10 +166,8 @@ public class DocumentService
         var total = files.Count;
         var processedCount = 0;
 
-        // Use array instead of ConcurrentBag for better cache locality
         var results = new (int Index, List<DocumentItem> Items)[total];
 
-        // Process files in parallel with controlled concurrency
         await Parallel.ForEachAsync(
         Enumerable.Range(0, total),
   new ParallelOptions
@@ -183,23 +179,19 @@ public class DocumentService
           {
               var file = files[index];
 
-              // Create items without thumbnails first for speed
               var items = await CreateDocumentItemsAsync(file, loadThumbnails: false);
               results[index] = (index, items);
 
-              // Report progress (thread-safe increment)
               var current = Interlocked.Increment(ref processedCount);
               progress?.Report((current, total, file.Name));
           });
 
-        // Calculate total items for pre-allocation
         var totalItems = 0;
         foreach (var result in results)
         {
             totalItems += result.Items?.Count ?? 0;
         }
 
-        // Sort results by original index and flatten - pre-allocate capacity
         var allItems = new List<DocumentItem>(totalItems);
         for (var i = 0; i < results.Length; i++)
         {
@@ -212,7 +204,7 @@ public class DocumentService
         return allItems;
     }
 
-    private async Task<List<DocumentItem>> CreatePdfPageItemsAsync(string pdfPath, string fileName, string fileSize, bool loadThumbnails)
+    private static async Task<List<DocumentItem>> CreatePdfPageItemsAsync(string pdfPath, string fileName, string fileSize, bool loadThumbnails)
     {
         try
         {
@@ -250,7 +242,6 @@ public class DocumentService
         {
             Log.Error(ex, "Error creating PDF page items: {Path}", pdfPath);
 
-            // Fallback: create items without thumbnails
             var pageCount = GetPdfPageCountFallback(pdfPath);
             var items = new List<DocumentItem>(pageCount);
 
@@ -279,7 +270,6 @@ public class DocumentService
             using var page = pdfDocument.GetPage((uint)pageIndex);
             using var stream = new InMemoryRandomAccessStream();
 
-            // Calculate height maintaining aspect ratio
             var aspectRatio = page.Size.Height / page.Size.Width;
             var options = new PdfPageRenderOptions
             {
@@ -307,10 +297,8 @@ public class DocumentService
         if (pathList.Count == 0)
             return [];
 
-        // Use array instead of ConcurrentBag for better memory layout
         var results = new (int Index, List<DocumentItem> Items)[pathList.Count];
 
-        // Process paths in parallel with controlled concurrency
         await Parallel.ForEachAsync(
    Enumerable.Range(0, pathList.Count),
   new ParallelOptions
@@ -324,14 +312,12 @@ async (index, ct) =>
                 results[index] = (index, items);
             });
 
-        // Calculate total items for pre-allocation
         var totalItems = 0;
         foreach (var result in results)
         {
             totalItems += result.Items?.Count ?? 0;
         }
 
-        // Flatten results maintaining order - pre-allocate capacity
         var allItems = new List<DocumentItem>(totalItems);
         for (var i = 0; i < results.Length; i++)
         {

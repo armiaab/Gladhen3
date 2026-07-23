@@ -33,11 +33,9 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Set up custom title bar
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
 
-        // Set window icon
         SetWindowIcon();
 
         DocumentGridView.ItemsSource = _documentItems;
@@ -240,10 +238,8 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            // Fast load: create items without thumbnails
             var items = await _documentService.CreateDocumentItemsBatchAsync(files, progress);
 
-            // Add items immediately so user sees them
             await AddItemsInBatchesAsync(items);
             addedCount = items.Count;
 
@@ -253,7 +249,6 @@ public sealed partial class MainWindow : Window
             {
                 StatusTextBlock.Text = $"Added {addedCount} page(s)";
 
-                // Load thumbnails in background without blocking - fire and forget
                 _ = LoadThumbnailsInBackgroundAsync(items);
             }
         }
@@ -271,10 +266,8 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            // Fast load without thumbnails
             var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
-            // Add items immediately
             await AddItemsInBatchesAsync(newItems);
 
             UpdateUIState();
@@ -283,7 +276,6 @@ public sealed partial class MainWindow : Window
             {
                 StatusTextBlock.Text = $"Loaded {newItems.Count} page(s)";
 
-                // Load thumbnails in background without blocking - fire and forget
                 _ = LoadThumbnailsInBackgroundAsync(newItems);
             }
             else
@@ -322,11 +314,9 @@ public sealed partial class MainWindow : Window
     {
         if (items.Count == 0) return;
 
-        // Group PDF pages by source file to avoid opening same PDF multiple times
         var pdfGroups = new Dictionary<string, List<DocumentItem>>(StringComparer.OrdinalIgnoreCase);
         var imageItems = new List<DocumentItem>();
 
-        // Single pass categorization to avoid multiple LINQ iterations
         foreach (var item in items)
         {
             if (item.Thumbnail != null) continue;
@@ -350,25 +340,17 @@ public sealed partial class MainWindow : Window
             }
         }
 
-        // Process images and PDFs concurrently with controlled parallelism
         const int maxParallelism = 6;
         using var semaphore = new SemaphoreSlim(maxParallelism);
 
         var tasks = new List<Task>(imageItems.Count + pdfGroups.Count);
 
-        // Queue image thumbnail tasks
         foreach (var item in imageItems)
-        {
             tasks.Add(LoadImageThumbnailWithSemaphoreAsync(item, semaphore));
-        }
 
-        // Queue PDF thumbnail tasks (one task per PDF file)
         foreach (var kvp in pdfGroups)
-        {
             tasks.Add(LoadPdfGroupThumbnailsWithSemaphoreAsync(kvp.Key, kvp.Value, semaphore));
-        }
 
-        // Wait for all tasks to complete
         await Task.WhenAll(tasks);
     }
 
@@ -379,9 +361,7 @@ public sealed partial class MainWindow : Window
         {
             var thumbnail = await LoadImageThumbnailAsync(item.FilePath);
             if (thumbnail != null)
-            {
                 item.Thumbnail = thumbnail;
-            }
         }
         catch (Exception ex)
         {
@@ -403,7 +383,6 @@ public sealed partial class MainWindow : Window
             var file = await StorageFile.GetFileFromPathAsync(sourcePath);
             var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
 
-            // Pre-allocate render options to reuse
             const uint thumbnailWidth = 200;
 
             foreach (var item in items)
@@ -491,7 +470,6 @@ public sealed partial class MainWindow : Window
         }
         catch (COMException comEx)
         {
-            // The COMException from the file picker can be opaque; log and show friendly message
             Log.Warning(comEx, "Save file picker failed (COMException)");
             await ShowDialogAsync("Save Failed", "Unable to open the save dialog. This can happen if the system file picker failed. Try again or restart the app.");
             StatusTextBlock.Text = "Save cancelled";
@@ -518,130 +496,128 @@ public sealed partial class MainWindow : Window
         SaveButton.IsEnabled = false;
         try
         {
-        while (true)
-        {
-            try
+            while (true)
             {
-                await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
-
-                StatusTextBlock.Text = "PDF created successfully";
-                await ShowDialogAsync("Success", $"PDF saved to:\n{outputPath}");
-                break;
-            }
-            catch (IOException ex)
-            {
-                Log.Warning(ex, "I/O error while saving PDF: {Path}", outputPath);
-
-                var dialog = new ContentDialog
+                try
                 {
-                    Title = "File in Use",
-                    Content = $"Cannot save to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and retry, or choose a different location.",
-                    PrimaryButtonText = "Retry",
-                    SecondaryButtonText = "Choose Location",
-                    CloseButtonText = "Cancel",
-                    XamlRoot = Content.XamlRoot
-                };
+                    await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
 
-                var result = await dialog.ShowAsync();
-                if (result == ContentDialogResult.Primary)
-                {
-                    // Retry
-                    continue;
+                    StatusTextBlock.Text = "PDF created successfully";
+                    await ShowDialogAsync("Success", $"PDF saved to:\n{outputPath}");
+                    break;
                 }
-                else if (result == ContentDialogResult.Secondary)
+                catch (IOException ex)
                 {
-                    // Choose different location
-                    var newPicker = new FileSavePicker
-                    {
-                        SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-                        SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
-                    };
-                    newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
-                    InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
+                    Log.Warning(ex, "I/O error while saving PDF: {Path}", outputPath);
 
-                    try
+                    var dialog = new ContentDialog
                     {
-                        var newFile = await newPicker.PickSaveFileAsync();
-                        if (newFile == null)
-                        {
-                            StatusTextBlock.Text = "Cancelled";
-                            return;
-                        }
-                        outputPath = newFile.Path;
+                        Title = "File in Use",
+                        Content = $"Cannot save to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and retry, or choose a different location.",
+                        PrimaryButtonText = "Retry",
+                        SecondaryButtonText = "Choose Location",
+                        CloseButtonText = "Cancel",
+                        XamlRoot = Content.XamlRoot
+                    };
+
+                    var result = await dialog.ShowAsync();
+                    if (result == ContentDialogResult.Primary)
+                    {
                         continue;
                     }
-                    catch (COMException comEx)
+                    else if (result == ContentDialogResult.Secondary)
                     {
-                        Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                        await ShowDialogAsync("Save Failed", "Unable to open the save dialog. Try again or restart the app.");
-                        StatusTextBlock.Text = "Save cancelled";
+                        var newPicker = new FileSavePicker
+                        {
+                            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                            SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
+                        };
+                        newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+                        InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
+
+                        try
+                        {
+                            var newFile = await newPicker.PickSaveFileAsync();
+                            if (newFile == null)
+                            {
+                                StatusTextBlock.Text = "Cancelled";
+                                return;
+                            }
+                            outputPath = newFile.Path;
+                            continue;
+                        }
+                        catch (COMException comEx)
+                        {
+                            Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
+                            await ShowDialogAsync("Save Failed", "Unable to open the save dialog. Try again or restart the app.");
+                            StatusTextBlock.Text = "Save cancelled";
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        StatusTextBlock.Text = "Cancelled";
                         return;
                     }
                 }
-                else
+                catch (UnauthorizedAccessException ex)
                 {
-                    StatusTextBlock.Text = "Cancelled";
-                    return;
-                }
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                Log.Warning(ex, "Access denied while saving PDF: {Path}", outputPath);
+                    Log.Warning(ex, "Access denied while saving PDF: {Path}", outputPath);
 
-                var dialog = new ContentDialog
-                {
-                    Title = "Access Denied",
-                    Content = $"Access denied saving to '{Path.GetFileName(outputPath)}'. Check permissions or choose a different location.",
-                    PrimaryButtonText = "Choose Location",
-                    CloseButtonText = "Cancel",
-                    XamlRoot = Content.XamlRoot
-                };
-
-                var result = await dialog.ShowAsync();
-                if (result == ContentDialogResult.Primary)
-                {
-                    var newPicker = new FileSavePicker
+                    var dialog = new ContentDialog
                     {
-                        SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-                        SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
+                        Title = "Access Denied",
+                        Content = $"Access denied saving to '{Path.GetFileName(outputPath)}'. Check permissions or choose a different location.",
+                        PrimaryButtonText = "Choose Location",
+                        CloseButtonText = "Cancel",
+                        XamlRoot = Content.XamlRoot
                     };
-                    newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
-                    InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
 
-                    try
+                    var result = await dialog.ShowAsync();
+                    if (result == ContentDialogResult.Primary)
                     {
-                        var newFile = await newPicker.PickSaveFileAsync();
-                        if (newFile == null)
+                        var newPicker = new FileSavePicker
                         {
-                            StatusTextBlock.Text = "Cancelled";
+                            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                            SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
+                        };
+                        newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+                        InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
+
+                        try
+                        {
+                            var newFile = await newPicker.PickSaveFileAsync();
+                            if (newFile == null)
+                            {
+                                StatusTextBlock.Text = "Cancelled";
+                                return;
+                            }
+                            outputPath = newFile.Path;
+                            continue;
+                        }
+                        catch (COMException comEx)
+                        {
+                            Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
+                            await ShowDialogAsync("Save Failed", "Unable to save the pdf file, the file is used by another process. Please close the file in the other application and try again.");
+                            StatusTextBlock.Text = "Save cancelled";
                             return;
                         }
-                        outputPath = newFile.Path;
-                        continue;
                     }
-                    catch (COMException comEx)
+                    else
                     {
-                        Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                        await ShowDialogAsync("Save Failed", "Unable to save the pdf file, the file is used by another process. Please close the file in the other application and try again.");
-                        StatusTextBlock.Text = "Save cancelled";
+                        StatusTextBlock.Text = "Cancelled";
                         return;
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    StatusTextBlock.Text = "Cancelled";
+                    StatusTextBlock.Text = $"Error: {ex.Message}";
+                    Log.Error(ex, "Error creating PDF");
+                    await ShowDialogAsync("Error", $"Failed to create PDF:\n{ex.Message}");
                     return;
                 }
-            }
-            catch (Exception ex)
-            {
-                StatusTextBlock.Text = $"Error: {ex.Message}";
-                Log.Error(ex, "Error creating PDF");
-                await ShowDialogAsync("Error", $"Failed to create PDF:\n{ex.Message}");
-                return;
             }
         }
-        } // while
         finally
         {
             SaveButton.IsEnabled = true;
@@ -745,7 +721,6 @@ public sealed partial class MainWindow : Window
     private async Task ShowPreviewDialogAtIndexAsync(int startIndex)
     {
         var currentIndex = startIndex;
-        // Cache loaded PDFs for the dialog's lifetime so Next/Prev doesn't re-open the file
         var pdfCache = new Dictionary<string, Windows.Data.Pdf.PdfDocument>(StringComparer.OrdinalIgnoreCase);
         var dialog = new ContentDialog
         {
@@ -1048,7 +1023,7 @@ public sealed partial class MainWindow : Window
         void ApplyFitZoom()
         {
             if (image.Source is not BitmapImage bmp || bmp.PixelWidth == 0 || bmp.PixelHeight == 0) return;
-            var cw = imageContainer.ActualWidth  > 0 ? imageContainer.ActualWidth  : 700;
+            var cw = imageContainer.ActualWidth > 0 ? imageContainer.ActualWidth : 700;
             var ch = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
             var fitZoom = (float)Math.Clamp(Math.Min(cw / bmp.PixelWidth, ch / bmp.PixelHeight), 0.05f, 5f);
             scrollViewer.ChangeView(0, 0, fitZoom);
@@ -1096,7 +1071,6 @@ public sealed partial class MainWindow : Window
 
         fitButton.Click += (s, args) => ApplyFitZoom();
 
-        // Keyboard navigation
         dialog.KeyDown += async (s, args) =>
         {
             switch (args.Key)
@@ -1132,7 +1106,6 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        // Re-apply fit when the dialog finishes its first layout pass
         dialog.Opened += (s, e) => ApplyFitZoom();
 
         await LoadItemAsync(startIndex);
@@ -1285,8 +1258,6 @@ public sealed partial class MainWindow : Window
             ? _documentItems.OrderBy(keySelector).ToList()
             : _documentItems.OrderByDescending(keySelector).ToList();
 
-        // Reorder in place with Move so the views recycle item containers,
-        // instead of Clear + re-Add which rebuilds every container in both views.
         for (var target = 0; target < sorted.Count; target++)
         {
             var current = _documentItems.IndexOf(sorted[target]);
@@ -1343,7 +1314,6 @@ public sealed partial class MainWindow : Window
         paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
         panel.Children.Add(paperSizeCombo);
 
-        // Custom size panel (initially hidden)
         var customSizePanel = new StackPanel
         {
             Spacing = 8,
@@ -1396,7 +1366,6 @@ public sealed partial class MainWindow : Window
         widthPanel.Children.Add(widthUnitLabel);
         unitMarginPanel.Children.Add(widthPanel);
 
-        // Height input
         var heightPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         heightPanel.Children.Add(new TextBlock
         {
@@ -1481,7 +1450,6 @@ public sealed partial class MainWindow : Window
                     2 => value * (mmPerInch / ptPerInch), // pt -> mm
                     _ => value
                 };
-                // Convert mm to target
                 return toUnit switch
                 {
                     0 => valueInMm, // mm
@@ -1500,7 +1468,6 @@ public sealed partial class MainWindow : Window
             }
         };
 
-        // Show/hide custom size panel based on selection
         paperSizeCombo.SelectionChanged += (s, args) =>
         {
             customSizePanel.Visibility = paperSizeCombo.SelectedIndex == 5
@@ -1539,7 +1506,6 @@ public sealed partial class MainWindow : Window
         marginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
         panel.Children.Add(marginCombo);
 
-        // Custom margin panel (initially hidden)
         var customMarginPanel = new StackPanel
         {
             Spacing = 8,
@@ -1547,7 +1513,6 @@ public sealed partial class MainWindow : Window
             Visibility = AppSettings.Current.Margin == (PdfPageMargin)5 ? Visibility.Visible : Visibility.Collapsed
         };
 
-        // Margin unit selector
         var marginUnitPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         marginUnitPanel.Children.Add(new TextBlock
         {
@@ -1559,11 +1524,10 @@ public sealed partial class MainWindow : Window
         marginUnitCombo.Items.Add("Millimeters (mm)");
         marginUnitCombo.Items.Add("Inches (in)");
         marginUnitCombo.Items.Add("Points (pt)");
-        marginUnitCombo.SelectedIndex = AppSettings.Current.CustomMarginUnit;
+        marginUnitCombo.SelectedIndex = (int)AppSettings.Current.CustomMarginUnit;
         marginUnitPanel.Children.Add(marginUnitCombo);
         customMarginPanel.Children.Add(marginUnitPanel);
 
-        // Margin input grid
         var marginGrid = new Grid { ColumnSpacing = 8, RowSpacing = 4 };
         for (int i = 0; i < 4; i++) marginGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -1671,7 +1635,6 @@ public sealed partial class MainWindow : Window
         };
         panel.Children.Add(infoText);
 
-        // ── Image Compression ────────────────────────────────────────────────────
         panel.Children.Add(new TextBlock
         {
             Text = "Image Compression:",
@@ -1696,10 +1659,18 @@ public sealed partial class MainWindow : Window
             Margin = new Thickness(0, 4, 0, 0)
         });
 
+        var scrollViewer = new ScrollViewer
+        {
+            Content = panel,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            MaxHeight = 400
+        };
+
         var dialog = new ContentDialog
         {
             Title = "PDF Settings",
-            Content = panel,
+            Content = scrollViewer,
             PrimaryButtonText = "Save",
             CloseButtonText = "Cancel",
             XamlRoot = Content.XamlRoot
@@ -1718,9 +1689,9 @@ public sealed partial class MainWindow : Window
                 AppSettings.Current.CustomWidth = widthBox.Value;
                 AppSettings.Current.CustomHeight = heightBox.Value;
             }
-            if (AppSettings.Current.Margin == (PdfPageMargin)5)
+            if (AppSettings.Current.Margin == PdfPageMargin.Custom)
             {
-                AppSettings.Current.CustomMarginUnit = marginUnitCombo.SelectedIndex;
+                AppSettings.Current.CustomMarginUnit = (MarginUnit)marginUnitCombo.SelectedIndex;
                 AppSettings.Current.CustomMarginLeft = leftMarginBox.Value;
                 AppSettings.Current.CustomMarginRight = rightMarginBox.Value;
                 AppSettings.Current.CustomMarginTop = topMarginBox.Value;
@@ -1806,10 +1777,8 @@ public sealed partial class MainWindow : Window
 
             StatusTextBlock.Text = $"Receiving {pathList.Count} file(s)...";
 
-            // Fast load without thumbnails
             var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
-            // Add items immediately
             await AddItemsInBatchesAsync(newItems);
 
             UpdateUIState();
@@ -1818,7 +1787,6 @@ public sealed partial class MainWindow : Window
             {
                 StatusTextBlock.Text = $"Added {newItems.Count} page(s) from another instance";
 
-                // Load thumbnails in background
                 _ = LoadThumbnailsInBackgroundAsync(newItems);
             }
         }
