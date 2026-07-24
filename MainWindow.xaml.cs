@@ -1,4 +1,4 @@
-﻿using Gladhen3.Models;
+using Gladhen3.Models;
 using Gladhen3.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -25,6 +25,7 @@ public sealed partial class MainWindow : Window
     private readonly ObservableCollection<DocumentItem> _documentItems = [];
     private readonly DocumentService _documentService = new();
     private readonly PdfService _pdfService = new();
+    private readonly Microsoft.Windows.ApplicationModel.Resources.ResourceLoader _resourceLoader = new();
     private bool _isGridView = true;
     private bool _isSelectMode;
     private bool _isInitialized;
@@ -82,7 +83,7 @@ public sealed partial class MainWindow : Window
 
         var imageCount = _documentItems.Count(d => d.Type == DocumentType.Image);
         var pdfPageCount = _documentItems.Count(d => d.Type == DocumentType.PdfPage);
-        ItemCountTextBlock.Text = $"{_documentItems.Count} pages ({imageCount} images, {pdfPageCount} PDF pages)";
+        ItemCountTextBlock.Text = string.Format(_resourceLoader.GetString("ItemCountFormat"), _documentItems.Count, imageCount, pdfPageCount);
 
         SaveButton.IsEnabled = hasItems;
         UpdateSelectionInfo();
@@ -131,7 +132,7 @@ public sealed partial class MainWindow : Window
         DocumentGridView.SelectionMode = mode;
         DocumentListView.SelectionMode = mode;
 
-        SelectModeMenuItem.Text = _isSelectMode ? "Exit Select Mode" : "Enter Select Mode";
+        SelectModeMenuItem.Text = _isSelectMode ? _resourceLoader.GetString("TextExitSelectMode") : _resourceLoader.GetString("TextEnterSelectMode");
         SelectionInfoPanel.Visibility = _isSelectMode ? Visibility.Visible : Visibility.Collapsed;
 
         UpdateSelectionInfo();
@@ -143,7 +144,7 @@ public sealed partial class MainWindow : Window
 
         var view = _isGridView ? (ListViewBase)DocumentGridView : DocumentListView;
         var count = view.SelectedItems.Count;
-        SelectionCountText.Text = count == 1 ? "1 selected" : $"{count} selected";
+        SelectionCountText.Text = count == 1 ? _resourceLoader.GetString("SelectionCountFormatSingle") : string.Format(_resourceLoader.GetString("SelectionCountFormatMultiple"), count);
     }
 
     // Called from menu item
@@ -157,7 +158,7 @@ public sealed partial class MainWindow : Window
     {
         _isSelectMode = true;
         UpdateSelectMode();
-        StatusTextBlock.Text = "Select mode: click items to select";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusSelectMode");
     }
 
     // Called when toggle button is unchecked
@@ -165,7 +166,7 @@ public sealed partial class MainWindow : Window
     {
         _isSelectMode = false;
         UpdateSelectMode();
-        StatusTextBlock.Text = "Ready";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusReady");
     }
 
     #endregion
@@ -228,12 +229,12 @@ public sealed partial class MainWindow : Window
 
     private async Task AddFilesAsync(IReadOnlyList<StorageFile> files)
     {
-        StatusTextBlock.Text = $"Loading {files.Count} file(s)...";
+        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadingFiles"), files.Count);
 
         var addedCount = 0;
         var progress = new Progress<(int current, int total, string fileName)>(p =>
         {
-            StatusTextBlock.Text = $"Loading {p.current}/{p.total}: {p.fileName}";
+            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadingFileProgress"), p.current, p.total, p.fileName);
         });
 
         try
@@ -247,7 +248,7 @@ public sealed partial class MainWindow : Window
 
             if (addedCount > 0)
             {
-                StatusTextBlock.Text = $"Added {addedCount} page(s)";
+                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusAddedPages"), addedCount);
 
                 _ = LoadThumbnailsInBackgroundAsync(items);
             }
@@ -255,14 +256,14 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error(ex, "Error adding files");
-            StatusTextBlock.Text = $"Error: {ex.Message}";
+            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
         }
     }
 
     private async Task LoadDocumentsAsync(IEnumerable<string> paths)
     {
         var pathList = paths.ToList();
-        StatusTextBlock.Text = $"Loading {pathList.Count} file(s)...";
+        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadingFiles"), pathList.Count);
 
         try
         {
@@ -274,19 +275,19 @@ public sealed partial class MainWindow : Window
 
             if (newItems.Count > 0)
             {
-                StatusTextBlock.Text = $"Loaded {newItems.Count} page(s)";
+                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadedPages"), newItems.Count);
 
                 _ = LoadThumbnailsInBackgroundAsync(newItems);
             }
             else
             {
-                StatusTextBlock.Text = "No supported files found";
+                StatusTextBlock.Text = _resourceLoader.GetString("StatusNoSupportedFiles");
             }
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Error loading documents");
-            StatusTextBlock.Text = $"Error: {ex.Message}";
+            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
         }
     }
 
@@ -1713,7 +1714,7 @@ public sealed partial class MainWindow : Window
             TextWrapping = TextWrapping.Wrap
         });
 
-        panel.Children.Add(new TextBlock { Text = "Version: 1.0.8" });
+        panel.Children.Add(new TextBlock { Text = "Version: 1.0.12" });
 
         var linkPanel = new StackPanel { Orientation = Orientation.Horizontal };
         linkPanel.Children.Add(new TextBlock { Text = "Repository: ", VerticalAlignment = VerticalAlignment.Center });

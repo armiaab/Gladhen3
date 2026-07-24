@@ -46,9 +46,9 @@
                     Height="16"
                     Source="ms-appx:///Assets/Square44x44Logo.png" />
                 <TextBlock
+                    x:Uid="AppTitle"
                     VerticalAlignment="Center"
-                    Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="Gladhen3" />
+                    Style="{StaticResource CaptionTextBlockStyle}" />
             </StackPanel>
 
             <!--  Menu Bar in Title Bar  -->
@@ -57,58 +57,58 @@
                 Margin="16,0,0,0"
                 VerticalAlignment="Center"
                 Background="Transparent">
-                <MenuBarItem Title="File">
-                    <MenuFlyoutItem Click="AddFilesButton_Click" Text="Add Files...">
+                <MenuBarItem x:Uid="MenuFile">
+                    <MenuFlyoutItem x:Uid="MenuAddFiles" Click="AddFilesButton_Click">
                         <MenuFlyoutItem.KeyboardAccelerators>
                             <KeyboardAccelerator Key="O" Modifiers="Control" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
-                    <MenuFlyoutItem Click="AddImagesButton_Click" Text="Add Images..." />
-                    <MenuFlyoutItem Click="AddPdfsButton_Click" Text="Add PDFs..." />
+                    <MenuFlyoutItem x:Uid="MenuAddImages" Click="AddImagesButton_Click" />
+                    <MenuFlyoutItem x:Uid="MenuAddPdfs" Click="AddPdfsButton_Click" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Click="ExitMenuItem_Click" Text="Exit" />
+                    <MenuFlyoutItem x:Uid="MenuExit" Click="ExitMenuItem_Click" />
                 </MenuBarItem>
-                <MenuBarItem Title="Edit">
+                <MenuBarItem x:Uid="MenuEdit">
                     <MenuFlyoutItem
                         x:Name="SelectModeMenuItem"
-                        Click="ToggleSelectModeMenu_Click"
-                        Text="Enter Select Mode">
+                        x:Uid="MenuEnterSelectMode"
+                        Click="ToggleSelectModeMenu_Click">
                         <MenuFlyoutItem.KeyboardAccelerators>
                             <KeyboardAccelerator Key="E" Modifiers="Control" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Click="SelectAllButton_Click" Text="Select All">
+                    <MenuFlyoutItem x:Uid="MenuSelectAll" Click="SelectAllButton_Click">
                         <MenuFlyoutItem.KeyboardAccelerators>
                             <KeyboardAccelerator Key="A" Modifiers="Control" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
-                    <MenuFlyoutItem Click="DeselectAllButton_Click" Text="Deselect All" />
+                    <MenuFlyoutItem x:Uid="MenuDeselectAll" Click="DeselectAllButton_Click" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Click="RemoveSelected_Click" Text="Remove Selected">
+                    <MenuFlyoutItem x:Uid="MenuRemoveSelected" Click="RemoveSelected_Click">
                         <MenuFlyoutItem.KeyboardAccelerators>
                             <KeyboardAccelerator Key="Delete" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
-                    <MenuFlyoutItem Click="RemoveAll_Click" Text="Remove All" />
+                    <MenuFlyoutItem x:Uid="MenuRemoveAll" Click="RemoveAll_Click" />
                 </MenuBarItem>
-                <MenuBarItem Title="View">
-                    <MenuFlyoutItem Click="SwitchToGridView_Click" Text="Thumbnails" />
-                    <MenuFlyoutItem Click="SwitchToListView_Click" Text="List" />
+                <MenuBarItem x:Uid="MenuView">
+                    <MenuFlyoutItem x:Uid="MenuThumbnails" Click="SwitchToGridView_Click" />
+                    <MenuFlyoutItem x:Uid="MenuList" Click="SwitchToListView_Click" />
                 </MenuBarItem>
-                <MenuBarItem Title="Sort">
-                    <MenuFlyoutItem Click="SortByFileNameAsc_Click" Text="Name (A-Z)" />
-                    <MenuFlyoutItem Click="SortByFileNameDesc_Click" Text="Name (Z-A)" />
+                <MenuBarItem x:Uid="MenuSort">
+                    <MenuFlyoutItem x:Uid="MenuSortNameAsc" Click="SortByFileNameAsc_Click" />
+                    <MenuFlyoutItem x:Uid="MenuSortNameDesc" Click="SortByFileNameDesc_Click" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem Click="SortByTypeAsc_Click" Text="Type (Images first)" />
-                    <MenuFlyoutItem Click="SortByTypeDesc_Click" Text="Type (PDFs first)" />
+                    <MenuFlyoutItem x:Uid="MenuSortTypeAsc" Click="SortByTypeAsc_Click" />
+                    <MenuFlyoutItem x:Uid="MenuSortTypeDesc" Click="SortByTypeDesc_Click" />
                 </MenuBarItem>
-                <MenuBarItem Title="Tools">
-                    <MenuFlyoutItem Click="SettingsButton_Click" Text="Settings" />
-                    <MenuFlyoutItem Click="LogButton_Click" Text="View Logs" />
+                <MenuBarItem x:Uid="MenuTools">
+                    <MenuFlyoutItem x:Uid="MenuSettings" Click="SettingsButton_Click" />
+                    <MenuFlyoutItem x:Uid="MenuLogs" Click="LogButton_Click" />
                 </MenuBarItem>
-                <MenuBarItem Title="Help">
-                    <MenuFlyoutItem Click="AboutButton_Click" Text="About" />
+                <MenuBarItem x:Uid="MenuHelp">
+                    <MenuFlyoutItem x:Uid="MenuAbout" Click="AboutButton_Click" />
                 </MenuBarItem>
             </MenuBar>
         </Grid>
@@ -122,14 +122,13 @@
 
             <StackPanel Grid.Column="0">
                 <TextBlock
+                    x:Uid="HeaderPages"
                     FontSize="28"
-                    FontWeight="SemiBold"
-                    Text="Pages" />
+                    FontWeight="SemiBold" />
                 <TextBlock
                     x:Name="ItemCountTextBlock"
                     FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="0 pages" />
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
             </StackPanel>
 
             <StackPanel
@@ -139,11 +138,11 @@
                 Spacing="8">
                 <ToggleButton
                     x:Name="SelectModeToggle"
+                    x:Uid="TooltipSelectMode"
                     Width="36"
                     Height="36"
                     Checked="SelectModeToggle_Checked"
                     CornerRadius="4"
-                    ToolTipService.ToolTip="Select Mode (Ctrl+E)"
                     Unchecked="SelectModeToggle_Unchecked">
                     <FontIcon FontSize="13" Glyph="&#xE762;" />
                 </ToggleButton>
@@ -155,22 +154,22 @@
 
                 <ToggleButton
                     x:Name="GridViewToggle"
+                    x:Uid="TooltipThumbnails"
                     Width="36"
                     Height="36"
                     Checked="GridViewToggle_Checked"
                     CornerRadius="4"
                     IsChecked="True"
-                    ToolTipService.ToolTip="Thumbnails"
                     Unchecked="GridViewToggle_Unchecked">
                     <FontIcon FontSize="13" Glyph="&#xF0E2;" />
                 </ToggleButton>
                 <ToggleButton
                     x:Name="ListViewToggle"
+                    x:Uid="TooltipList"
                     Width="36"
                     Height="36"
                     Checked="ListViewToggle_Checked"
                     CornerRadius="4"
-                    ToolTipService.ToolTip="List"
                     Unchecked="ListViewToggle_Unchecked">
                     <FontIcon FontSize="13" Glyph="&#xE8FD;" />
                 </ToggleButton>
@@ -346,15 +345,15 @@
                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                         Glyph="&#xE8B5;" />
                     <TextBlock
+                        x:Uid="EmptyStateTitle"
                         HorizontalAlignment="Center"
                         FontSize="14"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="Drop images or PDFs here" />
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock
+                        x:Uid="EmptyStateSubtitle"
                         HorizontalAlignment="Center"
                         FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Text="Double-click to preview" />
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -376,15 +375,14 @@
                 Orientation="Horizontal"
                 Spacing="8"
                 Visibility="Collapsed">
-                <Button Click="RemoveSelected_Click" ToolTipService.ToolTip="Remove Selected">
+                <Button x:Uid="TooltipRemoveSelected" Click="RemoveSelected_Click">
                     <FontIcon FontSize="14" Glyph="&#xE74D;" />
                 </Button>
                 <TextBlock
                     x:Name="SelectionCountText"
                     VerticalAlignment="Center"
                     FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    Text="0 selected" />
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Border
                     Width="1"
                     Height="20"
@@ -394,18 +392,18 @@
 
             <TextBlock
                 x:Name="StatusTextBlock"
+                x:Uid="StatusReady"
                 Grid.Column="1"
                 VerticalAlignment="Center"
                 FontSize="12"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="Ready" />
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
 
             <Button
                 x:Name="SaveButton"
+                x:Uid="ButtonSavePdf"
                 Grid.Column="2"
                 Padding="24,8"
                 Click="SaveButton_Click"
-                Content="Save as PDF"
                 Style="{ThemeResource AccentButtonStyle}" />
         </Grid>
     </Grid>
