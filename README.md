@@ -13,7 +13,7 @@ Gladhen 3 is winui3 application that allows you to convert, merge, and compress 
 - Preview image and pdf files
 - Compress PDF
 
-## Screen Shots
+## Screenshots
 ![Context Menu](./docs/contextmenu.png)
 ![Dashboard](./docs/dashboard.png)
 ![Main Window](./docs/mainmenu.png)
