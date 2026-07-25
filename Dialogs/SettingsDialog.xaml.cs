@@ -6,6 +6,7 @@ namespace Gladhen3.Dialogs;
 
 public sealed partial class SettingsDialog : ContentDialog
 {
+    private readonly Microsoft.Windows.ApplicationModel.Resources.ResourceLoader _resourceLoader = new();
     private int _previousUnitIndex;
     private int _previousMarginUnit;
 
@@ -24,7 +25,7 @@ public sealed partial class SettingsDialog : ContentDialog
 
         UnitCombo.SelectedIndex = AppSettings.Current.CustomSizeUnit;
         _previousUnitIndex = UnitCombo.SelectedIndex;
-        
+
         WidthBox.Value = AppSettings.Current.CustomWidth;
         HeightBox.Value = AppSettings.Current.CustomHeight;
 
@@ -57,12 +58,12 @@ public sealed partial class SettingsDialog : ContentDialog
 
     private void UpdateUnitLabels()
     {
-        var unitName = UnitCombo.SelectedIndex switch
+        var unitName = (UnitSize)UnitCombo.SelectedIndex switch
         {
-            0 => "mm",
-            1 => "in",
-            2 => "pt",
-            _ => "mm"
+            UnitSize.Millimetre => _resourceLoader.GetString("UnitMillimetre"),
+            UnitSize.Inch => _resourceLoader.GetString("UnitInch"),
+            UnitSize.Point => _resourceLoader.GetString("UnitPoint"),
+            _ => _resourceLoader.GetString("UnitMillimetre")
         };
         if (WidthUnitLabel != null) WidthUnitLabel.Text = unitName;
         if (HeightUnitLabel != null) HeightUnitLabel.Text = unitName;
@@ -77,8 +78,8 @@ public sealed partial class SettingsDialog : ContentDialog
         var newUnitIndex = UnitCombo.SelectedIndex;
         if (newUnitIndex != _previousUnitIndex)
         {
-            WidthBox.Value = ConvertValue(WidthBox.Value, _previousUnitIndex, newUnitIndex);
-            HeightBox.Value = ConvertValue(HeightBox.Value, _previousUnitIndex, newUnitIndex);
+            WidthBox.Value = ConvertValue(WidthBox.Value, (UnitSize)_previousUnitIndex, (UnitSize)newUnitIndex);
+            HeightBox.Value = ConvertValue(HeightBox.Value, (UnitSize)_previousUnitIndex, (UnitSize)newUnitIndex);
             _previousUnitIndex = newUnitIndex;
         }
     }
@@ -90,33 +91,33 @@ public sealed partial class SettingsDialog : ContentDialog
         var newUnit = MarginUnitCombo.SelectedIndex;
         if (newUnit != _previousMarginUnit)
         {
-            LeftMarginBox.Value = ConvertValue(LeftMarginBox.Value, _previousMarginUnit, newUnit);
-            RightMarginBox.Value = ConvertValue(RightMarginBox.Value, _previousMarginUnit, newUnit);
-            TopMarginBox.Value = ConvertValue(TopMarginBox.Value, _previousMarginUnit, newUnit);
-            BottomMarginBox.Value = ConvertValue(BottomMarginBox.Value, _previousMarginUnit, newUnit);
+            LeftMarginBox.Value = ConvertValue(LeftMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
+            RightMarginBox.Value = ConvertValue(RightMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
+            TopMarginBox.Value = ConvertValue(TopMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
+            BottomMarginBox.Value = ConvertValue(BottomMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
             _previousMarginUnit = newUnit;
         }
     }
 
-    private double ConvertValue(double value, int fromUnit, int toUnit)
+    private static double ConvertValue(double value, UnitSize fromUnit, UnitSize toUnit)
     {
         if (fromUnit == toUnit) return value;
-        var mmPerInch = 25.4;
-        var ptPerInch = 72.0;
+        const double mmPerInch = 25.4;
+        const double ptPerInch = 72.0;
 
-        double valueInMm = fromUnit switch
+        var valueInMm = fromUnit switch
         {
-            0 => value, // mm
-            1 => value * mmPerInch, // in -> mm
-            2 => value * (mmPerInch / ptPerInch), // pt -> mm
+            UnitSize.Millimetre => value,
+            UnitSize.Inch => value * mmPerInch,
+            UnitSize.Point => value * (mmPerInch / ptPerInch),
             _ => value
         };
 
         return toUnit switch
         {
-            0 => valueInMm, // mm
-            1 => valueInMm / mmPerInch, // mm -> in
-            2 => valueInMm * (ptPerInch / mmPerInch), // mm -> pt
+            UnitSize.Millimetre => valueInMm,
+            UnitSize.Inch => valueInMm / mmPerInch,
+            UnitSize.Point => valueInMm * (ptPerInch / mmPerInch),
             _ => valueInMm
         };
     }
@@ -141,7 +142,7 @@ public sealed partial class SettingsDialog : ContentDialog
         }
         if (AppSettings.Current.Margin == PdfPageMargin.Custom)
         {
-            AppSettings.Current.CustomMarginUnit = (MarginUnit)MarginUnitCombo.SelectedIndex;
+            AppSettings.Current.CustomMarginUnit = (UnitSize)MarginUnitCombo.SelectedIndex;
             AppSettings.Current.CustomMarginLeft = LeftMarginBox.Value;
             AppSettings.Current.CustomMarginRight = RightMarginBox.Value;
             AppSettings.Current.CustomMarginTop = TopMarginBox.Value;

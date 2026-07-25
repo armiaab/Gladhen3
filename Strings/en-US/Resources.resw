@@ -1,125 +1,44 @@
 <?xml version="1.0" encoding="utf-8"?>
 <root xmlns:ns1="urn:schemas-microsoft-com:xml-msdata" xmlns:xs="http://www.w3.org/2001/XMLSchema">
-  
-  
   <xs:schema id="root">
-    
-    
     <xs:element name="root" ns1:IsDataSet="true">
-      
-      
       <xs:complexType>
-        
-        
         <xs:choice maxOccurs="unbounded">
-          
-          
           <xs:element name="data">
-            
-            
             <xs:complexType>
-              
-              
               <xs:sequence>
-                
-                
-                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1"/>
-                
-                
-                <xs:element name="comment" type="xsd:string" minOccurs="0" ns1:Ordinal="2"/>
-                
-              
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1" />
+                <xs:element name="comment" type="xsd:string" minOccurs="0" ns1:Ordinal="2" />
               </xs:sequence>
-              
-              
-              <xs:attribute name="name" type="xsd:string"/>
-              
-              
-              <xs:attribute name="type" type="xsd:string"/>
-              
-              
-              <xs:attribute name="mimetype" type="xsd:string"/>
-              
-            
+              <xs:attribute name="name" type="xsd:string" />
+              <xs:attribute name="type" type="xsd:string" />
+              <xs:attribute name="mimetype" type="xsd:string" />
             </xs:complexType>
-            
-          
           </xs:element>
-          
-          
           <xs:element name="resheader">
-            
-            
             <xs:complexType>
-              
-              
               <xs:sequence>
-                
-                
-                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1"/>
-                
-              
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1" />
               </xs:sequence>
-              
-              
-              <xs:attribute name="name" type="xsd:string" use="required"/>
-              
-            
+              <xs:attribute name="name" type="xsd:string" use="required" />
             </xs:complexType>
-            
-          
           </xs:element>
-          
-        
         </xs:choice>
-        
-      
       </xs:complexType>
-      
-    
     </xs:element>
-    
-  
   </xs:schema>
-  
-  
   <resheader name="resmimetype">
-    
-    
     <value>text/microsoft-resx</value>
-    
-  
   </resheader>
-  
-  
   <resheader name="version">
-    
-    
     <value>2.0</value>
-    
-  
   </resheader>
-  
-  
   <resheader name="reader">
-    
-    
     <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-    
-  
   </resheader>
-  
-  
   <resheader name="writer">
-    
-    
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
-    
-  
   </resheader>
-  
-
-  
   <data name="AppTitle.Text" xml:space="preserve">
     
     
@@ -127,8 +46,6 @@
     
   
   </data>
-  
-  
   <data name="MenuFile.Title" xml:space="preserve">
     
     
@@ -136,8 +53,6 @@
     
   
   </data>
-  
-  
   <data name="MenuAddFiles.Text" xml:space="preserve">
     
     
@@ -145,8 +60,6 @@
     
   
   </data>
-  
-  
   <data name="MenuAddImages.Text" xml:space="preserve">
     
     
@@ -154,8 +67,6 @@
     
   
   </data>
-  
-  
   <data name="MenuAddPdfs.Text" xml:space="preserve">
     
     
@@ -163,8 +74,6 @@
     
   
   </data>
-  
-  
   <data name="MenuExit.Text" xml:space="preserve">
     
     
@@ -172,8 +81,6 @@
     
   
   </data>
-  
-  
   <data name="MenuEdit.Title" xml:space="preserve">
     
     
@@ -181,8 +88,6 @@
     
   
   </data>
-  
-  
   <data name="MenuEnterSelectMode.Text" xml:space="preserve">
     
     
@@ -190,8 +95,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSelectAll.Text" xml:space="preserve">
     
     
@@ -199,8 +102,6 @@
     
   
   </data>
-  
-  
   <data name="MenuDeselectAll.Text" xml:space="preserve">
     
     
@@ -208,8 +109,6 @@
     
   
   </data>
-  
-  
   <data name="MenuRemoveSelected.Text" xml:space="preserve">
     
     
@@ -217,8 +116,6 @@
     
   
   </data>
-  
-  
   <data name="MenuRemoveAll.Text" xml:space="preserve">
     
     
@@ -226,8 +123,6 @@
     
   
   </data>
-  
-  
   <data name="MenuView.Title" xml:space="preserve">
     
     
@@ -235,8 +130,6 @@
     
   
   </data>
-  
-  
   <data name="MenuThumbnails.Text" xml:space="preserve">
     
     
@@ -244,8 +137,6 @@
     
   
   </data>
-  
-  
   <data name="MenuList.Text" xml:space="preserve">
     
     
@@ -253,8 +144,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSort.Title" xml:space="preserve">
     
     
@@ -262,8 +151,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSortNameAsc.Text" xml:space="preserve">
     
     
@@ -271,8 +158,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSortNameDesc.Text" xml:space="preserve">
     
     
@@ -280,8 +165,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSortTypeAsc.Text" xml:space="preserve">
     
     
@@ -289,8 +172,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSortTypeDesc.Text" xml:space="preserve">
     
     
@@ -298,8 +179,6 @@
     
   
   </data>
-  
-  
   <data name="MenuTools.Title" xml:space="preserve">
     
     
@@ -307,8 +186,6 @@
     
   
   </data>
-  
-  
   <data name="MenuSettings.Text" xml:space="preserve">
     
     
@@ -316,8 +193,6 @@
     
   
   </data>
-  
-  
   <data name="MenuLogs.Text" xml:space="preserve">
     
     
@@ -325,8 +200,6 @@
     
   
   </data>
-  
-  
   <data name="MenuHelp.Title" xml:space="preserve">
     
     
@@ -334,8 +207,6 @@
     
   
   </data>
-  
-  
   <data name="MenuAbout.Text" xml:space="preserve">
     
     
@@ -343,8 +214,6 @@
     
   
   </data>
-  
-  
   <data name="HeaderPages.Text" xml:space="preserve">
     
     
@@ -352,8 +221,6 @@
     
   
   </data>
-  
-  
   <data name="EmptyStateTitle.Text" xml:space="preserve">
     
     
@@ -361,8 +228,6 @@
     
   
   </data>
-  
-  
   <data name="EmptyStateSubtitle.Text" xml:space="preserve">
     
     
@@ -370,8 +235,6 @@
     
   
   </data>
-  
-  
   <data name="ButtonSavePdf.Content" xml:space="preserve">
     
     
@@ -379,8 +242,6 @@
     
   
   </data>
-  
-  
   <data name="TooltipSelectMode.ToolTipService.ToolTip" xml:space="preserve">
     
     
@@ -388,8 +249,6 @@
     
   
   </data>
-  
-  
   <data name="TooltipThumbnails.ToolTipService.ToolTip" xml:space="preserve">
     
     
@@ -397,8 +256,6 @@
     
   
   </data>
-  
-  
   <data name="TooltipList.ToolTipService.ToolTip" xml:space="preserve">
     
     
@@ -406,8 +263,6 @@
     
   
   </data>
-  
-  
   <data name="TooltipRemoveSelected.ToolTipService.ToolTip" xml:space="preserve">
     
     
@@ -415,8 +270,6 @@
     
   
   </data>
-  
-  
   <data name="StatusReady" xml:space="preserve">
     
     
@@ -424,8 +277,6 @@
     
   
   </data>
-  
-  
   <data name="StatusLoadingFiles" xml:space="preserve">
     
     
@@ -433,8 +284,6 @@
     
   
   </data>
-  
-  
   <data name="StatusLoadingFileProgress" xml:space="preserve">
     
     
@@ -442,8 +291,6 @@
     
   
   </data>
-  
-  
   <data name="StatusAddedPages" xml:space="preserve">
     
     
@@ -451,8 +298,6 @@
     
   
   </data>
-  
-  
   <data name="StatusLoadedPages" xml:space="preserve">
     
     
@@ -460,8 +305,6 @@
     
   
   </data>
-  
-  
   <data name="StatusNoSupportedFiles" xml:space="preserve">
     
     
@@ -469,8 +312,6 @@
     
   
   </data>
-  
-  
   <data name="StatusError" xml:space="preserve">
     
     
@@ -478,8 +319,6 @@
     
   
   </data>
-  
-  
   <data name="StatusSelectMode" xml:space="preserve">
     
     
@@ -487,8 +326,6 @@
     
   
   </data>
-  
-  
   <data name="ItemCountFormat" xml:space="preserve">
     
     
@@ -496,8 +333,6 @@
     
   
   </data>
-  
-  
   <data name="SelectionCountFormatSingle" xml:space="preserve">
     
     
@@ -505,8 +340,6 @@
     
   
   </data>
-  
-  
   <data name="SelectionCountFormatMultiple" xml:space="preserve">
     
     
@@ -514,8 +347,6 @@
     
   
   </data>
-  
-  
   <data name="TextExitSelectMode" xml:space="preserve">
     
     
@@ -523,8 +354,6 @@
     
   
   </data>
-  
-  
   <data name="TextEnterSelectMode" xml:space="preserve">
     
     
@@ -532,8 +361,6 @@
     
   
   </data>
-  
-
   <data name="AboutDialog.Title" xml:space="preserve">
     <value>About Gladhen3</value>
   </data>
@@ -830,5 +657,14 @@ Drag to reorder, double-click to preview.</value>
   </data>
   <data name="StatusAddedPagesFromAnotherInstance" xml:space="preserve">
     <value>Added {0} page(s) from another instance</value>
+  </data>
+  <data name="UnitMillimetre" xml:space="preserve">
+    <value>Millimetre</value>
+  </data>
+  <data name="UnitInch" xml:space="preserve">
+    <value>Inch</value>
+  </data>
+  <data name="UnitPoint" xml:space="preserve">
+    <value>Point</value>
   </data>
 </root>

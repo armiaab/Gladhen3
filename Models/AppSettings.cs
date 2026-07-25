@@ -22,7 +22,7 @@ public class AppSettings
 
     private const double MmToPoints = 72.0 / 25.4;
     private const double InchToPoints = 72.0;
-    public MarginUnit CustomMarginUnit { get; set; } = MarginUnit.Mm;
+    public UnitSize CustomMarginUnit { get; set; } = UnitSize.Millimetre;
     public double CustomMarginLeft { get; set; } = 0.5;
     public double CustomMarginRight { get; set; } = 0.5;
     public double CustomMarginTop { get; set; } = 0.5;
