@@ -1,181 +1,834 @@
 <?xml version="1.0" encoding="utf-8"?>
-<root>
-  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
-    <xsd:element name="root" msdata:IsDataSet="true">
-      <xsd:complexType>
-        <xsd:choice maxOccurs="unbounded">
-          <xsd:element name="data">
-            <xsd:complexType>
-              <xsd:sequence>
-                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
-                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
-              </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" />
-              <xsd:attribute name="type" type="xsd:string" />
-              <xsd:attribute name="mimetype" type="xsd:string" />
-            </xsd:complexType>
-          </xsd:element>
-          <xsd:element name="resheader">
-            <xsd:complexType>
-              <xsd:sequence>
-                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
-              </xsd:sequence>
-              <xsd:attribute name="name" type="xsd:string" use="required" />
-            </xsd:complexType>
-          </xsd:element>
-        </xsd:choice>
-      </xsd:complexType>
-    </xsd:element>
-  </xsd:schema>
+<root xmlns:ns1="urn:schemas-microsoft-com:xml-msdata" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  
+  
+  <xs:schema id="root">
+    
+    
+    <xs:element name="root" ns1:IsDataSet="true">
+      
+      
+      <xs:complexType>
+        
+        
+        <xs:choice maxOccurs="unbounded">
+          
+          
+          <xs:element name="data">
+            
+            
+            <xs:complexType>
+              
+              
+              <xs:sequence>
+                
+                
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1"/>
+                
+                
+                <xs:element name="comment" type="xsd:string" minOccurs="0" ns1:Ordinal="2"/>
+                
+              
+              </xs:sequence>
+              
+              
+              <xs:attribute name="name" type="xsd:string"/>
+              
+              
+              <xs:attribute name="type" type="xsd:string"/>
+              
+              
+              <xs:attribute name="mimetype" type="xsd:string"/>
+              
+            
+            </xs:complexType>
+            
+          
+          </xs:element>
+          
+          
+          <xs:element name="resheader">
+            
+            
+            <xs:complexType>
+              
+              
+              <xs:sequence>
+                
+                
+                <xs:element name="value" type="xsd:string" minOccurs="0" ns1:Ordinal="1"/>
+                
+              
+              </xs:sequence>
+              
+              
+              <xs:attribute name="name" type="xsd:string" use="required"/>
+              
+            
+            </xs:complexType>
+            
+          
+          </xs:element>
+          
+        
+        </xs:choice>
+        
+      
+      </xs:complexType>
+      
+    
+    </xs:element>
+    
+  
+  </xs:schema>
+  
+  
   <resheader name="resmimetype">
+    
+    
     <value>text/microsoft-resx</value>
+    
+  
   </resheader>
+  
+  
   <resheader name="version">
+    
+    
     <value>2.0</value>
+    
+  
   </resheader>
+  
+  
   <resheader name="reader">
+    
+    
     <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    
+  
   </resheader>
+  
+  
   <resheader name="writer">
+    
+    
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+    
+  
   </resheader>
+  
 
+  
   <data name="AppTitle.Text" xml:space="preserve">
+    
+    
     <value>Gladhen3</value>
+    
+  
   </data>
+  
+  
   <data name="MenuFile.Title" xml:space="preserve">
+    
+    
     <value>File</value>
+    
+  
   </data>
+  
+  
   <data name="MenuAddFiles.Text" xml:space="preserve">
+    
+    
     <value>Add Files...</value>
+    
+  
   </data>
+  
+  
   <data name="MenuAddImages.Text" xml:space="preserve">
+    
+    
     <value>Add Images...</value>
+    
+  
   </data>
+  
+  
   <data name="MenuAddPdfs.Text" xml:space="preserve">
+    
+    
     <value>Add PDFs...</value>
+    
+  
   </data>
+  
+  
   <data name="MenuExit.Text" xml:space="preserve">
+    
+    
     <value>Exit</value>
+    
+  
   </data>
+  
+  
   <data name="MenuEdit.Title" xml:space="preserve">
+    
+    
     <value>Edit</value>
+    
+  
   </data>
+  
+  
   <data name="MenuEnterSelectMode.Text" xml:space="preserve">
+    
+    
     <value>Enter Select Mode</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSelectAll.Text" xml:space="preserve">
+    
+    
     <value>Select All</value>
+    
+  
   </data>
+  
+  
   <data name="MenuDeselectAll.Text" xml:space="preserve">
+    
+    
     <value>Deselect All</value>
+    
+  
   </data>
+  
+  
   <data name="MenuRemoveSelected.Text" xml:space="preserve">
+    
+    
     <value>Remove Selected</value>
+    
+  
   </data>
+  
+  
   <data name="MenuRemoveAll.Text" xml:space="preserve">
+    
+    
     <value>Remove All</value>
+    
+  
   </data>
+  
+  
   <data name="MenuView.Title" xml:space="preserve">
+    
+    
     <value>View</value>
+    
+  
   </data>
+  
+  
   <data name="MenuThumbnails.Text" xml:space="preserve">
+    
+    
     <value>Thumbnails</value>
+    
+  
   </data>
+  
+  
   <data name="MenuList.Text" xml:space="preserve">
+    
+    
     <value>List</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSort.Title" xml:space="preserve">
+    
+    
     <value>Sort</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSortNameAsc.Text" xml:space="preserve">
+    
+    
     <value>Name (A-Z)</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSortNameDesc.Text" xml:space="preserve">
+    
+    
     <value>Name (Z-A)</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSortTypeAsc.Text" xml:space="preserve">
+    
+    
     <value>Type (Images first)</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSortTypeDesc.Text" xml:space="preserve">
+    
+    
     <value>Type (PDFs first)</value>
+    
+  
   </data>
+  
+  
   <data name="MenuTools.Title" xml:space="preserve">
+    
+    
     <value>Tools</value>
+    
+  
   </data>
+  
+  
   <data name="MenuSettings.Text" xml:space="preserve">
+    
+    
     <value>Settings</value>
+    
+  
   </data>
+  
+  
   <data name="MenuLogs.Text" xml:space="preserve">
+    
+    
     <value>View Logs</value>
+    
+  
   </data>
+  
+  
   <data name="MenuHelp.Title" xml:space="preserve">
+    
+    
     <value>Help</value>
+    
+  
   </data>
+  
+  
   <data name="MenuAbout.Text" xml:space="preserve">
+    
+    
     <value>About</value>
+    
+  
   </data>
+  
+  
   <data name="HeaderPages.Text" xml:space="preserve">
+    
+    
     <value>Pages</value>
+    
+  
   </data>
+  
+  
   <data name="EmptyStateTitle.Text" xml:space="preserve">
+    
+    
     <value>Drop images or PDFs here</value>
+    
+  
   </data>
+  
+  
   <data name="EmptyStateSubtitle.Text" xml:space="preserve">
+    
+    
     <value>Double-click to preview</value>
+    
+  
   </data>
+  
+  
   <data name="ButtonSavePdf.Content" xml:space="preserve">
+    
+    
     <value>Save as PDF</value>
+    
+  
   </data>
+  
+  
   <data name="TooltipSelectMode.ToolTipService.ToolTip" xml:space="preserve">
+    
+    
     <value>Select Mode (Ctrl+E)</value>
+    
+  
   </data>
+  
+  
   <data name="TooltipThumbnails.ToolTipService.ToolTip" xml:space="preserve">
+    
+    
     <value>Thumbnails</value>
+    
+  
   </data>
+  
+  
   <data name="TooltipList.ToolTipService.ToolTip" xml:space="preserve">
+    
+    
     <value>List</value>
+    
+  
   </data>
+  
+  
   <data name="TooltipRemoveSelected.ToolTipService.ToolTip" xml:space="preserve">
+    
+    
     <value>Remove Selected</value>
+    
+  
   </data>
+  
+  
   <data name="StatusReady" xml:space="preserve">
+    
+    
     <value>Ready</value>
+    
+  
   </data>
+  
+  
   <data name="StatusLoadingFiles" xml:space="preserve">
+    
+    
     <value>Loading {0} file(s)...</value>
+    
+  
   </data>
+  
+  
   <data name="StatusLoadingFileProgress" xml:space="preserve">
+    
+    
     <value>Loading {0}/{1}: {2}</value>
+    
+  
   </data>
+  
+  
   <data name="StatusAddedPages" xml:space="preserve">
+    
+    
     <value>Added {0} page(s)</value>
+    
+  
   </data>
+  
+  
   <data name="StatusLoadedPages" xml:space="preserve">
+    
+    
     <value>Loaded {0} page(s)</value>
+    
+  
   </data>
+  
+  
   <data name="StatusNoSupportedFiles" xml:space="preserve">
+    
+    
     <value>No supported files found</value>
+    
+  
   </data>
+  
+  
   <data name="StatusError" xml:space="preserve">
+    
+    
     <value>Error: {0}</value>
+    
+  
   </data>
+  
+  
   <data name="StatusSelectMode" xml:space="preserve">
+    
+    
     <value>Select mode: click items to select</value>
+    
+  
   </data>
+  
+  
   <data name="ItemCountFormat" xml:space="preserve">
+    
+    
     <value>{0} pages ({1} images, {2} PDF pages)</value>
+    
+  
   </data>
+  
+  
   <data name="SelectionCountFormatSingle" xml:space="preserve">
+    
+    
     <value>1 selected</value>
+    
+  
   </data>
+  
+  
   <data name="SelectionCountFormatMultiple" xml:space="preserve">
+    
+    
     <value>{0} selected</value>
+    
+  
   </data>
+  
+  
   <data name="TextExitSelectMode" xml:space="preserve">
+    
+    
     <value>Exit Select Mode</value>
+    
+  
   </data>
+  
+  
   <data name="TextEnterSelectMode" xml:space="preserve">
+    
+    
     <value>Enter Select Mode</value>
+    
+  
+  </data>
+  
+
+  <data name="AboutDialog.Title" xml:space="preserve">
+    <value>About Gladhen3</value>
+  </data>
+  <data name="AboutDialog.CloseButtonText" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="AboutDialog_Description.Text" xml:space="preserve">
+    <value>Gladhen3 - Convert images to PDF and merge PDF files.
+Drag to reorder, double-click to preview.</value>
+  </data>
+  <data name="AboutDialog_Version.Text" xml:space="preserve">
+    <value>Version: 1.0.12</value>
+  </data>
+  <data name="AboutDialog_Repository.Text" xml:space="preserve">
+    <value>Repository: </value>
+  </data>
+  <data name="SettingsDialog.Title" xml:space="preserve">
+    <value>PDF Settings</value>
+  </data>
+  <data name="SettingsDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SettingsDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SettingsDialog_PaperSizeLabel.Text" xml:space="preserve">
+    <value>Paper Size (for images):</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Auto.Content" xml:space="preserve">
+    <value>Automatic (Use Image Size)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_A4.Content" xml:space="preserve">
+    <value>A4 (210 ×297 mm)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Letter.Content" xml:space="preserve">
+    <value>Letter (8.5 ×11 in)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Legal.Content" xml:space="preserve">
+    <value>Legal (8.5 ×14 in)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_A3.Content" xml:space="preserve">
+    <value>A3 (297 ×420 mm)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Custom.Content" xml:space="preserve">
+    <value>Custom...</value>
+  </data>
+  <data name="SettingsDialog_UnitLabel.Text" xml:space="preserve">
+    <value>Unit:</value>
+  </data>
+  <data name="SettingsDialog_Unit_MM.Content" xml:space="preserve">
+    <value>Millimeters (mm)</value>
+  </data>
+  <data name="SettingsDialog_Unit_IN.Content" xml:space="preserve">
+    <value>Inches (in)</value>
+  </data>
+  <data name="SettingsDialog_Unit_PT.Content" xml:space="preserve">
+    <value>Points (pt)</value>
+  </data>
+  <data name="SettingsDialog_WidthLabel.Text" xml:space="preserve">
+    <value>Width:</value>
+  </data>
+  <data name="SettingsDialog_HeightLabel.Text" xml:space="preserve">
+    <value>Height:</value>
+  </data>
+  <data name="SettingsDialog_PresetsLabel.Text" xml:space="preserve">
+    <value>Presets:</value>
+  </data>
+  <data name="SettingsDialog_OrientationLabel.Text" xml:space="preserve">
+    <value>Orientation:</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Auto.Content" xml:space="preserve">
+    <value>Automatic</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Portrait.Content" xml:space="preserve">
+    <value>Portrait</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Landscape.Content" xml:space="preserve">
+    <value>Landscape</value>
+  </data>
+  <data name="SettingsDialog_MarginsLabel.Text" xml:space="preserve">
+    <value>Page Margins:</value>
+  </data>
+  <data name="SettingsDialog_Margins_None.Content" xml:space="preserve">
+    <value>None (0")</value>
+  </data>
+  <data name="SettingsDialog_Margins_Narrow.Content" xml:space="preserve">
+    <value>Narrow (0.25")</value>
+  </data>
+  <data name="SettingsDialog_Margins_Normal.Content" xml:space="preserve">
+    <value>Normal (0.5")</value>
+  </data>
+  <data name="SettingsDialog_Margins_Wide.Content" xml:space="preserve">
+    <value>Wide (1")</value>
+  </data>
+  <data name="SettingsDialog_Margins_ExtraWide.Content" xml:space="preserve">
+    <value>Extra Wide (1.5")</value>
+  </data>
+  <data name="SettingsDialog_Margins_Custom.Content" xml:space="preserve">
+    <value>Custom...</value>
+  </data>
+  <data name="SettingsDialog_MarginLeft.Header" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="SettingsDialog_MarginTop.Header" xml:space="preserve">
+    <value>Top</value>
+  </data>
+  <data name="SettingsDialog_MarginRight.Header" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="SettingsDialog_MarginBottom.Header" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="SettingsDialog_MarginNote.Text" xml:space="preserve">
+    <value>Note: Margins only apply when using a specific page size (not Automatic).</value>
+  </data>
+  <data name="SettingsDialog_CompressionLabel.Text" xml:space="preserve">
+    <value>Image Compression:</value>
+  </data>
+  <data name="SettingsDialog_Compression_None.Content" xml:space="preserve">
+    <value>None (Original Quality)</value>
+  </data>
+  <data name="SettingsDialog_Compression_Low.Content" xml:space="preserve">
+    <value>Low (JPEG 85%)</value>
+  </data>
+  <data name="SettingsDialog_Compression_Medium.Content" xml:space="preserve">
+    <value>Medium (JPEG 65%)</value>
+  </data>
+  <data name="SettingsDialog_Compression_High.Content" xml:space="preserve">
+    <value>High (JPEG 40%)</value>
+  </data>
+  <data name="SettingsDialog_CompressionNote.Text" xml:space="preserve">
+    <value>Note: Compression re-encodes all images to JPEG. Higher compression means smaller file size but lower quality.</value>
+  </data>
+  <data name="StatusLoadingNamedFiles" xml:space="preserve">
+    <value>Loading {0}...</value>
+  </data>
+  <data name="DialogTitleNoPages" xml:space="preserve">
+    <value>No Pages</value>
+  </data>
+  <data name="DialogContentNoPages" xml:space="preserve">
+    <value>Add images or PDFs to create a PDF.</value>
+  </data>
+  <data name="SuggestedFileNameDocument" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="FileTypePdfDocument" xml:space="preserve">
+    <value>PDF Document</value>
+  </data>
+  <data name="DialogTitleSaveFailed" xml:space="preserve">
+    <value>Save Failed</value>
+  </data>
+  <data name="DialogContentSaveFailedPicker" xml:space="preserve">
+    <value>Unable to open the save dialog. This can happen if the system file picker failed. Try again or restart the app.</value>
+  </data>
+  <data name="StatusSaveCancelled" xml:space="preserve">
+    <value>Save cancelled</value>
+  </data>
+  <data name="DialogContentSaveFailedPickerException" xml:space="preserve">
+    <value>Unable to open the save dialog: {0}</value>
+  </data>
+  <data name="StatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="StatusCreatingPdf" xml:space="preserve">
+    <value>Creating PDF...</value>
+  </data>
+  <data name="StatusPdfCreatedSuccessfully" xml:space="preserve">
+    <value>PDF created successfully</value>
+  </data>
+  <data name="DialogTitleSuccess" xml:space="preserve">
+    <value>Success</value>
+  </data>
+  <data name="DialogContentPdfSaved" xml:space="preserve">
+    <value>PDF saved to:
+{0}</value>
+  </data>
+  <data name="DialogTitleFileInUse" xml:space="preserve">
+    <value>File in Use</value>
+  </data>
+  <data name="DialogContentFileInUse" xml:space="preserve">
+    <value>Cannot save to '{0}' because it is open in another application. Close it and retry, or choose a different location.</value>
+  </data>
+  <data name="DialogButtonRetry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="DialogButtonChooseLocation" xml:space="preserve">
+    <value>Choose Location</value>
+  </data>
+  <data name="DialogButtonCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="DialogContentSaveFailedPickerShort" xml:space="preserve">
+    <value>Unable to open the save dialog. Try again or restart the app.</value>
+  </data>
+  <data name="DialogTitleAccessDenied" xml:space="preserve">
+    <value>Access Denied</value>
+  </data>
+  <data name="DialogContentAccessDenied" xml:space="preserve">
+    <value>Access denied saving to '{0}'. Check permissions or choose a different location.</value>
+  </data>
+  <data name="DialogContentSaveFailedFileInUse" xml:space="preserve">
+    <value>Unable to save the pdf file, the file is used by another process. Please close the file in the other application and try again.</value>
+  </data>
+  <data name="DialogTitleError" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="DialogContentCreatePdfError" xml:space="preserve">
+    <value>Failed to create PDF:
+{0}</value>
+  </data>
+  <data name="StatusErrorOpeningPreview" xml:space="preserve">
+    <value>Error opening preview</value>
+  </data>
+  <data name="TooltipPrevious" xml:space="preserve">
+    <value>Previous (?)</value>
+  </data>
+  <data name="TooltipNext" xml:space="preserve">
+    <value>Next (?)</value>
+  </data>
+  <data name="TooltipZoomOut" xml:space="preserve">
+    <value>Zoom Out (-)</value>
+  </data>
+  <data name="TooltipZoomIn" xml:space="preserve">
+    <value>Zoom In (+)</value>
+  </data>
+  <data name="TooltipFitToWindow" xml:space="preserve">
+    <value>Fit to Window</value>
+  </data>
+  <data name="ButtonOpenText" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="DialogButtonClose" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="TextUnableToLoadPreview" xml:space="preserve">
+    <value>Unable to load preview</value>
+  </data>
+  <data name="TextErrorLoadingPreview" xml:space="preserve">
+    <value>Error loading preview</value>
+  </data>
+  <data name="StatusReordering" xml:space="preserve">
+    <value>Reordering...</value>
+  </data>
+  <data name="StatusReorderComplete" xml:space="preserve">
+    <value>Reorder complete</value>
+  </data>
+  <data name="DragDropAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="StatusDropToAdd" xml:space="preserve">
+    <value>Drop to add</value>
+  </data>
+  <data name="StatusSelectedPages" xml:space="preserve">
+    <value>Selected {0} pages</value>
+  </data>
+  <data name="StatusDeselectedAll" xml:space="preserve">
+    <value>Deselected all</value>
+  </data>
+  <data name="StatusEnterSelectModeFirst" xml:space="preserve">
+    <value>Enter select mode first</value>
+  </data>
+  <data name="StatusNoPagesSelected" xml:space="preserve">
+    <value>No pages selected</value>
+  </data>
+  <data name="StatusRemovedPages" xml:space="preserve">
+    <value>Removed {0} page(s)</value>
+  </data>
+  <data name="StatusNoPagesToRemove" xml:space="preserve">
+    <value>No pages to remove</value>
+  </data>
+  <data name="StatusSortedByFilenameAsc" xml:space="preserve">
+    <value>Sorted by filename (A-Z)</value>
+  </data>
+  <data name="StatusSortedByFilenameDesc" xml:space="preserve">
+    <value>Sorted by filename (Z-A)</value>
+  </data>
+  <data name="StatusSortedByTypeImagesFirst" xml:space="preserve">
+    <value>Sorted by type (Images first)</value>
+  </data>
+  <data name="StatusSortedByTypePdfsFirst" xml:space="preserve">
+    <value>Sorted by type (PDFs first)</value>
+  </data>
+  <data name="StatusSettingsSaved" xml:space="preserve">
+    <value>Settings saved</value>
+  </data>
+  <data name="DialogButtonOK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="StatusNoSupportedFilesReceived" xml:space="preserve">
+    <value>No supported files received</value>
+  </data>
+  <data name="StatusReceivingFiles" xml:space="preserve">
+    <value>Receiving {0} file(s)...</value>
+  </data>
+  <data name="StatusAddedPagesFromAnotherInstance" xml:space="preserve">
+    <value>Added {0} page(s) from another instance</value>
   </data>
 </root>

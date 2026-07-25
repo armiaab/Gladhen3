@@ -67,7 +67,7 @@ public sealed partial class MainWindow : Window
         if (paths?.Any() == true)
         {
             var fileNames = paths.Select(Path.GetFileName).Take(3).ToList();
-            StatusTextBlock.Text = $"Loading {string.Join(", ", fileNames)}...";
+            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadingNamedFiles"), string.Join(", ", fileNames));
             _ = LoadDocumentsAsync(paths);
         }
     }
@@ -451,16 +451,16 @@ public sealed partial class MainWindow : Window
     {
         if (_documentItems.Count == 0)
         {
-            await ShowDialogAsync("No Pages", "Add images or PDFs to create a PDF.");
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleNoPages"), _resourceLoader.GetString("DialogContentNoPages"));
             return;
         }
 
         var savePicker = new FileSavePicker
         {
             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = "Document"
+            SuggestedFileName = _resourceLoader.GetString("SuggestedFileNameDocument")
         };
-        savePicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+        savePicker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
 
         InitializeWithWindow.Initialize(savePicker, WindowNative.GetWindowHandle(this));
 
@@ -472,28 +472,28 @@ public sealed partial class MainWindow : Window
         catch (COMException comEx)
         {
             Log.Warning(comEx, "Save file picker failed (COMException)");
-            await ShowDialogAsync("Save Failed", "Unable to open the save dialog. This can happen if the system file picker failed. Try again or restart the app.");
-            StatusTextBlock.Text = "Save cancelled";
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), _resourceLoader.GetString("DialogContentSaveFailedPicker"));
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
             return;
         }
         catch (Exception ex)
         {
             Log.Warning(ex, "Save file picker failed");
-            await ShowDialogAsync("Save Failed", $"Unable to open the save dialog: {ex.Message}");
-            StatusTextBlock.Text = "Save cancelled";
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), string.Format(_resourceLoader.GetString("DialogContentSaveFailedPickerException"), ex.Message));
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
             return;
         }
 
         if (file == null)
         {
-            StatusTextBlock.Text = "Cancelled";
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
             return;
         }
 
         var items = _documentItems.ToList();
         var outputPath = file.Path;
 
-        StatusTextBlock.Text = "Creating PDF...";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusCreatingPdf");
         SaveButton.IsEnabled = false;
         try
         {
@@ -503,8 +503,8 @@ public sealed partial class MainWindow : Window
                 {
                     await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
 
-                    StatusTextBlock.Text = "PDF created successfully";
-                    await ShowDialogAsync("Success", $"PDF saved to:\n{outputPath}");
+                    StatusTextBlock.Text = _resourceLoader.GetString("StatusPdfCreatedSuccessfully");
+                    await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSuccess"), string.Format(_resourceLoader.GetString("DialogContentPdfSaved"), outputPath));
                     break;
                 }
                 catch (IOException ex)
@@ -513,11 +513,11 @@ public sealed partial class MainWindow : Window
 
                     var dialog = new ContentDialog
                     {
-                        Title = "File in Use",
-                        Content = $"Cannot save to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and retry, or choose a different location.",
-                        PrimaryButtonText = "Retry",
-                        SecondaryButtonText = "Choose Location",
-                        CloseButtonText = "Cancel",
+                        Title = _resourceLoader.GetString("DialogTitleFileInUse"),
+                        Content = string.Format(_resourceLoader.GetString("DialogContentFileInUse"), Path.GetFileName(outputPath)),
+                        PrimaryButtonText = _resourceLoader.GetString("DialogButtonRetry"),
+                        SecondaryButtonText = _resourceLoader.GetString("DialogButtonChooseLocation"),
+                        CloseButtonText = _resourceLoader.GetString("DialogButtonCancel"),
                         XamlRoot = Content.XamlRoot
                     };
 
@@ -533,7 +533,7 @@ public sealed partial class MainWindow : Window
                             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
                             SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
                         };
-                        newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+                        newPicker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
                         InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
 
                         try
@@ -541,7 +541,7 @@ public sealed partial class MainWindow : Window
                             var newFile = await newPicker.PickSaveFileAsync();
                             if (newFile == null)
                             {
-                                StatusTextBlock.Text = "Cancelled";
+                                StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
                                 return;
                             }
                             outputPath = newFile.Path;
@@ -550,14 +550,14 @@ public sealed partial class MainWindow : Window
                         catch (COMException comEx)
                         {
                             Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                            await ShowDialogAsync("Save Failed", "Unable to open the save dialog. Try again or restart the app.");
-                            StatusTextBlock.Text = "Save cancelled";
+                            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), _resourceLoader.GetString("DialogContentSaveFailedPickerShort"));
+                            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
                             return;
                         }
                     }
                     else
                     {
-                        StatusTextBlock.Text = "Cancelled";
+                        StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
                         return;
                     }
                 }
@@ -567,10 +567,10 @@ public sealed partial class MainWindow : Window
 
                     var dialog = new ContentDialog
                     {
-                        Title = "Access Denied",
-                        Content = $"Access denied saving to '{Path.GetFileName(outputPath)}'. Check permissions or choose a different location.",
+                        Title = _resourceLoader.GetString("DialogTitleAccessDenied"),
+                        Content = string.Format(_resourceLoader.GetString("DialogContentAccessDenied"), Path.GetFileName(outputPath)),
                         PrimaryButtonText = "Choose Location",
-                        CloseButtonText = "Cancel",
+                        CloseButtonText = _resourceLoader.GetString("DialogButtonCancel"),
                         XamlRoot = Content.XamlRoot
                     };
 
@@ -582,7 +582,7 @@ public sealed partial class MainWindow : Window
                             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
                             SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
                         };
-                        newPicker.FileTypeChoices.Add("PDF Document", new List<string> { ".pdf" });
+                        newPicker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
                         InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
 
                         try
@@ -590,7 +590,7 @@ public sealed partial class MainWindow : Window
                             var newFile = await newPicker.PickSaveFileAsync();
                             if (newFile == null)
                             {
-                                StatusTextBlock.Text = "Cancelled";
+                                StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
                                 return;
                             }
                             outputPath = newFile.Path;
@@ -599,22 +599,22 @@ public sealed partial class MainWindow : Window
                         catch (COMException comEx)
                         {
                             Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                            await ShowDialogAsync("Save Failed", "Unable to save the pdf file, the file is used by another process. Please close the file in the other application and try again.");
-                            StatusTextBlock.Text = "Save cancelled";
+                            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), _resourceLoader.GetString("DialogContentSaveFailedFileInUse"));
+                            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
                             return;
                         }
                     }
                     else
                     {
-                        StatusTextBlock.Text = "Cancelled";
+                        StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
                         return;
                     }
                 }
                 catch (Exception ex)
                 {
-                    StatusTextBlock.Text = $"Error: {ex.Message}";
+                    StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
                     Log.Error(ex, "Error creating PDF");
-                    await ShowDialogAsync("Error", $"Failed to create PDF:\n{ex.Message}");
+                    await ShowDialogAsync(_resourceLoader.GetString("DialogTitleError"), string.Format(_resourceLoader.GetString("DialogContentCreatePdfError"), ex.Message));
                     return;
                 }
             }
@@ -707,7 +707,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error(ex, "Error opening preview");
-            StatusTextBlock.Text = "Error opening preview";
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusErrorOpeningPreview");
         }
     }
 
@@ -822,7 +822,7 @@ public sealed partial class MainWindow : Window
             Width = 32,
             Height = 32
         };
-        ToolTipService.SetToolTip(zoomOutButton, "Zoom Out (-)");
+        ToolTipService.SetToolTip(zoomOutButton, _resourceLoader.GetString("TooltipZoomOut"));
 
         var zoomText = new TextBlock
         {
@@ -839,7 +839,7 @@ public sealed partial class MainWindow : Window
             Width = 32,
             Height = 32
         };
-        ToolTipService.SetToolTip(zoomInButton, "Zoom In (+)");
+        ToolTipService.SetToolTip(zoomInButton, _resourceLoader.GetString("TooltipZoomIn"));
 
         var fitButton = new Button
         {
@@ -848,7 +848,7 @@ public sealed partial class MainWindow : Window
             Height = 32,
             Margin = new Thickness(8, 0, 0, 0)
         };
-        ToolTipService.SetToolTip(fitButton, "Fit to Window");
+        ToolTipService.SetToolTip(fitButton, _resourceLoader.GetString("TooltipFitToWindow"));
 
         var openButton = new Button
         {
@@ -859,7 +859,7 @@ public sealed partial class MainWindow : Window
                 Children =
                 {
                     new FontIcon { Glyph = "\uE8A7", FontSize = 12 },
-                    new TextBlock { Text = "Open", VerticalAlignment = VerticalAlignment.Center, FontSize = 12 }
+                    new TextBlock { Text = _resourceLoader.GetString("ButtonOpenText"), VerticalAlignment = VerticalAlignment.Center, FontSize = 12 }
                 }
             },
             Margin = new Thickness(8, 0, 0, 0)
@@ -925,7 +925,7 @@ public sealed partial class MainWindow : Window
         mainGrid.Children.Add(footerGrid);
 
         dialog.Content = mainGrid;
-        dialog.CloseButtonText = "Close";
+        dialog.CloseButtonText = _resourceLoader.GetString("DialogButtonClose");
 
         var loadingRing = new ProgressRing
         {
@@ -996,7 +996,7 @@ public sealed partial class MainWindow : Window
                 {
                     scrollViewer.Content = new TextBlock
                     {
-                        Text = "Unable to load preview",
+                        Text = _resourceLoader.GetString("TextUnableToLoadPreview"),
                         HorizontalAlignment = HorizontalAlignment.Center,
                         VerticalAlignment = VerticalAlignment.Center,
                         Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
@@ -1013,7 +1013,7 @@ public sealed partial class MainWindow : Window
                 loadingRing.IsActive = false;
                 scrollViewer.Content = new TextBlock
                 {
-                    Text = "Error loading preview",
+                    Text = _resourceLoader.GetString("TextErrorLoadingPreview"),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
@@ -1160,22 +1160,22 @@ public sealed partial class MainWindow : Window
 
     private void DocumentView_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
-        StatusTextBlock.Text = "Reordering...";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusReordering");
     }
 
     private void DocumentView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
     {
         if (args.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move)
-            StatusTextBlock.Text = "Reorder complete";
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusReorderComplete");
     }
 
     private void DocumentView_DragOver(object sender, DragEventArgs e)
     {
         e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
-        e.DragUIOverride.Caption = "Add";
+        e.DragUIOverride.Caption = _resourceLoader.GetString("DragDropAdd");
         e.DragUIOverride.IsContentVisible = true;
         e.DragUIOverride.IsCaptionVisible = true;
-        StatusTextBlock.Text = "Drop to add";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusDropToAdd");
     }
 
     private async void DocumentView_Drop(object sender, DragEventArgs e)
@@ -1208,7 +1208,7 @@ public sealed partial class MainWindow : Window
         else
             DocumentListView.SelectAll();
 
-        StatusTextBlock.Text = $"Selected {_documentItems.Count} pages";
+        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusSelectedPages"), _documentItems.Count);
     }
 
     private void DeselectAllButton_Click(object sender, RoutedEventArgs e)
@@ -1218,14 +1218,14 @@ public sealed partial class MainWindow : Window
             DocumentGridView.SelectedItems.Clear();
             DocumentListView.SelectedItems.Clear();
         }
-        StatusTextBlock.Text = "Deselected all";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusDeselectedAll");
     }
 
     private void RemoveSelected_Click(object sender, RoutedEventArgs e)
     {
         if (!_isSelectMode)
         {
-            StatusTextBlock.Text = "Enter select mode first";
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusEnterSelectModeFirst");
             return;
         }
 
@@ -1234,7 +1234,7 @@ public sealed partial class MainWindow : Window
 
         if (selectedItems.Count == 0)
         {
-            StatusTextBlock.Text = "No pages selected";
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesSelected");
             return;
         }
 
@@ -1242,7 +1242,7 @@ public sealed partial class MainWindow : Window
             _documentItems.Remove(item);
 
         UpdateUIState();
-        StatusTextBlock.Text = $"Removed {selectedItems.Count} page(s)";
+        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusRemovedPages"), selectedItems.Count);
     }
 
     private void RemoveAll_Click(object sender, RoutedEventArgs e)
@@ -1250,7 +1250,7 @@ public sealed partial class MainWindow : Window
         var count = _documentItems.Count;
         _documentItems.Clear();
         UpdateUIState();
-        StatusTextBlock.Text = count > 0 ? $"Removed {count} page(s)" : "No pages to remove";
+        StatusTextBlock.Text = count > 0 ? string.Format(_resourceLoader.GetString("StatusRemovedPages"), count) : _resourceLoader.GetString("StatusNoPagesToRemove");
     }
 
     private void SortDocuments<T>(Func<DocumentItem, T?> keySelector, bool ascending) where T : IComparable
@@ -1270,25 +1270,25 @@ public sealed partial class MainWindow : Window
     private void SortByFileNameAsc_Click(object sender, RoutedEventArgs e)
     {
         SortDocuments(d => d.FileName, true);
-        StatusTextBlock.Text = "Sorted by filename (A-Z)";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusSortedByFilenameAsc");
     }
 
     private void SortByFileNameDesc_Click(object sender, RoutedEventArgs e)
     {
         SortDocuments(d => d.FileName, false);
-        StatusTextBlock.Text = "Sorted by filename (Z-A)";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusSortedByFilenameDesc");
     }
 
     private void SortByTypeAsc_Click(object sender, RoutedEventArgs e)
     {
         SortDocuments(d => d.Type, true);
-        StatusTextBlock.Text = "Sorted by type (Images first)";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusSortedByTypeImagesFirst");
     }
 
     private void SortByTypeDesc_Click(object sender, RoutedEventArgs e)
     {
         SortDocuments(d => d.Type, false);
-        StatusTextBlock.Text = "Sorted by type (PDFs first)";
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusSortedByTypePdfsFirst");
     }
 
     #endregion
@@ -1297,435 +1297,24 @@ public sealed partial class MainWindow : Window
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        var panel = new StackPanel { Spacing = 16 };
-
-        panel.Children.Add(new TextBlock
+        var dialog = new Gladhen3.Dialogs.SettingsDialog
         {
-            Text = "Paper Size (for images):",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        });
-
-        var paperSizeCombo = new ComboBox { Width = 220 };
-        paperSizeCombo.Items.Add("Automatic (Use Image Size)");
-        paperSizeCombo.Items.Add("A4 (210 ×297 mm)");
-        paperSizeCombo.Items.Add("Letter (8.5 ×11 in)");
-        paperSizeCombo.Items.Add("Legal (8.5 ×14 in)");
-        paperSizeCombo.Items.Add("A3 (297 ×420 mm)");
-        paperSizeCombo.Items.Add("Custom...");
-        paperSizeCombo.SelectedIndex = (int)AppSettings.Current.PaperSize;
-        panel.Children.Add(paperSizeCombo);
-
-        var customSizePanel = new StackPanel
-        {
-            Spacing = 8,
-            Margin = new Thickness(0, 8, 0, 0),
-            Visibility = AppSettings.Current.PaperSize == PdfPaperSize.Custom ? Visibility.Visible : Visibility.Collapsed
-        };
-
-        var unitPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        unitPanel.Children.Add(new TextBlock
-        {
-            Text = "Unit:",
-            VerticalAlignment = VerticalAlignment.Center,
-            Width = 50
-        });
-
-        var unitCombo = new ComboBox { Width = 120 };
-        unitCombo.Items.Add("Millimeters (mm)");
-        unitCombo.Items.Add("Inches (in)");
-        unitCombo.Items.Add("Points (pt)");
-        unitCombo.SelectedIndex = AppSettings.Current.CustomSizeUnit;
-        unitPanel.Children.Add(unitCombo);
-        customSizePanel.Children.Add(unitPanel);
-
-        var unitMarginPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var widthPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        widthPanel.Children.Add(new TextBlock
-        {
-            Text = "Width:",
-            VerticalAlignment = VerticalAlignment.Center,
-            Width = 50
-        });
-
-        var widthBox = new NumberBox
-        {
-            Value = AppSettings.Current.CustomWidth,
-            Minimum = 1,
-            Maximum = 10000,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
-            Width = 120,
-            SmallChange = 1,
-            LargeChange = 10
-        };
-        widthPanel.Children.Add(widthBox);
-
-        var widthUnitLabel = new TextBlock
-        {
-            Text = AppSettings.Current.GetUnitName(),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        widthPanel.Children.Add(widthUnitLabel);
-        unitMarginPanel.Children.Add(widthPanel);
-
-        var heightPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        heightPanel.Children.Add(new TextBlock
-        {
-            Text = "Height:",
-            VerticalAlignment = VerticalAlignment.Center,
-            Width = 50
-        });
-
-        var heightBox = new NumberBox
-        {
-            Value = AppSettings.Current.CustomHeight,
-            Minimum = 1,
-            Maximum = 10000,
-            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
-            Width = 120,
-            SmallChange = 1,
-            LargeChange = 10
-        };
-        heightPanel.Children.Add(heightBox);
-
-        var heightUnitLabel = new TextBlock
-        {
-            Text = AppSettings.Current.GetUnitName(),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        heightPanel.Children.Add(heightUnitLabel);
-        unitMarginPanel.Children.Add(heightPanel);
-
-        customSizePanel.Children.Add(unitMarginPanel);
-
-        var presetPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Thickness(0, 4, 0, 0) };
-        presetPanel.Children.Add(new TextBlock
-        {
-            Text = "Presets:",
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 12,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-        });
-
-        var presetA4 = new Button { Content = "A4", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
-        var presetLetter = new Button { Content = "Letter", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
-        var presetA5 = new Button { Content = "A5", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
-        var preset4x6 = new Button { Content = "4×6\"", FontSize = 11, Padding = new Thickness(8, 4, 8, 4) };
-
-        presetA4.Click += (s, args) => { unitCombo.SelectedIndex = 0; widthBox.Value = 210; heightBox.Value = 297; };
-        presetLetter.Click += (s, args) => { unitCombo.SelectedIndex = 1; widthBox.Value = 8.5; heightBox.Value = 11; };
-        presetA5.Click += (s, args) => { unitCombo.SelectedIndex = 0; widthBox.Value = 148; heightBox.Value = 210; };
-        preset4x6.Click += (s, args) => { unitCombo.SelectedIndex = 1; widthBox.Value = 4; heightBox.Value = 6; };
-
-        presetPanel.Children.Add(presetA4);
-        presetPanel.Children.Add(presetLetter);
-        presetPanel.Children.Add(presetA5);
-        presetPanel.Children.Add(preset4x6);
-        customSizePanel.Children.Add(presetPanel);
-
-        panel.Children.Add(customSizePanel);
-
-        int previousUnitIndex = unitCombo.SelectedIndex;
-
-        unitCombo.SelectionChanged += (s, args) =>
-        {
-            var unitName = unitCombo.SelectedIndex switch
-            {
-                0 => "mm",
-                1 => "in",
-                2 => "pt",
-                _ => "mm"
-            };
-            widthUnitLabel.Text = unitName;
-            heightUnitLabel.Text = unitName;
-
-            var mmPerInch = 25.4;
-            var ptPerInch = 72.0;
-
-            double ConvertValue(double value, int fromUnit, int toUnit)
-            {
-                if (fromUnit == toUnit) return value;
-                double valueInMm = fromUnit switch
-                {
-                    0 => value, // mm
-                    1 => value * mmPerInch, // in -> mm
-                    2 => value * (mmPerInch / ptPerInch), // pt -> mm
-                    _ => value
-                };
-                return toUnit switch
-                {
-                    0 => valueInMm, // mm
-                    1 => valueInMm / mmPerInch, // mm -> in
-                    2 => valueInMm * (ptPerInch / mmPerInch), // mm -> pt
-                    _ => valueInMm
-                };
-            }
-
-            var newUnitIndex = unitCombo.SelectedIndex;
-            if (newUnitIndex != previousUnitIndex)
-            {
-                widthBox.Value = ConvertValue(widthBox.Value, previousUnitIndex, newUnitIndex);
-                heightBox.Value = ConvertValue(heightBox.Value, previousUnitIndex, newUnitIndex);
-                previousUnitIndex = newUnitIndex;
-            }
-        };
-
-        paperSizeCombo.SelectionChanged += (s, args) =>
-        {
-            customSizePanel.Visibility = paperSizeCombo.SelectedIndex == 5
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        };
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Orientation:",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-
-        var orientationCombo = new ComboBox { Width = 220 };
-        orientationCombo.Items.Add("Automatic");
-        orientationCombo.Items.Add("Portrait");
-        orientationCombo.Items.Add("Landscape");
-        orientationCombo.SelectedIndex = (int)AppSettings.Current.Orientation;
-        panel.Children.Add(orientationCombo);
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Page Margins:",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-
-        var marginCombo = new ComboBox { Width = 220 };
-        marginCombo.Items.Add("None (0\")");
-        marginCombo.Items.Add("Narrow (0.25\")");
-        marginCombo.Items.Add("Normal (0.5\")");
-        marginCombo.Items.Add("Wide (1\")");
-        marginCombo.Items.Add("Extra Wide (1.5\")");
-        marginCombo.Items.Add("Custom...");
-        marginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
-        panel.Children.Add(marginCombo);
-
-        var customMarginPanel = new StackPanel
-        {
-            Spacing = 8,
-            Margin = new Thickness(0, 8, 0, 0),
-            Visibility = AppSettings.Current.Margin == (PdfPageMargin)5 ? Visibility.Visible : Visibility.Collapsed
-        };
-
-        var marginUnitPanel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        marginUnitPanel.Children.Add(new TextBlock
-        {
-            Text = "Unit:",
-            VerticalAlignment = VerticalAlignment.Center,
-            Width = 50
-        });
-        var marginUnitCombo = new ComboBox { Width = 120 };
-        marginUnitCombo.Items.Add("Millimeters (mm)");
-        marginUnitCombo.Items.Add("Inches (in)");
-        marginUnitCombo.Items.Add("Points (pt)");
-        marginUnitCombo.SelectedIndex = (int)AppSettings.Current.CustomMarginUnit;
-        marginUnitPanel.Children.Add(marginUnitCombo);
-        customMarginPanel.Children.Add(marginUnitPanel);
-
-        var marginGrid = new Grid { ColumnSpacing = 8, RowSpacing = 4 };
-        for (int i = 0; i < 4; i++) marginGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var leftMarginBox = new NumberBox
-        {
-            Header = "Left",
-            Value = AppSettings.Current.CustomMarginLeft,
-            Minimum = 0,
-            Maximum = 100,
-            Width = 100,
-            SmallChange = 0.1,
-            LargeChange = 0.5
-        };
-        var rightMarginBox = new NumberBox
-        {
-            Header = "Right",
-            Value = AppSettings.Current.CustomMarginRight,
-            Minimum = 0,
-            Maximum = 100,
-            Width = 100,
-            SmallChange = 0.1,
-            LargeChange = 0.5
-        };
-        var topMarginBox = new NumberBox
-        {
-            Header = "Top",
-            Value = AppSettings.Current.CustomMarginTop,
-            Minimum = 0,
-            Maximum = 100,
-            Width = 100,
-            SmallChange = 0.1,
-            LargeChange = 0.5
-        };
-        var bottomMarginBox = new NumberBox
-        {
-            Header = "Bottom",
-            Value = AppSettings.Current.CustomMarginBottom,
-            Minimum = 0,
-            Maximum = 100,
-            Width = 100,
-            SmallChange = 0.1,
-            LargeChange = 0.5
-        };
-
-        marginGrid.Children.Add(leftMarginBox);
-        Grid.SetColumn(leftMarginBox, 0);
-        marginGrid.Children.Add(topMarginBox);
-        Grid.SetColumn(topMarginBox, 1);
-        marginGrid.Children.Add(rightMarginBox);
-        Grid.SetColumn(rightMarginBox, 2);
-        marginGrid.Children.Add(bottomMarginBox);
-        Grid.SetColumn(bottomMarginBox, 3);
-
-        customMarginPanel.Children.Add(marginGrid);
-        panel.Children.Add(customMarginPanel);
-
-        int previousMarginUnit = marginUnitCombo.SelectedIndex;
-        marginUnitCombo.SelectionChanged += (s, args) =>
-        {
-            var mmPerInch = 25.4;
-            var ptPerInch = 72.0;
-            double ConvertValue(double value, int fromUnit, int toUnit)
-            {
-                if (fromUnit == toUnit) return value;
-                double valueInMm = fromUnit switch
-                {
-                    0 => value, // mm
-                    1 => value * mmPerInch, // in -> mm
-                    2 => value * (mmPerInch / ptPerInch), // pt -> mm
-                    _ => value
-                };
-                return toUnit switch
-                {
-                    0 => valueInMm, // mm
-                    1 => valueInMm / mmPerInch, // mm -> in
-                    2 => valueInMm * (ptPerInch / mmPerInch), // mm -> pt
-                    _ => valueInMm
-                };
-            }
-            var newUnit = marginUnitCombo.SelectedIndex;
-            if (newUnit != previousMarginUnit)
-            {
-                leftMarginBox.Value = ConvertValue(leftMarginBox.Value, previousMarginUnit, newUnit);
-                rightMarginBox.Value = ConvertValue(rightMarginBox.Value, previousMarginUnit, newUnit);
-                topMarginBox.Value = ConvertValue(topMarginBox.Value, previousMarginUnit, newUnit);
-                bottomMarginBox.Value = ConvertValue(bottomMarginBox.Value, previousMarginUnit, newUnit);
-                previousMarginUnit = newUnit;
-            }
-        };
-
-        marginCombo.SelectionChanged += (s, args) =>
-        {
-            customMarginPanel.Visibility = marginCombo.SelectedIndex == 5
-                ? Visibility.Visible
-                : Visibility.Collapsed;
-        };
-
-        var infoText = new TextBlock
-        {
-            Text = "Note: Margins only apply when using a specific page size (not Automatic).",
-            FontSize = 12,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 8, 0, 0)
-        };
-        panel.Children.Add(infoText);
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Image Compression:",
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-
-        var compressionCombo = new ComboBox { Width = 220 };
-        compressionCombo.Items.Add("None (Original Quality)");
-        compressionCombo.Items.Add("Low (JPEG 85%)");
-        compressionCombo.Items.Add("Medium (JPEG 65%)");
-        compressionCombo.Items.Add("High (JPEG 40%)");
-        compressionCombo.SelectedIndex = (int)AppSettings.Current.ImageCompression;
-        panel.Children.Add(compressionCombo);
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = "Note: Compression re-encodes all images to JPEG. Higher compression means smaller file size but lower quality.",
-            FontSize = 12,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 4, 0, 0)
-        });
-
-        var scrollViewer = new ScrollViewer
-        {
-            Content = panel,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-            MaxHeight = 400
-        };
-
-        var dialog = new ContentDialog
-        {
-            Title = "PDF Settings",
-            Content = scrollViewer,
-            PrimaryButtonText = "Save",
-            CloseButtonText = "Cancel",
             XamlRoot = Content.XamlRoot
         };
 
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
-            AppSettings.Current.PaperSize = (PdfPaperSize)paperSizeCombo.SelectedIndex;
-            AppSettings.Current.Orientation = (PdfPaperOrientation)orientationCombo.SelectedIndex;
-            AppSettings.Current.Margin = (PdfPageMargin)marginCombo.SelectedIndex;
-            AppSettings.Current.ImageCompression = (PdfImageCompression)compressionCombo.SelectedIndex;
-
-            if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
-            {
-                AppSettings.Current.CustomSizeUnit = unitCombo.SelectedIndex;
-                AppSettings.Current.CustomWidth = widthBox.Value;
-                AppSettings.Current.CustomHeight = heightBox.Value;
-            }
-            if (AppSettings.Current.Margin == PdfPageMargin.Custom)
-            {
-                AppSettings.Current.CustomMarginUnit = (MarginUnit)marginUnitCombo.SelectedIndex;
-                AppSettings.Current.CustomMarginLeft = leftMarginBox.Value;
-                AppSettings.Current.CustomMarginRight = rightMarginBox.Value;
-                AppSettings.Current.CustomMarginTop = topMarginBox.Value;
-                AppSettings.Current.CustomMarginBottom = bottomMarginBox.Value;
-            }
-
-            await AppSettings.SaveAsync();
-            StatusTextBlock.Text = "Settings saved";
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusSettingsSaved");
         }
     }
 
     private async void AboutButton_Click(object sender, RoutedEventArgs e)
     {
-        var panel = new StackPanel { Spacing = 8 };
-
-        panel.Children.Add(new TextBlock
+        var dialog = new Gladhen3.Dialogs.AboutDialog
         {
-            Text = "Gladhen3 - Convert images to PDF and merge PDF files.\nDrag to reorder, double-click to preview.",
-            TextWrapping = TextWrapping.Wrap
-        });
-
-        panel.Children.Add(new TextBlock { Text = "Version: 1.0.12" });
-
-        var linkPanel = new StackPanel { Orientation = Orientation.Horizontal };
-        linkPanel.Children.Add(new TextBlock { Text = "Repository: ", VerticalAlignment = VerticalAlignment.Center });
-        linkPanel.Children.Add(new HyperlinkButton
-        {
-            Content = "github.com/armiaab/Gladhen3",
-            NavigateUri = new Uri("https://github.com/armiaab/Gladhen3")
-        });
-        panel.Children.Add(linkPanel);
-
-        await ShowDialogAsync("About Gladhen3", panel);
+            XamlRoot = Content.XamlRoot
+        };
+        await dialog.ShowAsync();
     }
 
     private async Task ShowDialogAsync(string title, object content)
@@ -1734,7 +1323,7 @@ public sealed partial class MainWindow : Window
         {
             Title = title,
             Content = content,
-            CloseButtonText = "OK",
+            CloseButtonText = _resourceLoader.GetString("DialogButtonOK"),
             XamlRoot = Content.XamlRoot
         };
         await dialog.ShowAsync();
@@ -1772,11 +1361,11 @@ public sealed partial class MainWindow : Window
 
             if (pathList.Count == 0)
             {
-                StatusTextBlock.Text = "No supported files received";
+                StatusTextBlock.Text = _resourceLoader.GetString("StatusNoSupportedFilesReceived");
                 return;
             }
 
-            StatusTextBlock.Text = $"Receiving {pathList.Count} file(s)...";
+            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusReceivingFiles"), pathList.Count);
 
             var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
@@ -1786,7 +1375,7 @@ public sealed partial class MainWindow : Window
 
             if (newItems.Count > 0)
             {
-                StatusTextBlock.Text = $"Added {newItems.Count} page(s) from another instance";
+                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusAddedPagesFromAnotherInstance"), newItems.Count);
 
                 _ = LoadThumbnailsInBackgroundAsync(newItems);
             }
@@ -1794,7 +1383,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             Log.Error(ex, "Error adding files from paths");
-            StatusTextBlock.Text = $"Error: {ex.Message}";
+            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
         }
     }
 
