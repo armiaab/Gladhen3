@@ -2,9 +2,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Threading.Tasks;
-#if !UNIT_TEST
 using Windows.Storage;
-#endif
 
 namespace Gladhen3.Models;
 
@@ -16,7 +14,7 @@ public class AppSettings
     public PdfImageCompression ImageCompression { get; set; } = PdfImageCompression.None;
     public double CustomWidth { get; set; } = 210;
     public double CustomHeight { get; set; } = 297;
-    public int CustomSizeUnit { get; set; } = 0;
+    public UnitSize CustomSizeUnit { get; set; } = UnitSize.Millimetre;
 
     private const string SettingsFileName = "appSettings.json";
 
@@ -51,9 +49,9 @@ public class AppSettings
     /// </summary>
     public double GetCustomWidthInPoints() => CustomSizeUnit switch
     {
-        0 => CustomWidth * MmToPoints,
-        1 => CustomWidth * InchToPoints,
-        2 => CustomWidth,
+        UnitSize.Millimetre => CustomWidth * MmToPoints,
+        UnitSize.Inch => CustomWidth * InchToPoints,
+        UnitSize.Point => CustomWidth,
         _ => CustomWidth * MmToPoints
     };
 
@@ -62,9 +60,9 @@ public class AppSettings
     /// </summary>
     public double GetCustomHeightInPoints() => CustomSizeUnit switch
     {
-        0 => CustomHeight * MmToPoints,
-        1 => CustomHeight * InchToPoints,
-        2 => CustomHeight,
+        UnitSize.Millimetre => CustomHeight * MmToPoints,
+        UnitSize.Inch => CustomHeight * InchToPoints,
+        UnitSize.Point => CustomHeight,
         _ => CustomHeight * MmToPoints
     };
 
@@ -75,14 +73,13 @@ public class AppSettings
     {
         return CustomSizeUnit switch
         {
-            0 => "mm",
-            1 => "in",
-            2 => "pt",
+            UnitSize.Millimetre => "mm",
+            UnitSize.Inch => "in",
+            UnitSize.Point => "pt",
             _ => "mm"
         };
     }
 
-#if !UNIT_TEST
     public static async Task LoadAsync()
     {
         try
@@ -119,5 +116,4 @@ public class AppSettings
             Serilog.Log.Logger.Error(ex, "Failed to save settings");
         }
     }
-#endif
 }

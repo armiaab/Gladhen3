@@ -7,8 +7,8 @@ namespace Gladhen3.Dialogs;
 public sealed partial class SettingsDialog : ContentDialog
 {
     private readonly Microsoft.Windows.ApplicationModel.Resources.ResourceLoader _resourceLoader = new();
-    private int _previousUnitIndex;
-    private int _previousMarginUnit;
+    private UnitSize _previousUnit;
+    private UnitSize _previousMarginUnit;
 
     public SettingsDialog()
     {
@@ -23,14 +23,14 @@ public sealed partial class SettingsDialog : ContentDialog
         MarginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
         CompressionCombo.SelectedIndex = (int)AppSettings.Current.ImageCompression;
 
-        UnitCombo.SelectedIndex = AppSettings.Current.CustomSizeUnit;
-        _previousUnitIndex = UnitCombo.SelectedIndex;
+        UnitCombo.SelectedIndex = (int)AppSettings.Current.CustomSizeUnit;
+        _previousUnit = (UnitSize)UnitCombo.SelectedIndex;
 
         WidthBox.Value = AppSettings.Current.CustomWidth;
         HeightBox.Value = AppSettings.Current.CustomHeight;
 
         MarginUnitCombo.SelectedIndex = (int)AppSettings.Current.CustomMarginUnit;
-        _previousMarginUnit = MarginUnitCombo.SelectedIndex;
+        _previousMarginUnit = (UnitSize)MarginUnitCombo.SelectedIndex;
 
         LeftMarginBox.Value = AppSettings.Current.CustomMarginLeft;
         RightMarginBox.Value = AppSettings.Current.CustomMarginRight;
@@ -76,11 +76,12 @@ public sealed partial class SettingsDialog : ContentDialog
         UpdateUnitLabels();
 
         var newUnitIndex = UnitCombo.SelectedIndex;
-        if (newUnitIndex != _previousUnitIndex)
+        var newUnit = (UnitSize)newUnitIndex;
+        if (newUnit != _previousUnit)
         {
-            WidthBox.Value = ConvertValue(WidthBox.Value, (UnitSize)_previousUnitIndex, (UnitSize)newUnitIndex);
-            HeightBox.Value = ConvertValue(HeightBox.Value, (UnitSize)_previousUnitIndex, (UnitSize)newUnitIndex);
-            _previousUnitIndex = newUnitIndex;
+            WidthBox.Value = ConvertValue(WidthBox.Value, _previousUnit, newUnit);
+            HeightBox.Value = ConvertValue(HeightBox.Value, _previousUnit, newUnit);
+            _previousUnit = newUnit;
         }
     }
 
@@ -88,13 +89,13 @@ public sealed partial class SettingsDialog : ContentDialog
     {
         if (LeftMarginBox == null) return;
 
-        var newUnit = MarginUnitCombo.SelectedIndex;
+        var newUnit = (UnitSize)MarginUnitCombo.SelectedIndex;
         if (newUnit != _previousMarginUnit)
         {
-            LeftMarginBox.Value = ConvertValue(LeftMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
-            RightMarginBox.Value = ConvertValue(RightMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
-            TopMarginBox.Value = ConvertValue(TopMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
-            BottomMarginBox.Value = ConvertValue(BottomMarginBox.Value, (UnitSize)_previousMarginUnit, (UnitSize)newUnit);
+            LeftMarginBox.Value = ConvertValue(LeftMarginBox.Value, _previousMarginUnit, newUnit);
+            RightMarginBox.Value = ConvertValue(RightMarginBox.Value, _previousMarginUnit, newUnit);
+            TopMarginBox.Value = ConvertValue(TopMarginBox.Value, _previousMarginUnit, newUnit);
+            BottomMarginBox.Value = ConvertValue(BottomMarginBox.Value, _previousMarginUnit, newUnit);
             _previousMarginUnit = newUnit;
         }
     }
@@ -136,7 +137,7 @@ public sealed partial class SettingsDialog : ContentDialog
 
         if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
         {
-            AppSettings.Current.CustomSizeUnit = UnitCombo.SelectedIndex;
+            AppSettings.Current.CustomSizeUnit = (UnitSize)UnitCombo.SelectedIndex;
             AppSettings.Current.CustomWidth = WidthBox.Value;
             AppSettings.Current.CustomHeight = HeightBox.Value;
         }
