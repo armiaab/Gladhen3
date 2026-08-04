@@ -1,8 +1,10 @@
 using Gladhen3.Models;
-using ImageMagick;
-using PdfSharp.Drawing;
-using PdfSharp.Pdf;
-using PdfSharp.Pdf.IO;
+using iText.IO.Image;
+using iText.Kernel.Pdf;
+using iText.Kernel.Pdf.Canvas;
+using PdfPageSize = iText.Kernel.Geom.PageSize;
+using PdfRectangle = iText.Kernel.Geom.Rectangle;
+using SkiaSharp;
 using Serilog;
 using System;
 using System.Collections.Concurrent;
@@ -13,227 +15,62 @@ using System.Threading.Tasks;
 #if !UNIT_TEST
 using Windows.Graphics.Imaging;
 using Windows.Storage;
-using Windows.Storage.Streams;
 #endif
 
 namespace Gladhen3.Services;
 
 public class PdfService
 {
-    private readonly Dictionary<string, XImage> _imageCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, XPdfForm> _pdfFormCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentBag<string> _convertedImageTempFiles = [];
-
 
     public void CreatePdfFromDocuments(List<DocumentItem> items, string outputPath)
     {
-        var tempFiles = new List<string>();
         var useCustomPageSize = AppSettings.Current.PaperSize != PdfPaperSize.Automatic;
 
         try
         {
             try { EnsureFileIsWritable(outputPath); }
-            catch (IOException ex)
-            {
-                throw new IOException(
-                    $"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and try again.", ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                throw new UnauthorizedAccessException(
-                    $"Access denied saving PDF to '{Path.GetFileName(outputPath)}'. Check permissions or choose another location.", ex);
-            }
+            catch (IOException ex) { throw new IOException($"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and try again.", ex); }
+            catch (UnauthorizedAccessException ex) { throw new UnauthorizedAccessException($"Access denied saving PDF to '{Path.GetFileName(outputPath)}'. Check permissions or choose another location.", ex); }
 
             try
             {
-                if (useCustomPageSize)
-                    CreatePdfWithCustomPageSize(items, outputPath);
-                else
-                    CreatePdfWithAutomaticPageSize(items, outputPath, tempFiles);
-
+                CreatePdfWithIText(items, outputPath, useCustomPageSize);
                 Log.Information("PDF created with {PageCount} pages: {OutputPath}", items.Count, outputPath);
             }
-            catch (IOException ex)
-            {
-                throw new IOException(
-                    $"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application or an I/O error occurred. Close other apps and try again.", ex);
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                throw new UnauthorizedAccessException(
-                    $"Access denied saving PDF to '{Path.GetFileName(outputPath)}'. Check permissions or choose another location.", ex);
-            }
+            catch (IOException ex) { throw new IOException($"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application or an I/O error occurred. Close other apps and try again.", ex); }
+            catch (UnauthorizedAccessException ex) { throw new UnauthorizedAccessException($"Access denied saving PDF to '{Path.GetFileName(outputPath)}'. Check permissions or choose another location.", ex); }
         }
         finally
         {
-            foreach (var f in tempFiles)
-                try { File.Delete(f); } catch { }
             foreach (var f in _convertedImageTempFiles)
                 try { File.Delete(f); } catch { }
             _convertedImageTempFiles.Clear();
-            ClearCaches();
         }
     }
 
-
-    private void CreatePdfWithAutomaticPageSize(
-        List<DocumentItem> items, string outputPath, List<string> tempFiles)
+    private void CreatePdfWithIText(List<DocumentItem> items, string outputPath, bool useCustomPageSize)
     {
-        var compress = AppSettings.Current.ImageCompression != PdfImageCompression.None;
+        var compressImages = AppSettings.Current.ImageCompression != PdfImageCompression.None;
+        Log.Information("PDF compression mode: {CompressionMode}, Quality: {Quality}%, DPI: {DPI}",
+            AppSettings.Current.ImageCompression, Math.Round(GetJpegQuality() * 100), GetRasterDpi());
 
-        if (!compress)
-        {
-            var pageList = new List<(string PdfPath, int PageIndex)>(items.Count);
-            foreach (var item in items)
-            {
-                if (item.Type == DocumentType.Image)
-                {
-                    var tmpPath = Path.Combine(Path.GetTempPath(), $"gladhen_{Guid.NewGuid():N}.pdf");
-                    try
-                    {
-                        CreateSingleImagePdfWithFallback(item.FilePath, tmpPath);
-                        tempFiles.Add(tmpPath);
-                        pageList.Add((tmpPath, 0));
-                    }
-                    catch (Exception ex) { Log.Error(ex, "Failed to create PDF from image: {Path}", item.FilePath); }
-                }
-                else if (item.Type == DocumentType.PdfPage)
-                {
-                    var src = item.SourcePdfPath ?? item.FilePath;
-                    if (!string.IsNullOrEmpty(src))
-                        pageList.Add((src, item.PageNumber - 1));
-                }
-            }
-            if (pageList.Count == 0)
-                throw new InvalidOperationException("No pages could be processed. Please check the image formats.");
-            MergePagesOptimized(pageList, outputPath);
-            return;
-        }
-
-        var imageKeys = items
-            .Where(i => i.Type == DocumentType.Image)
-            .Select(i => i.FilePath)
-            .Distinct()
-            .ToList();
-
-        var convertedImages = imageKeys.Count > 0
-            ? PreConvertImagesAsync(imageKeys).GetAwaiter().GetResult()
+        var imagePaths = items.Where(i => i.Type == DocumentType.Image).Select(i => i.FilePath).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var convertedImages = compressImages && imagePaths.Count > 0
+            ? PreConvertImagesAsync(imagePaths).GetAwaiter().GetResult()
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        BuildCompressedAutoPdf(items, outputPath, convertedImages);
-    }
+        Log.Information("Image conversion: {ConvertedCount} of {TotalCount} images processed", convertedImages.Count, imagePaths.Count);
 
-    /// <summary>
-    /// Compression variant of the automatic-size path.
-    /// Images use pre-converted JPEGs; PDF pages are re-rendered via XPdfForm at their
-    /// original dimensions so PDFsharp's deflate compression is applied to content streams.
-    /// </summary>
-    private void BuildCompressedAutoPdf(
-        List<DocumentItem> items, string outputPath,
-        Dictionary<string, string> convertedImages)
-    {
-        using var doc = new PdfDocument();
-        doc.Info.Title = "Created with Gladhen3";
-        var pagesAdded = 0;
+        var writerProps = new WriterProperties()
+            .SetCompressionLevel(CompressionConstants.BEST_COMPRESSION)
+            .SetFullCompressionMode(true);
 
-        foreach (var item in items)
-        {
-            if (item.Type == DocumentType.Image)
-            {
-                try
-                {
-                    var src = convertedImages.GetValueOrDefault(item.FilePath, item.FilePath);
-                    using var xImage = XImage.FromFile(src);
-                    var wPt = xImage.PointWidth;
-                    var hPt = xImage.PointHeight;
+        using var outputStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var writer = new PdfWriter(outputStream, writerProps);
+        using var outputDocument = new PdfDocument(writer);
+        outputDocument.GetDocumentInfo().SetTitle("Created with Gladhen3");
 
-                    var isLandscape = wPt > hPt;
-                    var useLandscape = AppSettings.Current.Orientation switch
-                    {
-                        PdfPaperOrientation.Portrait => false,
-                        PdfPaperOrientation.Landscape => true,
-                        _ => isLandscape
-                    };
-
-                    var page = doc.AddPage();
-                    page.Width = new XUnit(useLandscape == isLandscape ? wPt : hPt);
-                    page.Height = new XUnit(useLandscape == isLandscape ? hPt : wPt);
-
-                    using var gfx = XGraphics.FromPdfPage(page);
-                    var s = Math.Min(page.Width.Point / wPt, page.Height.Point / hPt);
-                    var dw = wPt * s;
-                    var dh = hPt * s;
-                    gfx.DrawImage(xImage,
-                        (page.Width.Point - dw) / 2,
-                        (page.Height.Point - dh) / 2, dw, dh);
-                    pagesAdded++;
-                }
-                catch (Exception ex) { Log.Error(ex, "Failed to add image: {Path}", item.FilePath); }
-            }
-            else if (item.Type == DocumentType.PdfPage)
-            {
-                var src = item.SourcePdfPath ?? item.FilePath;
-                if (string.IsNullOrEmpty(src)) continue;
-
-                try
-                {
-                    var form = GetOrCreateXPdfForm(src);
-                    form.PageIndex = item.PageNumber - 1;
-
-                    var srcW = form.PointWidth;
-                    var srcH = form.PointHeight;
-
-                    var isLandscape = srcW > srcH;
-                    var targetLandscape = AppSettings.Current.Orientation switch
-                    {
-                        PdfPaperOrientation.Portrait => false,
-                        PdfPaperOrientation.Landscape => true,
-                        _ => isLandscape
-                    };
-
-                    var page = doc.AddPage();
-                    page.Width = new XUnit(targetLandscape == isLandscape ? srcW : srcH);
-                    page.Height = new XUnit(targetLandscape == isLandscape ? srcH : srcW);
-
-                    using var gfx = XGraphics.FromPdfPage(page);
-                    var s = Math.Min(page.Width.Point / srcW, page.Height.Point / srcH);
-                    gfx.DrawImage(form,
-                        (page.Width.Point - srcW * s) / 2,
-                        (page.Height.Point - srcH * s) / 2,
-                        srcW * s, srcH * s);
-                    pagesAdded++;
-                }
-                catch (Exception ex) { Log.Error(ex, "Failed to add PDF page: {Path}", src); }
-            }
-        }
-
-        if (pagesAdded == 0)
-            throw new InvalidOperationException("No pages could be processed. Please check the image formats.");
-        CompressEmbeddedPdfImages(doc);
-        doc.Save(outputPath);
-    }
-
-
-    private void CreatePdfWithCustomPageSize(List<DocumentItem> items, string outputPath)
-    {
-        var compress = AppSettings.Current.ImageCompression != PdfImageCompression.None;
-
-        var convertedImages = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (compress)
-        {
-            var imageKeys = items
-                .Where(i => i.Type == DocumentType.Image)
-                .Select(i => i.FilePath)
-                .Distinct()
-                .ToList();
-            if (imageKeys.Count > 0)
-                convertedImages = PreConvertImagesAsync(imageKeys).GetAwaiter().GetResult();
-        }
-
-        using var outputDocument = new PdfDocument();
-        outputDocument.Info.Title = "Created with Gladhen3";
-
-        var currentPdfPath = string.Empty;
-        PdfDocument? currentInputDoc = null;
+        var inputPdfCache = new Dictionary<string, PdfDocument>(StringComparer.OrdinalIgnoreCase);
         var pagesAdded = 0;
 
         try
@@ -244,10 +81,8 @@ public class PdfService
                 {
                     try
                     {
-                        if (compress && convertedImages.TryGetValue(item.FilePath, out var convPath))
-                            AddImageToDocumentFromPath(outputDocument, convPath);
-                        else
-                            AddImageToDocumentWithFallback(outputDocument, item.FilePath);
+                        var sourcePath = compressImages && convertedImages.TryGetValue(item.FilePath, out var convPath) ? convPath : item.FilePath;
+                        AddImagePage(outputDocument, sourcePath, useCustomPageSize);
                         pagesAdded++;
                     }
                     catch (Exception ex) { Log.Error(ex, "Failed to add image to PDF: {Path}", item.FilePath); }
@@ -257,225 +92,120 @@ public class PdfService
                     var sourcePath = item.SourcePdfPath ?? item.FilePath;
                     if (string.IsNullOrEmpty(sourcePath)) continue;
 
-                    if (sourcePath != currentPdfPath)
+                    try
                     {
-                        currentInputDoc?.Dispose();
-                        currentInputDoc = PdfReader.Open(sourcePath, PdfDocumentOpenMode.Import);
-                        currentPdfPath = sourcePath;
-                    }
+                        if (!inputPdfCache.TryGetValue(sourcePath, out var sourcePdf))
+                        {
+                            sourcePdf = new PdfDocument(new PdfReader(sourcePath));
+                            inputPdfCache[sourcePath] = sourcePdf;
+                        }
 
-                    if (currentInputDoc != null && item.PageNumber > 0 && item.PageNumber <= currentInputDoc.PageCount)
-                    {
-                        AddPdfPageToDocumentOptimized(outputDocument, sourcePath, item.PageNumber - 1);
+                        var sourcePageIndex = item.PageNumber - 1;
+                        if (sourcePageIndex < 0 || sourcePageIndex >= sourcePdf.GetNumberOfPages()) continue;
+
+                        AddPdfPage(outputDocument, sourcePdf.GetPage(item.PageNumber), useCustomPageSize);
                         pagesAdded++;
                     }
+                    catch (Exception ex) { Log.Error(ex, "Failed to add PDF page: {Path}", sourcePath); }
                 }
             }
         }
-        finally { currentInputDoc?.Dispose(); }
-
-        if (pagesAdded == 0)
-            throw new InvalidOperationException("No pages could be processed. Please check the image formats.");
-
-        if (compress)
-            CompressEmbeddedPdfImages(outputDocument);
-
-        try { outputDocument.Save(outputPath); }
-        catch (IOException ex)
+        finally
         {
-            throw new IOException(
-                $"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and try again.", ex);
+            foreach (var sourcePdf in inputPdfCache.Values)
+                try { sourcePdf.Close(); } catch { }
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new UnauthorizedAccessException(
-                $"Access denied saving PDF to '{Path.GetFileName(outputPath)}'. Check permissions or choose another location.", ex);
-        }
-    }
 
-    /// <summary>
-    /// Adds an image file to the document using the instance cache with format fallback.
-    /// Used in the no-compression path where the same source file may appear multiple times.
-    /// </summary>
-    private void AddImageToDocumentWithFallback(PdfDocument document, string imagePath)
-        => AddImageToDocumentCore(document, GetOrCreateXImageWithFallback(imagePath));
+        if (pagesAdded == 0) throw new InvalidOperationException("No pages could be processed. Please check the image formats.");
 
-    /// <summary>
-    /// Adds an image to the document by loading directly from <paramref name="imagePath"/>.
-    /// Used when the file is a pre-converted temp JPEG that won't be reused.
-    /// </summary>
-    private void AddImageToDocumentFromPath(PdfDocument document, string imagePath)
-    {
-        using var xImage = XImage.FromFile(imagePath);
-        AddImageToDocumentCore(document, xImage);
-    }
-
-    /// <summary>
-    /// Core image layout: places xImage on a new page sized to the current paper setting.
-    /// Photos are never upscaled beyond 1× their natural size.
-    /// </summary>
-    private void AddImageToDocumentCore(PdfDocument document, XImage xImage)
-    {
-        var page = document.AddPage();
-        var imgW = xImage.PointWidth;
-        var imgH = xImage.PointHeight;
-
-        var (baseW, baseH) = GetPageDimensionsInPortrait(AppSettings.Current.PaperSize);
-
-        var useLandscape = AppSettings.Current.Orientation switch
-        {
-            PdfPaperOrientation.Portrait => false,
-            PdfPaperOrientation.Landscape => true,
-            _ => imgW > imgH
-        };
-
-        page.Width = new XUnit(useLandscape ? baseH : baseW);
-        page.Height = new XUnit(useLandscape ? baseW : baseH);
-
-        using var gfx = XGraphics.FromPdfPage(page);
-
-        var margin = AppSettings.Current.GetMarginInPoints();
-        var availW = page.Width.Point - margin * 2;
-        var availH = page.Height.Point - margin * 2;
-        var scale = Math.Min(Math.Min(availW / imgW, availH / imgH), 1.0);
-        var drawW = imgW * scale;
-        var drawH = imgH * scale;
-
-        gfx.DrawImage(xImage,
-            (page.Width.Point - drawW) / 2,
-            (page.Height.Point - drawH) / 2,
-            drawW, drawH);
-    }
-
-    /// <summary>
-    /// Re-renders a PDF page via XPdfForm onto the target paper size.
-    /// Vector content is resolution-independent and is never upscale-limited.
-    /// </summary>
-    private void AddPdfPageToDocumentOptimized(PdfDocument document, string sourcePath, int pageIndex)
-    {
-        var form = GetOrCreateXPdfForm(sourcePath);
-        form.PageIndex = pageIndex;
-
-        var srcW = form.PointWidth;
-        var srcH = form.PointHeight;
-
-        var (baseW, baseH) = GetPageDimensionsInPortrait(AppSettings.Current.PaperSize);
-
-        var useLandscape = AppSettings.Current.Orientation switch
-        {
-            PdfPaperOrientation.Portrait => false,
-            PdfPaperOrientation.Landscape => true,
-            _ => srcW > srcH
-        };
-
-        var newPage = document.AddPage();
-        newPage.Width = new XUnit(useLandscape ? baseH : baseW);
-        newPage.Height = new XUnit(useLandscape ? baseW : baseH);
-
-        using var gfx = XGraphics.FromPdfPage(newPage);
-
-        var margin = AppSettings.Current.GetMarginInPoints();
-        var availW = newPage.Width.Point - margin * 2;
-        var availH = newPage.Height.Point - margin * 2;
-        var scale = Math.Min(availW / srcW, availH / srcH);
-        var drawW = srcW * scale;
-        var drawH = srcH * scale;
-
-        gfx.DrawImage(form,
-            (newPage.Width.Point - drawW) / 2,
-            (newPage.Height.Point - drawH) / 2,
-            drawW, drawH);
-    }
-
-
-    private void CreateSingleImagePdfWithFallback(string imagePath, string outputPath)
-    {
-        using var document = new PdfDocument();
-        var page = document.AddPage();
-
-        using var xImage = LoadImageWithFallback(imagePath);
-        var imgW = xImage.PointWidth;
-        var imgH = xImage.PointHeight;
-
-        page.Width = new XUnit(imgW);
-        page.Height = new XUnit(imgH);
-
-        var isImgLandscape = imgW > imgH;
-        var currentIsLandscape = page.Width.Point > page.Height.Point;
-        var targetLandscape = AppSettings.Current.Orientation switch
-        {
-            PdfPaperOrientation.Portrait => false,
-            PdfPaperOrientation.Landscape => true,
-            _ => isImgLandscape
-        };
-
-        if (targetLandscape != currentIsLandscape)
-            (page.Width, page.Height) = (page.Height, page.Width);
-
-        using var gfx = XGraphics.FromPdfPage(page);
-        var s = Math.Min(page.Width.Point / imgW, page.Height.Point / imgH);
-        gfx.DrawImage(xImage,
-            (page.Width.Point - imgW * s) / 2,
-            (page.Height.Point - imgH * s) / 2,
-            imgW * s, imgH * s);
-
-        try { document.Save(outputPath); }
-        catch (IOException ex)
-        {
-            throw new IOException(
-                $"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and try again.", ex);
-        }
-    }
-
-    private XImage LoadImageWithFallback(string imagePath)
-    {
         if (AppSettings.Current.ImageCompression != PdfImageCompression.None)
         {
-            var compressed = ConvertImageToCompatibleFormat(imagePath);
-            if (compressed != null) return XImage.FromFile(compressed);
+            Log.Information("Starting embedded PDF image recompression...");
+            CompressEmbeddedPdfImages(outputDocument);
+            Log.Information("Embedded image recompression complete");
         }
+    }
 
-        try { return XImage.FromFile(imagePath); }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Direct image load failed for: {Path}, attempting conversion", imagePath);
-        }
+    private void AddImagePage(PdfDocument outputDocument, string imagePath, bool useCustomPageSize)
+    {
+        var imageData = LoadImageDataWithFallback(imagePath);
+        var imgWidth = imageData.GetWidth();
+        var imgHeight = imageData.GetHeight();
+
+        var sourceIsLandscape = imgWidth > imgHeight;
+        var targetIsLandscape = ResolveTargetLandscape(sourceIsLandscape);
+        var pageRectangle = useCustomPageSize ? GetCustomPageRectangle(targetIsLandscape) : GetAutoPageRectangle(imgWidth, imgHeight, sourceIsLandscape, targetIsLandscape);
+
+        var page = outputDocument.AddNewPage(new PdfPageSize(pageRectangle));
+        var canvas = new PdfCanvas(page);
+
+        var margin = useCustomPageSize ? (float)AppSettings.Current.GetMarginInPoints() : 0f;
+        var availableWidth = Math.Max(1f, pageRectangle.GetWidth() - (2f * margin));
+        var availableHeight = Math.Max(1f, pageRectangle.GetHeight() - (2f * margin));
+        var scale = Math.Min(Math.Min(availableWidth / imgWidth, availableHeight / imgHeight), 1f);
+        var drawWidth = imgWidth * scale;
+        var drawHeight = imgHeight * scale;
+
+        var drawRect = new PdfRectangle((pageRectangle.GetWidth() - drawWidth) / 2f, (pageRectangle.GetHeight() - drawHeight) / 2f, drawWidth, drawHeight);
+        canvas.AddImageFittedIntoRectangle(imageData, drawRect, false);
+    }
+
+    private void AddPdfPage(PdfDocument outputDocument, PdfPage sourcePage, bool useCustomPageSize)
+    {
+        var sourceRect = sourcePage.GetPageSizeWithRotation();
+        var sourceWidth = sourceRect.GetWidth();
+        var sourceHeight = sourceRect.GetHeight();
+
+        var sourceIsLandscape = sourceWidth > sourceHeight;
+        var targetIsLandscape = ResolveTargetLandscape(sourceIsLandscape);
+        var pageRectangle = useCustomPageSize ? GetCustomPageRectangle(targetIsLandscape) : GetAutoPageRectangle(sourceWidth, sourceHeight, sourceIsLandscape, targetIsLandscape);
+
+        var newPage = outputDocument.AddNewPage(new PdfPageSize(pageRectangle));
+        var xObject = sourcePage.CopyAsFormXObject(outputDocument);
+        var canvas = new PdfCanvas(newPage);
+
+        var margin = useCustomPageSize ? (float)AppSettings.Current.GetMarginInPoints() : 0f;
+        var availableWidth = Math.Max(1f, pageRectangle.GetWidth() - (2f * margin));
+        var availableHeight = Math.Max(1f, pageRectangle.GetHeight() - (2f * margin));
+        var scale = Math.Min(availableWidth / sourceWidth, availableHeight / sourceHeight);
+        var drawWidth = sourceWidth * scale;
+        var drawHeight = sourceHeight * scale;
+        var drawX = (pageRectangle.GetWidth() - drawWidth) / 2f;
+        var drawY = (pageRectangle.GetHeight() - drawHeight) / 2f;
+
+        canvas.AddXObjectWithTransformationMatrix(xObject, drawWidth / sourceWidth, 0, 0, drawHeight / sourceHeight, drawX, drawY);
+    }
+
+    private static PdfRectangle GetAutoPageRectangle(float sourceWidth, float sourceHeight, bool sourceIsLandscape, bool targetIsLandscape)
+        => targetIsLandscape == sourceIsLandscape ? new PdfRectangle(0, 0, sourceWidth, sourceHeight) : new PdfRectangle(0, 0, sourceHeight, sourceWidth);
+
+    private static PdfRectangle GetCustomPageRectangle(bool useLandscape)
+    {
+        var (baseWidth, baseHeight) = GetPageDimensionsInPortrait(AppSettings.Current.PaperSize);
+        return useLandscape ? new PdfRectangle(0, 0, (float)baseHeight, (float)baseWidth) : new PdfRectangle(0, 0, (float)baseWidth, (float)baseHeight);
+    }
+
+    private static bool ResolveTargetLandscape(bool sourceLandscape) => AppSettings.Current.Orientation switch
+    {
+        PdfPaperOrientation.Portrait => false,
+        PdfPaperOrientation.Landscape => true,
+        _ => sourceLandscape
+    };
+
+    private ImageData LoadImageDataWithFallback(string imagePath)
+    {
+        try { return ImageDataFactory.Create(imagePath); }
+        catch (Exception ex) { Log.Warning(ex, "Direct image load failed for: {Path}, attempting conversion", imagePath); }
 
         var converted = ConvertImageToCompatibleFormat(imagePath);
-        if (converted != null)
+        if (!string.IsNullOrEmpty(converted))
         {
-            try { return XImage.FromFile(converted); }
+            try { return ImageDataFactory.Create(converted); }
             catch (Exception ex) { Log.Error(ex, "Failed to load converted image: {Path}", converted); }
         }
 
         throw new InvalidOperationException($"Unable to load or convert image: {imagePath}");
     }
-
-    private XImage GetOrCreateXImageWithFallback(string imagePath)
-    {
-        if (_imageCache.TryGetValue(imagePath, out var cached)) return cached;
-        var xImage = LoadImageWithFallback(imagePath);
-        _imageCache[imagePath] = xImage;
-        return xImage;
-    }
-
-    private XPdfForm GetOrCreateXPdfForm(string pdfPath)
-    {
-        if (_pdfFormCache.TryGetValue(pdfPath, out var cached)) return cached;
-        var form = XPdfForm.FromFile(pdfPath);
-        _pdfFormCache[pdfPath] = form;
-        return form;
-    }
-
-    private void ClearCaches()
-    {
-        foreach (var img in _imageCache.Values) try { img.Dispose(); } catch { }
-        foreach (var form in _pdfFormCache.Values) try { form.Dispose(); } catch { }
-        _imageCache.Clear();
-        _pdfFormCache.Clear();
-    }
-
-    // ── Static helpers ────────────────────────────────────────────────────────
 
     internal static double GetJpegQuality() => AppSettings.Current.ImageCompression switch
     {
@@ -495,10 +225,10 @@ public class PdfService
 
     private static class PageDimensions
     {
-        public static readonly (double W, double H) A4 = (XUnit.FromMillimeter(210).Point, XUnit.FromMillimeter(297).Point);
-        public static readonly (double W, double H) Letter = (XUnit.FromInch(8.5).Point, XUnit.FromInch(11).Point);
-        public static readonly (double W, double H) Legal = (XUnit.FromInch(8.5).Point, XUnit.FromInch(14).Point);
-        public static readonly (double W, double H) A3 = (XUnit.FromMillimeter(297).Point, XUnit.FromMillimeter(420).Point);
+        public static readonly (double W, double H) A4 = (210.0 * 72.0 / 25.4, 297.0 * 72.0 / 25.4);
+        public static readonly (double W, double H) Letter = (8.5 * 72.0, 11.0 * 72.0);
+        public static readonly (double W, double H) Legal = (8.5 * 72.0, 14.0 * 72.0);
+        public static readonly (double W, double H) A3 = (297.0 * 72.0 / 25.4, 420.0 * 72.0 / 25.4);
     }
 
     internal static (double Width, double Height) GetPageDimensionsInPortrait(PdfPaperSize size)
@@ -509,8 +239,7 @@ public class PdfService
             PdfPaperSize.Letter => PageDimensions.Letter,
             PdfPaperSize.Legal => PageDimensions.Legal,
             PdfPaperSize.A3 => PageDimensions.A3,
-            PdfPaperSize.Custom => (AppSettings.Current.GetCustomWidthInPoints(),
-                                    AppSettings.Current.GetCustomHeightInPoints()),
+            PdfPaperSize.Custom => (AppSettings.Current.GetCustomWidthInPoints(), AppSettings.Current.GetCustomHeightInPoints()),
             _ => PageDimensions.A4
         };
         return w > h ? (h, w) : (w, h);
@@ -526,168 +255,32 @@ public class PdfService
             return;
         }
 
-        try
-        {
-            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.None);
-        }
-        catch (IOException ex)
-        {
-            throw new IOException(
-                $"Cannot save to '{Path.GetFileName(filePath)}' because it is currently open in another application.\n\nPlease close the file in the other application and try again.", ex);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            throw new UnauthorizedAccessException(
-                $"Cannot save to '{Path.GetFileName(filePath)}' because access is denied.\n\nPlease check file permissions or choose a different location.", ex);
-        }
+        try { using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Write, FileShare.None); }
+        catch (IOException ex) { throw new IOException($"Cannot save to ''{Path.GetFileName(filePath)}'' because it is currently open in another application.\n\nPlease close the file in the other application and try again.", ex); }
+        catch (UnauthorizedAccessException ex) { throw new UnauthorizedAccessException($"Cannot save to ''{Path.GetFileName(filePath)}'' because access is denied.\n\nPlease check file permissions or choose a different location.", ex); }
     }
 
-    private static void MergePagesOptimized(List<(string PdfPath, int PageIndex)> pageList, string outputPath)
-    {
-        using var outputDocument = new PdfDocument();
-        outputDocument.Info.Title = "Created with Gladhen3";
-
-        var documentCache = new Dictionary<string, PdfDocument>(StringComparer.OrdinalIgnoreCase);
-        try
-        {
-            foreach (var (pdfPath, pageIndex) in pageList)
-            {
-                if (!documentCache.TryGetValue(pdfPath, out var inputDoc))
-                {
-                    inputDoc = PdfReader.Open(pdfPath, PdfDocumentOpenMode.Import);
-                    documentCache[pdfPath] = inputDoc;
-                }
-
-                if (pageIndex >= 0 && pageIndex < inputDoc.PageCount)
-                    outputDocument.AddPage(inputDoc.Pages[pageIndex]);
-            }
-
-            try { outputDocument.Save(outputPath); }
-            catch (IOException ex)
-            {
-                throw new IOException(
-                    $"Cannot save PDF to '{Path.GetFileName(outputPath)}' because it is open in another application. Close it and try again.", ex);
-            }
-        }
-        finally
-        {
-            foreach (var doc in documentCache.Values)
-                try { doc.Dispose(); } catch { }
-        }
-    }
-
-    // ── Embedded PDF image recompression ──────────────────────────────────────
-    //
-    // Pages imported from existing PDFs arrive as form XObjects whose raster images are
-    // copied byte-for-byte, so without this pass a merged scan/photo PDF comes out exactly
-    // the same size as it went in. This walks every image XObject in the finished document
-    // and recompresses the JPEG-encoded ones (the dominant case for scans and photos):
-    // downsample to the page-size pixel budget, re-encode at the configured quality, and
-    // only ever swap the bytes in when the result is actually smaller.
-
-    /// <summary>
-    /// Recompresses JPEG (DCTDecode) image XObjects embedded in <paramref name="doc"/>.
-    /// Non-JPEG images (Flate, CCITT, masks) and CMYK JPEGs are left untouched.
-    /// </summary>
-    internal static void CompressEmbeddedPdfImages(PdfDocument doc)
-    {
-        var quality = (uint)Math.Clamp((int)Math.Round(GetJpegQuality() * 100), 1, 100);
-
-        // Budget: assume an image may span the largest page in the document full-bleed.
-        double pageLongInches = 0;
-        foreach (var page in doc.Pages)
-            pageLongInches = Math.Max(pageLongInches, Math.Max(page.Width.Point, page.Height.Point) / 72.0);
-        if (pageLongInches <= 0)
-            pageLongInches = MaxPageLongEdgeInches();
-        var maxLongEdge = (int)Math.Ceiling(pageLongInches * GetRasterDpi());
-
-        foreach (var obj in doc.Internals.GetAllObjects())
-        {
-            if (obj is not PdfDictionary dict || dict.Stream is null) continue;
-            if (dict.Elements.GetName("/Subtype") != "/Image") continue;
-            if (!IsDctEncoded(dict)) continue;
-
-            try
-            {
-                RecompressJpegXObject(dict, maxLongEdge, quality);
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Skipping recompression of an embedded PDF image");
-            }
-        }
-    }
-
-    /// <summary>True when the image stream is plain JPEG data (single DCTDecode filter).</summary>
-    private static bool IsDctEncoded(PdfDictionary dict)
-    {
-        var filter = dict.Elements["/Filter"];
-        return filter switch
-        {
-            PdfName name => name.Value == "/DCTDecode",
-            PdfArray { Elements.Count: 1 } arr => (arr.Elements[0] as PdfName)?.Value == "/DCTDecode",
-            _ => false
-        };
-    }
-
-    private static void RecompressJpegXObject(PdfDictionary dict, int maxLongEdge, uint quality)
-    {
-        var jpeg = dict.Stream.Value;
-        using var image = new MagickImage(jpeg);
-
-        // CMYK JPEGs need colour management to convert safely — not worth the risk here.
-        if (image.ColorSpace == ColorSpace.CMYK) return;
-
-        var srcLong = (int)Math.Max(image.Width, image.Height);
-        if (srcLong > maxLongEdge)
-            image.Thumbnail(new Percentage((double)maxLongEdge / srcLong * 100));
-
-        image.Format = MagickFormat.Jpeg;
-        image.Quality = quality;
-        image.Strip();
-        var newBytes = image.ToByteArray();
-
-        // Never inflate: keep the original bytes unless recompression actually helped.
-        if (newBytes.Length >= jpeg.Length) return;
-
-        var isGray = image.ColorSpace is ColorSpace.Gray or ColorSpace.LinearGray;
-        dict.Stream.Value = newBytes;
-        dict.Elements["/Width"] = new PdfInteger((int)image.Width);
-        dict.Elements["/Height"] = new PdfInteger((int)image.Height);
-        dict.Elements["/BitsPerComponent"] = new PdfInteger(8);
-        dict.Elements["/ColorSpace"] = new PdfName(isGray ? "/DeviceGray" : "/DeviceRGB");
-        dict.Elements["/Filter"] = new PdfName("/DCTDecode");
-        dict.Elements.Remove("/DecodeParms");
-        dict.Elements.Remove("/Decode");
-    }
-
-    // ── Image conversion & compression ────────────────────────────────────────
-    //
-    // Compression runs through Magick.NET (cross-platform and therefore unit-testable):
-    // every image is downsampled to the target DPI for the active page size and re-encoded
-    // as JPEG at the configured quality. That resolution reduction — not just the quality
-    // drop — is what actually makes the output PDF smaller than the source images. Formats
-    // Magick.NET can't decode (some camera RAW / HEIC) fall back to the OS WinRT codecs.
-
-    /// <summary>
-    /// Pre-converts/compresses images concurrently.
-    /// Returns a map of original path → converted temp-file path.
-    /// </summary>
     private async Task<Dictionary<string, string>> PreConvertImagesAsync(IEnumerable<string> imagePaths)
     {
         var results = new ConcurrentDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pathList = imagePaths.ToList();
+        Log.Information("Starting pre-conversion of {ImageCount} images", pathList.Count);
 
-        await Task.WhenAll(imagePaths.Select(path => Task.Run(() =>
+        await Task.WhenAll(pathList.Select(path => Task.Run(() =>
         {
             try
             {
                 var tempPath = ConvertImageToTemp(path);
                 _convertedImageTempFiles.Add(tempPath);
                 results[path] = tempPath;
+                var srcSize = new FileInfo(path).Length;
+                var dstSize = new FileInfo(tempPath).Length;
+                Log.Information("Pre-converted image: {Src} ({SrcSize}B) -> {Dst} ({DstSize}B, {Ratio:P0})", Path.GetFileName(path), srcSize, Path.GetFileName(tempPath), dstSize, (double)dstSize / srcSize);
             }
             catch (Exception ex) { Log.Error(ex, "Failed to pre-convert image: {Path}", path); }
         })));
 
+        Log.Information("Pre-conversion complete: {SuccessCount}/{TotalCount} images converted", results.Count, pathList.Count);
         return new Dictionary<string, string>(results, StringComparer.OrdinalIgnoreCase);
     }
 
@@ -707,39 +300,26 @@ public class PdfService
         }
     }
 
-    /// <summary>Chooses the output format, runs the compressor, returns the temp-file path.</summary>
     private string ConvertImageToTemp(string imagePath)
     {
         var useJpeg = ShouldUseJpeg(imagePath);
-        var tempPath = Path.Combine(Path.GetTempPath(), $"gladhen_conv_{Guid.NewGuid():N}{(useJpeg ? ".jpg" : ".png")}");
+        var extension = useJpeg ? ".jpg" : ".png";
+        var tempPath = Path.Combine(Path.GetTempPath(), $"gladhen_conv_{Guid.NewGuid():N}{extension}");
         ConvertImage(imagePath, tempPath, useJpeg);
         return tempPath;
     }
 
-    /// <summary>
-    /// JPEG for photos and for any image when compression is enabled; PNG only to losslessly
-    /// normalise a non-photo format while compression is off.
-    /// </summary>
     internal static bool ShouldUseJpeg(string imagePath)
     {
         if (AppSettings.Current.ImageCompression != PdfImageCompression.None) return true;
         var ext = Path.GetExtension(imagePath).ToLowerInvariant();
-        return ext is ".jpg" or ".jpeg" or ".heic" or ".heif"
-                    or ".cr2" or ".nef" or ".arw" or ".dng" or ".raw";
+        return ext is ".jpg" or ".jpeg" or ".heic" or ".heif" or ".cr2" or ".nef" or ".arw" or ".dng" or ".raw";
     }
 
-    /// <summary>Magick.NET compressor with a WinRT fallback for formats it can't decode.</summary>
     private void ConvertImage(string sourcePath, string destPath, bool useJpeg)
     {
-        try
-        {
-            CompressImageWithMagick(sourcePath, destPath, useJpeg);
-            return;
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Magick.NET conversion failed for {Path}; trying OS codec fallback", sourcePath);
-        }
+        try { CompressImageWithSkia(sourcePath, destPath, useJpeg); return; }
+        catch (Exception ex) { Log.Warning(ex, "SkiaSharp conversion failed for {Path}; trying OS codec fallback", sourcePath); }
 #if !UNIT_TEST
         ConvertImageWithWinRtAsync(sourcePath, destPath, useJpeg).GetAwaiter().GetResult();
 #else
@@ -747,117 +327,75 @@ public class PdfService
 #endif
     }
 
-    /// <summary>
-    /// Downsamples to the target DPI for the active page size and re-encodes at the
-    /// configured quality. This is the core of the "make the PDF thinner" feature.
-    /// </summary>
-    internal static void CompressImageWithMagick(string sourcePath, string destPath, bool useJpeg)
+    internal static void CompressImageWithSkia(string sourcePath, string destPath, bool useJpeg)
     {
         var level = AppSettings.Current.ImageCompression;
-        using var image = OpenSourceImage(sourcePath, level, out var srcLong, out var srcDpi, out var targetLong);
+        using var bitmap = OpenSourceImage(sourcePath, level, out var srcLong, out var srcDpi, out var targetLong);
 
+        SKBitmap toEncode = bitmap;
         if (level != PdfImageCompression.None && targetLong < srcLong)
         {
-            // The JPEG decode hint in OpenSourceImage may have already shrunk the decoded
-            // pixels; Thumbnail() closes the remaining gap (its fast filter is fine here —
-            // metadata is stripped below anyway).
-            var loadedLong = (int)Math.Max(image.Width, image.Height);
+            var loadedLong = Math.Max(bitmap.Width, bitmap.Height);
             if (targetLong < loadedLong)
-                image.Thumbnail(new Percentage((double)targetLong / loadedLong * 100));
-
-            // Keep the on-page physical size unchanged by scaling the stored DPI with the
-            // pixel count, so automatic-mode page dimensions don't shift when resolution drops.
-            var newDpi = srcDpi * ((double)targetLong / srcLong);
-            image.Density = new Density(newDpi, newDpi, DensityUnit.PixelsPerInch);
+            {
+                var scale = (float)targetLong / loadedLong;
+                var newWidth = (int)Math.Max(1, Math.Round(bitmap.Width * scale));
+                var newHeight = (int)Math.Max(1, Math.Round(bitmap.Height * scale));
+                toEncode = bitmap.Resize(new SKImageInfo(newWidth, newHeight), SKFilterQuality.High);
+                Log.Information("Downsampled image: {W}x{H}px -> {NewW}x{NewH}px ({Scale:P0})", bitmap.Width, bitmap.Height, newWidth, newHeight, scale);
+            }
         }
 
-        if (useJpeg)
+        using var image = SKImage.FromBitmap(toEncode);
+        var format = useJpeg ? SKEncodedImageFormat.Jpeg : SKEncodedImageFormat.Png;
+        var quality = useJpeg ? (int)Math.Clamp(Math.Round(GetJpegQuality() * 100), 1, 100) : 100;
+        using (var data = image.Encode(format, quality))
+        using (var fs = new FileStream(destPath, FileMode.Create, FileAccess.Write))
+            data.SaveTo(fs);
+
+        if (toEncode != bitmap) toEncode.Dispose();
+
+        var srcInfo = new FileInfo(sourcePath);
+        var destInfo = new FileInfo(destPath);
+        if (destInfo.Length >= srcInfo.Length)
         {
-            if (image.HasAlpha)
+            var ext = Path.GetExtension(sourcePath).ToLowerInvariant();
+            if (ext == ".jpg" || ext == ".jpeg" || ext == ".png")
             {
-                image.BackgroundColor = MagickColors.White;
-                image.Alpha(AlphaOption.Remove);
+                File.Copy(sourcePath, destPath, true);
+                Log.Information("Output larger than source, keeping original: {Src} ({SrcSize}B) was > {Dst} ({DstSize}B)", Path.GetFileName(sourcePath), srcInfo.Length, Path.GetFileName(destPath), destInfo.Length);
             }
-            image.Format = MagickFormat.Jpeg;
-            image.Quality = (uint)Math.Clamp((int)Math.Round(GetJpegQuality() * 100), 1, 100);
         }
         else
-        {
-            image.Format = MagickFormat.Png;
-        }
-
-        image.Strip(); // drop EXIF/thumbnail/colour-profile metadata to save bytes
-        image.Write(destPath);
+            Log.Information("Compression reduced file: {Src} ({SrcSize}B) -> {Dst} ({DstSize}B, {Ratio:P0})", Path.GetFileName(sourcePath), srcInfo.Length, Path.GetFileName(destPath), destInfo.Length, (double)destInfo.Length / srcInfo.Length);
     }
 
-    /// <summary>
-    /// Maximum long-edge pixel budget for a downsampled image. For a fixed page size this is
-    /// (page long edge in inches × target DPI); for automatic size
-    /// (<paramref name="pageLongInches"/> = null) it's the image's own physical long edge.
-    /// Never exceeds the source long edge, so images are only ever shrunk, never enlarged.
-    /// </summary>
-    internal static int ComputeMaxLongEdgePixels(
-        int srcWidthPx, int srcHeightPx, double srcDpi, int targetDpi, double? pageLongInches)
+    internal static int ComputeMaxLongEdgePixels(int srcWidthPx, int srcHeightPx, double srcDpi, int targetDpi, double? pageLongInches)
     {
         var srcLong = Math.Max(srcWidthPx, srcHeightPx);
         if (targetDpi <= 0 || srcLong <= 0) return Math.Max(1, srcLong);
-
         var longInches = pageLongInches ?? (srcLong / (srcDpi <= 1 ? 96.0 : srcDpi));
         var cap = (int)Math.Ceiling(longInches * targetDpi);
         return Math.Clamp(cap, 1, srcLong);
     }
 
-    /// <summary>
-    /// Opens the source image for compression. When downsampling is needed and the source
-    /// is a JPEG, a "jpeg:size" decode hint lets libjpeg DCT-scale during decode (reading a
-    /// fraction of the pixels) instead of decoding at full resolution and resizing afterwards.
-    /// </summary>
-    private static MagickImage OpenSourceImage(
-        string sourcePath, PdfImageCompression level,
-        out int srcLong, out double srcDpi, out int targetLong)
+    private static SKBitmap OpenSourceImage(string sourcePath, PdfImageCompression level, out int srcLong, out double srcDpi, out int targetLong)
     {
         if (level != PdfImageCompression.None)
         {
-            double? pageLongInches = AppSettings.Current.PaperSize == PdfPaperSize.Automatic
-                ? null                       // automatic page == image's own physical size
-                : MaxPageLongEdgeInches();
-
-            try
-            {
-                var info = new MagickImageInfo(sourcePath); // header-only read
-                srcDpi = DpiFromDensity(info.Density);
-                srcLong = (int)Math.Max(info.Width, info.Height);
-                targetLong = ComputeMaxLongEdgePixels(
-                    (int)info.Width, (int)info.Height, srcDpi, (int)GetRasterDpi(), pageLongInches);
-
-                if (targetLong < srcLong && info.Format == MagickFormat.Jpeg)
-                {
-                    // Ask for 2× the target so the final Thumbnail() pass has quality headroom.
-                    var hint = Math.Min(srcLong, targetLong * 2);
-                    var settings = new MagickReadSettings();
-                    settings.SetDefine(MagickFormat.Jpeg, "size", $"{hint}x{hint}");
-                    return new MagickImage(sourcePath, settings);
-                }
-                return new MagickImage(sourcePath);
-            }
-            catch
-            {
-                // Header ping failed (unusual format): fall through to a full decode.
-
-            }
-
-            var fullImage = new MagickImage(sourcePath);
-            srcDpi = GetImageDpi(fullImage);
-            srcLong = (int)Math.Max(fullImage.Width, fullImage.Height);
-            targetLong = ComputeMaxLongEdgePixels(
-                (int)fullImage.Width, (int)fullImage.Height, srcDpi, (int)GetRasterDpi(), pageLongInches);
-            return fullImage;
+            double? pageLongInches = AppSettings.Current.PaperSize == PdfPaperSize.Automatic ? 11.0 : MaxPageLongEdgeInches();
+            srcDpi = 96.0;
+            var bitmap = SKBitmap.Decode(sourcePath) ?? throw new InvalidOperationException($"Unable to decode image: {sourcePath}");
+            srcLong = (int)Math.Max(bitmap.Width, bitmap.Height);
+            targetLong = ComputeMaxLongEdgePixels(bitmap.Width, bitmap.Height, srcDpi, (int)GetRasterDpi(), pageLongInches);
+            Log.Information("Image compression: {Src} -> {SrcLong}px source long edge, target {TargetLong}px ({CompressionLevel})", Path.GetFileName(sourcePath), srcLong, targetLong, level);
+            return bitmap;
         }
 
         srcLong = 0;
         srcDpi = 96.0;
         targetLong = 0;
-        return new MagickImage(sourcePath);
+        return SKBitmap.Decode(sourcePath) ?? throw new InvalidOperationException($"Unable to decode image: {sourcePath}");
     }
 
     private static double MaxPageLongEdgeInches()
@@ -866,27 +404,13 @@ public class PdfService
         return Math.Max(w, h) / 72.0;
     }
 
-    private static double GetImageDpi(MagickImage image) => DpiFromDensity(image.Density);
-
-    private static double DpiFromDensity(Density? d)
-    {
-        if (d is null) return 96.0;
-        var dpi = d.Units == DensityUnit.PixelsPerCentimeter ? d.X * 2.54 : d.X;
-        return dpi > 1 ? dpi : 96.0;
-    }
-
 #if !UNIT_TEST
-    /// <summary>
-    /// Fallback for formats Magick.NET can't open (some RAW/HEIC): decode with the OS WinRT
-    /// codecs, downsampling during encode to the same pixel budget.
-    /// </summary>
     private static async Task ConvertImageWithWinRtAsync(string sourcePath, string destPath, bool useJpeg)
     {
         var file = await StorageFile.GetFileFromPathAsync(sourcePath);
         using var sourceStream = await file.OpenReadAsync();
         var decoder = await BitmapDecoder.CreateAsync(sourceStream);
-        var softwareBitmap = await decoder.GetSoftwareBitmapAsync(
-            BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+        var softwareBitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
 
         try
         {
@@ -898,13 +422,10 @@ public class PdfService
 
             if (AppSettings.Current.ImageCompression != PdfImageCompression.None)
             {
-                double? pageLongInches = AppSettings.Current.PaperSize == PdfPaperSize.Automatic
-                    ? null
-                    : MaxPageLongEdgeInches();
+                double? pageLongInches = AppSettings.Current.PaperSize == PdfPaperSize.Automatic ? null : MaxPageLongEdgeInches();
                 var dpi = decoder.DpiX > 1 ? decoder.DpiX : 96.0;
                 var srcLong = (int)Math.Max(decoder.PixelWidth, decoder.PixelHeight);
-                var targetLong = ComputeMaxLongEdgePixels(
-                    (int)decoder.PixelWidth, (int)decoder.PixelHeight, dpi, (int)GetRasterDpi(), pageLongInches);
+                var targetLong = ComputeMaxLongEdgePixels((int)decoder.PixelWidth, (int)decoder.PixelHeight, dpi, (int)GetRasterDpi(), pageLongInches);
                 if (targetLong < srcLong)
                 {
                     var scale = (double)targetLong / srcLong;
@@ -915,16 +436,100 @@ public class PdfService
             }
 
             if (useJpeg)
-            {
-                await encoder.BitmapProperties.SetPropertiesAsync(new BitmapPropertySet
-                {
-                    { "ImageQuality", new BitmapTypedValue(GetJpegQuality(), Windows.Foundation.PropertyType.Single) }
-                });
-            }
+                await encoder.BitmapProperties.SetPropertiesAsync(new BitmapPropertySet { { "ImageQuality", new BitmapTypedValue(GetJpegQuality(), Windows.Foundation.PropertyType.Single) } });
 
             await encoder.FlushAsync();
         }
         finally { softwareBitmap.Dispose(); }
     }
 #endif
+
+    internal static void CompressEmbeddedPdfImages(PdfDocument doc)
+    {
+        if (AppSettings.Current.ImageCompression == PdfImageCompression.None) return;
+        var quality = (uint)Math.Clamp((int)Math.Round(GetJpegQuality() * 100), 1, 100);
+
+        try
+        {
+            Log.Information("Scanning {PageCount} pages for embedded images to recompress", doc.GetNumberOfPages());
+            var recompressedCount = 0;
+            for (int i = 1; i <= doc.GetNumberOfPages(); i++)
+                recompressedCount += CompressPageXObjects(doc.GetPage(i), quality);
+            Log.Information("Embedded image recompression: {Count} images recompressed", recompressedCount);
+        }
+        catch (Exception ex) { Log.Warning(ex, "Error compressing embedded PDF images: {Error}", ex.Message); }
+    }
+
+    private static int CompressPageXObjects(PdfPage page, uint quality)
+    {
+        var recompressed = 0;
+        try
+        {
+            var resources = page.GetResources();
+            if (resources == null) return 0;
+            var xObjectDict = resources.GetResource(PdfName.XObject);
+            if (xObjectDict == null || xObjectDict.IsEmpty()) return 0;
+
+            foreach (var key in xObjectDict.KeySet())
+            {
+                try
+                {
+                    var objRef = xObjectDict.Get((PdfName)key);
+                    if (objRef == null) continue;
+
+                    PdfStream? xObject = null;
+                    if (objRef.IsStream()) xObject = objRef as PdfStream;
+                    else if (objRef.IsIndirectReference()) xObject = ((PdfIndirectReference)objRef).GetRefersTo() as PdfStream;
+
+                    if (xObject == null) continue;
+                    var subtype = xObject.Get(PdfName.Subtype);
+                    if (subtype == null || !subtype.Equals(PdfName.Image)) continue;
+
+                    if (TryRecompressImageStream(xObject, quality)) recompressed++;
+                }
+                catch (Exception ex) { Log.Warning(ex, "Error processing XObject {Key}", key); }
+            }
+        }
+        catch (Exception ex) { Log.Warning(ex, "Error processing XObjects on page"); }
+        return recompressed;
+    }
+
+    private static bool TryRecompressImageStream(PdfStream imageStream, uint quality)
+    {
+        try
+        {
+            if (imageStream == null) return false;
+            var filter = imageStream.Get(PdfName.Filter);
+            if (filter == null) return false;
+
+            bool isJpeg = false;
+            if (filter is PdfName filterName) isJpeg = filterName.Equals(PdfName.DCTDecode);
+            else if (filter is PdfArray filterArray && filterArray.Size() > 0)
+            {
+                var first = filterArray.Get(0);
+                if (first is PdfName firstName) isJpeg = firstName.Equals(PdfName.DCTDecode);
+            }
+
+            if (!isJpeg) return false;
+            byte[] jpegData = imageStream.GetBytes(false);
+            if (jpegData == null || jpegData.Length == 0) return false;
+
+            using var bitmap = SKBitmap.Decode(jpegData);
+            if (bitmap == null) return false;
+
+            using var image = SKImage.FromBitmap(bitmap);
+            using var reencoded = image.Encode(SKEncodedImageFormat.Jpeg, (int)quality);
+            byte[] newBytes = reencoded.ToArray();
+
+            if (newBytes.Length < jpegData.Length)
+            {
+                imageStream.SetData(newBytes);
+                imageStream.Put(PdfName.Filter, PdfName.DCTDecode);
+                Log.Information("Recompressed embedded JPEG: {OldSize}B -> {NewSize}B ({Ratio:P0})", jpegData.Length, newBytes.Length, (double)newBytes.Length / jpegData.Length);
+                return true;
+            }
+        }
+        catch (Exception ex) { Log.Warning(ex, "Failed to recompress image stream"); }
+        return false;
+    }
 }

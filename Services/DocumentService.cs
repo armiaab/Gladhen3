@@ -1,9 +1,9 @@
 using Gladhen3.Models;
+using ITextPdfDocument = iText.Kernel.Pdf.PdfDocument;
+using ITextPdfReader = iText.Kernel.Pdf.PdfReader;
 using Microsoft.UI.Xaml.Media.Imaging;
-using PdfSharp.Pdf.IO;
 using Serilog;
 using System;
-using System.Buffers;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.IO;
@@ -209,10 +209,9 @@ public class DocumentService
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(pdfPath);
-            var pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+            var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
             var pageCount = (int)pdfDocument.PageCount;
 
-            // Pre-allocate list with exact capacity
             var items = new List<DocumentItem>(pageCount);
 
             for (var i = 0; i < pageCount; i++)
@@ -263,7 +262,7 @@ public class DocumentService
         }
     }
 
-    private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(PdfDocument pdfDocument, int pageIndex)
+    private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(Windows.Data.Pdf.PdfDocument pdfDocument, int pageIndex)
     {
         try
         {
@@ -352,8 +351,9 @@ async (index, ct) =>
     {
         try
         {
-            using var document = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
-            return document.PageCount;
+            using var reader = new ITextPdfReader(filePath);
+            using var document = new ITextPdfDocument(reader);
+            return document.GetNumberOfPages();
         }
         catch (Exception ex)
         {
