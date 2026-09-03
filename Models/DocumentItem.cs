@@ -57,6 +57,16 @@ public class DocumentItem : INotifyPropertyChanged
     public string DisplayName => _displayName ??= ComputeDisplayName();
     public string PageInfo => _pageInfo ??= ComputePageInfo();
 
+    /// <summary>
+    /// The size shown against a row in list view.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FileSize"/> is the size of the file the item came from, so every page of
+    /// one PDF reports the same number - twelve rows of a 2.58 MB document read as 31 MB.
+    /// Only a loose image is genuinely one file, so only an image gets a size.
+    /// </remarks>
+    public string SizeInfo => Type == DocumentType.Image ? FileSize : string.Empty;
+
     private string ComputeDisplayName() =>
         Type == DocumentType.PdfPage && TotalPages > 1
             ? $"{FileName} (Page {PageNumber}/{TotalPages})"

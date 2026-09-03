@@ -6,7 +6,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    x:Uid="AboutDialog">
+    x:Uid="AboutDialog"
+    CloseButtonStyle="{StaticResource DefaultButtonStyle}">
 
     <StackPanel Spacing="8">
         <TextBlock x:Uid="AboutDialog_Description" TextWrapping="Wrap" />

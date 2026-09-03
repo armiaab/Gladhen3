@@ -31,6 +31,39 @@ public partial class App : Application
         Instance = this;
         InitializeComponent();
         InitializeLogger();
+        HookGlobalExceptionHandlers();
+    }
+
+    /// <summary>
+    /// Last line of defence for exceptions nothing else caught.
+    /// </summary>
+    /// <remarks>
+    /// There was no handler at all before this, so a failure on a background thread or inside
+    /// an unawaited task ended the process with nothing written to the log to say why.
+    /// Nothing here marks the exception handled: the process state is unknown at that point,
+    /// and carrying on regardless is how corrupt output gets written. It fails, but it fails
+    /// with a record of what happened.
+    /// </remarks>
+    private void HookGlobalExceptionHandlers()
+    {
+        UnhandledException += (_, e) =>
+        {
+            Log.Fatal(e.Exception, "Unhandled exception on the UI thread");
+            Log.CloseAndFlush();
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+        {
+            Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception (terminating={Terminating})", e.IsTerminating);
+            Log.CloseAndFlush();
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            // Marked observed so it does not escalate on finalization, but it is still a bug.
+            Log.Error(e.Exception, "Unobserved task exception");
+            e.SetObserved();
+        };
     }
 
     private static void InitializeLogger()
@@ -52,6 +85,8 @@ public partial class App : Application
 
             Log.Information("Application started");
         }
+        // Nothing else can be done about a logger that will not start - there is nowhere to
+        // report it to - and it must not stop the app from running.
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"Failed to initialize logger: {ex.Message}");
@@ -96,9 +131,11 @@ public partial class App : Application
 
             Log.Information("Sent {Count} file(s) to existing instance", filePaths.Count);
         }
-        catch (Exception ex)
+        // The other instance may be busy, shutting down, or gone between the mutex check and
+        // now. This one is exiting either way, so there is nobody left to report to.
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
         {
-            Log.Error(ex, "Failed to send files to existing instance");
+            Log.Error(ex, "Could not hand {Count} file(s) to the running instance", filePaths.Count);
         }
     }
 
@@ -165,9 +202,11 @@ public partial class App : Application
             {
                 break;
             }
+            // A long-lived background loop: one bad message or a client that disconnects
+            // mid-write must not take the listener down for the rest of the session.
             catch (Exception ex)
             {
-                Log.Error(ex, "Error in pipe server");
+                Log.Error(ex, "Error in pipe server; continuing to listen");
                 await Task.Delay(100, cancellationToken);
             }
         }
@@ -179,13 +218,14 @@ public partial class App : Application
     {
         if (_mainWindow == null) return;
 
+        // Queued onto the dispatcher, so there is no caller left to propagate to.
         try
         {
             _mainWindow.AddFilesFromPaths(filePaths);
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error adding files from another instance");
+            Log.Error(ex, "Could not add {Count} file(s) sent by another instance", filePaths.Count);
         }
     }
 
@@ -193,6 +233,7 @@ public partial class App : Application
     {
         if (_mainWindow == null) return;
 
+        // Purely cosmetic, and the window handle is gone if the window is already closing.
         try
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_mainWindow);
@@ -200,9 +241,9 @@ public partial class App : Application
             ShowWindow(hwnd, SW_RESTORE);
             SetForegroundWindow(hwnd);
         }
-        catch (Exception ex)
+        catch (COMException ex)
         {
-            Log.Error(ex, "Error bringing window to front");
+            Log.Warning(ex, "Could not bring the window to the front");
         }
     }
 
@@ -225,25 +266,23 @@ public partial class App : Application
 
     private static void ParseGladhenUri(string uriString, List<string> filePaths)
     {
-        try
+        // Anything can invoke a registered protocol, so malformed input is ordinary rather
+        // than exceptional - it is tested for instead of being caught after the fact.
+        if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
         {
-            var uri = new Uri(uriString);
-            var query = HttpUtility.ParseQueryString(uri.Query);
-            var files = query["files"];
-
-            if (string.IsNullOrEmpty(files))
-                return;
-
-            foreach (var encodedPath in files.Split(','))
-            {
-                var decodedPath = HttpUtility.UrlDecode(encodedPath);
-                if (!string.IsNullOrEmpty(decodedPath) && File.Exists(decodedPath))
-                    filePaths.Add(decodedPath);
-            }
+            Log.Warning("Ignoring a malformed activation URI");
+            return;
         }
-        catch (Exception ex)
+
+        var files = HttpUtility.ParseQueryString(uri.Query)["files"];
+        if (string.IsNullOrEmpty(files))
+            return;
+
+        foreach (var encodedPath in files.Split(','))
         {
-            Log.Error(ex, "Failed to parse URI: {Uri}", uriString);
+            var decodedPath = HttpUtility.UrlDecode(encodedPath);
+            if (!string.IsNullOrEmpty(decodedPath) && File.Exists(decodedPath))
+                filePaths.Add(decodedPath);
         }
     }
 

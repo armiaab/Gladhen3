@@ -7,10 +7,9 @@
 #endif
 
 #include <windows.h>
-#include <wchar.h>
 #include <objbase.h>
 #include <ShObjIdl_core.h>
-#include <shlwapi.h>
-#include <shellapi.h>
 
-#pragma comment(lib, "shlwapi.lib")
+// SHELLEXECUTEINFOW's declaration only - ShellExecuteExW itself is resolved at call time so
+// that shell32 is not in this DLL's import table. See LaunchUri in ShellExtension.cpp.
+#include <shellapi.h>

@@ -80,40 +80,51 @@ public class AppSettings
         };
     }
 
+    /// <summary>
+    /// Loads persisted settings, falling back to defaults.
+    /// </summary>
+    /// <remarks>
+    /// Continuing with defaults is the correct behaviour here: a missing or corrupt settings
+    /// file must not stop the app from starting. Only the failures that mean exactly that are
+    /// handled - anything else is a defect and is allowed to surface.
+    /// </remarks>
     public static async Task LoadAsync()
     {
         try
         {
             var folder = ApplicationData.Current.LocalFolder;
-            var file = await folder.TryGetItemAsync(SettingsFileName) as StorageFile;
 
-            if (file != null)
-            {
-                var json = await FileIO.ReadTextAsync(file);
-                var loaded = JsonSerializer.Deserialize<AppSettings>(json);
-                if (loaded != null)
-                    _current = loaded;
-            }
+            if (await folder.TryGetItemAsync(SettingsFileName) is not StorageFile file)
+                return;
+
+            var json = await FileIO.ReadTextAsync(file);
+            var loaded = JsonSerializer.Deserialize<AppSettings>(json);
+            if (loaded != null)
+                _current = loaded;
         }
-        catch (Exception ex)
+        catch (JsonException ex)
         {
-            Serilog.Log.Logger.Error(ex, "Failed to load settings");
+            Serilog.Log.Logger.Warning(ex, "Settings file is not valid JSON; continuing with defaults");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Serilog.Log.Logger.Warning(ex, "Settings file could not be read; continuing with defaults");
         }
     }
 
+    /// <summary>Writes the current settings.</summary>
+    /// <remarks>
+    /// Failures propagate. Silently discarding them meant a user could change a setting, see
+    /// no error, and find it reverted on next launch.
+    /// </remarks>
+    /// <exception cref="IOException">The settings file could not be written.</exception>
+    /// <exception cref="UnauthorizedAccessException">The settings file could not be written.</exception>
     public static async Task SaveAsync()
     {
-        try
-        {
-            var folder = ApplicationData.Current.LocalFolder;
-            var file = await folder.CreateFileAsync(SettingsFileName, CreationCollisionOption.ReplaceExisting);
+        var folder = ApplicationData.Current.LocalFolder;
+        var file = await folder.CreateFileAsync(SettingsFileName, CreationCollisionOption.ReplaceExisting);
 
-            var json = JsonSerializer.Serialize(_current);
-            await FileIO.WriteTextAsync(file, json);
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Logger.Error(ex, "Failed to save settings");
-        }
+        var json = JsonSerializer.Serialize(_current);
+        await FileIO.WriteTextAsync(file, json);
     }
 }

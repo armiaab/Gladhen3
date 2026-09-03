@@ -1,0 +1,26 @@
+root = true
+
+[*.cs]
+
+# --- Error handling ---------------------------------------------------------
+# CA1031 is off by default because catching Exception is legitimate at a few places:
+# event-handler boundaries, long-lived background loops, and per-item isolation where one
+# bad file must not abandon a batch. Every such site in this project is commented with the
+# reason. It is a suggestion rather than a warning so those deliberate cases do not bury
+# real findings, while anything new still shows up in the IDE.
+dotnet_diagnostic.CA1031.severity = suggestion
+
+# Rethrowing must preserve the original stack trace ("throw;", never "throw ex;").
+dotnet_diagnostic.CA2200.severity = warning
+
+# An unawaited ValueTask is usually a functional bug; a dropped async flush already cost
+# this app its shutdown log entries once.
+dotnet_diagnostic.CA2012.severity = warning
+
+# Cancellation tokens should be passed on rather than quietly dropped.
+dotnet_diagnostic.CA2016.severity = warning
+
+# --- Noise ------------------------------------------------------------------
+# Culture-aware formatting. These are user-facing strings where CurrentCulture is already
+# the intended behaviour, so the rule is informational here rather than a defect.
+dotnet_diagnostic.CA1305.severity = suggestion

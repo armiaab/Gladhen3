@@ -1,6 +1,9 @@
 using Gladhen3.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Serilog;
+using System;
+using System.Threading.Tasks;
 
 namespace Gladhen3.Dialogs;
 
@@ -150,6 +153,29 @@ public sealed partial class SettingsDialog : ContentDialog
             AppSettings.Current.CustomMarginBottom = BottomMarginBox.Value;
         }
 
-        await AppSettings.SaveAsync();
+        // An "async void" handler is the end of the line: nothing can observe an exception
+        // thrown past this point, so it takes the process down. Settings not persisting is
+        // worth telling the user about, but it is not worth crashing over.
+        try
+        {
+            await AppSettings.SaveAsync();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to save settings");
+            await ShowSaveFailedAsync();
+        }
+    }
+
+    private async Task ShowSaveFailedAsync()
+    {
+        var dialog = new ContentDialog
+        {
+            Title = _resourceLoader.GetString("DialogTitleError"),
+            Content = _resourceLoader.GetString("DialogContentSettingsNotSaved"),
+            CloseButtonText = _resourceLoader.GetString("DialogButtonOK"),
+            XamlRoot = XamlRoot
+        };
+        await dialog.ShowAsync();
     }
 }

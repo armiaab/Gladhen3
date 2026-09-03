@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Application
     x:Class="Gladhen3.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -15,6 +15,107 @@
             <!--  Converters  -->
             <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
             <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibilityConverter" />
+
+            <!--
+                Shape scale. Three radii, one per role, so a card never disagrees with the
+                surface it sits on. The window previously mixed 4, 6 and 8 by hand.
+            -->
+            <CornerRadius x:Key="SurfaceCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="CardCornerRadius">6</CornerRadius>
+            <CornerRadius x:Key="SmallCornerRadius">4</CornerRadius>
+
+            <!--  Spacing scale: everything is a multiple of 4.  -->
+            <Thickness x:Key="PageMargin">16,0,16,16</Thickness>
+            <Thickness x:Key="BarPadding">16,10</Thickness>
+
+            <!--  The main content surface.  -->
+            <Style x:Key="SurfaceBorderStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource LayerFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource SurfaceCornerRadius}" />
+            </Style>
+
+            <!--  A single item within the content surface.  -->
+            <Style x:Key="ItemCardStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource CardCornerRadius}" />
+            </Style>
+
+            <!--  The recessed well a thumbnail sits in.  -->
+            <Style x:Key="ThumbnailWellStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorSecondaryBrush}" />
+                <Setter Property="CornerRadius" Value="{StaticResource SmallCornerRadius}" />
+            </Style>
+
+            <!--  Grouping container for related toolbar buttons.  -->
+            <Style x:Key="ToolGroupStyle" TargetType="Border">
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="{StaticResource SmallCornerRadius}" />
+                <Setter Property="Padding" Value="2" />
+            </Style>
+
+            <!--  Square icon buttons. Sized once here instead of on every instance.  -->
+            <Style
+                x:Key="ToolToggleButtonStyle"
+                BasedOn="{StaticResource DefaultToggleButtonStyle}"
+                TargetType="ToggleButton">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource SmallCornerRadius}" />
+            </Style>
+
+            <Style
+                x:Key="ToolButtonStyle"
+                BasedOn="{StaticResource DefaultButtonStyle}"
+                TargetType="Button">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="CornerRadius" Value="{StaticResource SmallCornerRadius}" />
+            </Style>
+
+            <!--  Vertical hairline between button groups.  -->
+            <Style x:Key="ToolSeparatorStyle" TargetType="Border">
+                <Setter Property="Width" Value="1" />
+                <Setter Property="Height" Value="20" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Background" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            </Style>
+
+            <!--  Text roles, so font sizes stop being invented per call site.  -->
+            <Style
+                x:Key="PageTitleStyle"
+                BasedOn="{StaticResource TitleTextBlockStyle}"
+                TargetType="TextBlock">
+                <Setter Property="FontSize" Value="22" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <Style
+                x:Key="SecondaryTextStyle"
+                BasedOn="{StaticResource CaptionTextBlockStyle}"
+                TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+            </Style>
+
+            <Style
+                x:Key="TertiaryTextStyle"
+                BasedOn="{StaticResource CaptionTextBlockStyle}"
+                TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorTertiaryBrush}" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -1,9 +1,9 @@
 using Gladhen3.Models;
-using ITextPdfDocument = iText.Kernel.Pdf.PdfDocument;
-using ITextPdfReader = iText.Kernel.Pdf.PdfReader;
+using PdfSharp.Pdf.IO;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.IO;
@@ -16,6 +16,16 @@ using Windows.Storage;
 using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
+
+/// <summary>
+/// The result of loading a batch of files.
+/// </summary>
+/// <param name="Items">Everything that loaded.</param>
+/// <param name="FailedFiles">
+/// Names of files that could not be read. One unreadable file should not abandon the rest of
+/// a batch, but the user still has to be told which of their files did not arrive.
+/// </param>
+public sealed record DocumentLoadResult(List<DocumentItem> Items, IReadOnlyList<string> FailedFiles);
 
 public class DocumentService
 {
@@ -65,204 +75,223 @@ public class DocumentService
     }
 
     /// <summary>
-    /// Creates document items with thumbnail loading deferred for better performance
+    /// Creates document items with thumbnail loading deferred for better performance.
     /// </summary>
+    /// <remarks>
+    /// Failures propagate. This used to log and return an empty list, so a file that could not
+    /// be read was indistinguishable from a file with no pages, and the caller had no way to
+    /// tell the user anything had gone wrong.
+    /// </remarks>
+    /// <exception cref="FileNotFoundException">The file no longer exists.</exception>
+    /// <exception cref="IOException">The file could not be read.</exception>
     public async Task<List<DocumentItem>> CreateDocumentItemsAsync(string filePath, bool loadThumbnails = true)
     {
-        var items = new List<DocumentItem>(1);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
-        try
-        {
-            if (!File.Exists(filePath))
-                return items;
+        if (!File.Exists(filePath))
+            throw new FileNotFoundException("The file could not be found.", filePath);
 
-            var fileInfo = new FileInfo(filePath);
-            var fileSize = FormatFileSize((ulong)fileInfo.Length);
-
-            if (IsImageFile(filePath))
-            {
-                var item = new DocumentItem
-                {
-                    FileName = fileInfo.Name,
-                    FilePath = filePath,
-                    Type = DocumentType.Image,
-                    PageNumber = 1,
-                    TotalPages = 1,
-                    FileSize = fileSize
-                };
-
-                if (loadThumbnails)
-                {
-                    item.Thumbnail = await LoadImageThumbnailAsync(filePath);
-                }
-
-                items.Add(item);
-            }
-            else if (IsPdfFile(filePath))
-            {
-                items.AddRange(await CreatePdfPageItemsAsync(filePath, fileInfo.Name, fileSize, loadThumbnails));
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error creating document items from path: {Path}", filePath);
-        }
-
-        return items;
+        var fileInfo = new FileInfo(filePath);
+        return await CreateItemsAsync(filePath, fileInfo.Name, FormatFileSize((ulong)fileInfo.Length), loadThumbnails);
     }
 
     /// <summary>
-    /// Creates document items from StorageFile with optional thumbnail loading
+    /// Creates document items from a <see cref="StorageFile"/> with optional thumbnail loading.
     /// </summary>
+    /// <inheritdoc cref="CreateDocumentItemsAsync(string, bool)" path="/exception"/>
     public async Task<List<DocumentItem>> CreateDocumentItemsAsync(StorageFile file, bool loadThumbnails = true)
     {
-        var items = new List<DocumentItem>(1);
+        ArgumentNullException.ThrowIfNull(file);
 
-        try
+        var basicProperties = await file.GetBasicPropertiesAsync();
+        return await CreateItemsAsync(file.Path, file.Name, FormatFileSize(basicProperties.Size), loadThumbnails);
+    }
+
+    private async Task<List<DocumentItem>> CreateItemsAsync(string filePath, string fileName, string fileSize, bool loadThumbnails)
+    {
+        if (IsImageFile(filePath))
         {
-            var basicProperties = await file.GetBasicPropertiesAsync();
-            var fileSize = FormatFileSize(basicProperties.Size);
-
-            if (IsImageFile(file.Path))
+            var item = new DocumentItem
             {
-                var item = new DocumentItem
-                {
-                    FileName = file.Name,
-                    FilePath = file.Path,
-                    Type = DocumentType.Image,
-                    PageNumber = 1,
-                    TotalPages = 1,
-                    FileSize = fileSize
-                };
+                FileName = fileName,
+                FilePath = filePath,
+                Type = DocumentType.Image,
+                PageNumber = 1,
+                TotalPages = 1,
+                FileSize = fileSize
+            };
 
-                if (loadThumbnails)
-                {
-                    item.Thumbnail = await LoadImageThumbnailAsync(file.Path);
-                }
+            if (loadThumbnails)
+                item.Thumbnail = await LoadImageThumbnailAsync(filePath);
 
-                items.Add(item);
-            }
-            else if (IsPdfFile(file.Path))
-            {
-                items.AddRange(await CreatePdfPageItemsAsync(file.Path, file.Name, fileSize, loadThumbnails));
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error creating document items from file: {Path}", file.Path);
+            return [item];
         }
 
-        return items;
+        if (IsPdfFile(filePath))
+            return await CreatePdfPageItemsAsync(filePath, fileName, fileSize, loadThumbnails);
+
+        return [];
     }
 
     /// <summary>
-    /// Batch load multiple files with progress reporting using parallel processing
+    /// Batch load multiple files with progress reporting using parallel processing.
     /// </summary>
-    public async Task<List<DocumentItem>> CreateDocumentItemsBatchAsync(
-     IReadOnlyList<StorageFile> files,
+    public async Task<DocumentLoadResult> CreateDocumentItemsBatchAsync(
+        IReadOnlyList<StorageFile> files,
         IProgress<(int current, int total, string fileName)>? progress = null,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(files);
+
         var total = files.Count;
         var processedCount = 0;
 
-        var results = new (int Index, List<DocumentItem> Items)[total];
+        var results = new List<DocumentItem>?[total];
+        var failures = new ConcurrentBag<string>();
 
         await Parallel.ForEachAsync(
-        Enumerable.Range(0, total),
-  new ParallelOptions
-  {
-      MaxDegreeOfParallelism = MaxDegreeOfParallelism,
-      CancellationToken = cancellationToken
-  },
+            Enumerable.Range(0, total),
+            new ParallelOptions
+            {
+                MaxDegreeOfParallelism = MaxDegreeOfParallelism,
+                CancellationToken = cancellationToken
+            },
             async (index, ct) =>
-          {
-              var file = files[index];
+            {
+                var file = files[index];
+                results[index] = await LoadOneAsync(() => CreateDocumentItemsAsync(file, loadThumbnails: false), file.Name, failures);
 
-              var items = await CreateDocumentItemsAsync(file, loadThumbnails: false);
-              results[index] = (index, items);
+                var current = Interlocked.Increment(ref processedCount);
+                progress?.Report((current, total, file.Name));
+            });
 
-              var current = Interlocked.Increment(ref processedCount);
-              progress?.Report((current, total, file.Name));
-          });
+        return Collect(results, failures);
+    }
 
+    public async Task<DocumentLoadResult> LoadDocumentsFromPathsAsync(IEnumerable<string> paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+
+        var pathList = paths.Where(p => IsSupportedFile(p) && File.Exists(p)).ToList();
+
+        if (pathList.Count == 0)
+            return new DocumentLoadResult([], []);
+
+        var results = new List<DocumentItem>?[pathList.Count];
+        var failures = new ConcurrentBag<string>();
+
+        await Parallel.ForEachAsync(
+            Enumerable.Range(0, pathList.Count),
+            new ParallelOptions { MaxDegreeOfParallelism = MaxDegreeOfParallelism },
+            async (index, ct) =>
+            {
+                var path = pathList[index];
+                results[index] = await LoadOneAsync(() => CreateDocumentItemsAsync(path, loadThumbnails: false), Path.GetFileName(path), failures);
+            });
+
+        return Collect(results, failures);
+    }
+
+    /// <summary>
+    /// Runs one file's load, isolating its failure from the rest of the batch.
+    /// </summary>
+    /// <remarks>
+    /// This is the one place a general catch is right: the files are independent, a single
+    /// unreadable one should not cost the user the other ninety-nine, and the name is recorded
+    /// so the outcome is reported rather than hidden.
+    /// </remarks>
+    private static async Task<List<DocumentItem>?> LoadOneAsync(Func<Task<List<DocumentItem>>> load, string name, ConcurrentBag<string> failures)
+    {
+        try
+        {
+            return await load();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not load {Name}", name);
+            failures.Add(name);
+            return null;
+        }
+    }
+
+    private static DocumentLoadResult Collect(List<DocumentItem>?[] results, ConcurrentBag<string> failures)
+    {
         var totalItems = 0;
         foreach (var result in results)
-        {
-            totalItems += result.Items?.Count ?? 0;
-        }
+            totalItems += result?.Count ?? 0;
 
         var allItems = new List<DocumentItem>(totalItems);
-        for (var i = 0; i < results.Length; i++)
+        foreach (var result in results)
         {
-            if (results[i].Items != null)
-            {
-                allItems.AddRange(results[i].Items);
-            }
+            if (result != null)
+                allItems.AddRange(result);
         }
 
-        return allItems;
+        return new DocumentLoadResult(allItems, [.. failures]);
     }
 
     private static async Task<List<DocumentItem>> CreatePdfPageItemsAsync(string pdfPath, string fileName, string fileSize, bool loadThumbnails)
     {
+        var pageCount = 0;
+        PdfDocument? pdfDocument = null;
+
         try
         {
             var file = await StorageFile.GetFileFromPathAsync(pdfPath);
-            var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-            var pageCount = (int)pdfDocument.PageCount;
-
-            var items = new List<DocumentItem>(pageCount);
-
-            for (var i = 0; i < pageCount; i++)
-            {
-                var item = new DocumentItem
-                {
-                    FileName = fileName,
-                    FilePath = pdfPath,
-                    SourcePdfPath = pdfPath,
-                    Type = DocumentType.PdfPage,
-                    PageNumber = i + 1,
-                    TotalPages = pageCount,
-                    FileSize = fileSize
-                };
-
-                if (loadThumbnails)
-                {
-                    item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, i);
-                }
-
-                items.Add(item);
-            }
-
-            return items;
+            pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+            pageCount = (int)pdfDocument.PageCount;
         }
+        // The OS renderer refuses some otherwise valid PDFs. PDFsharp can still count their
+        // pages, so this is a real fallback rather than an error being buried - and if that
+        // fails too the exception is allowed out.
         catch (Exception ex)
         {
-            Log.Error(ex, "Error creating PDF page items: {Path}", pdfPath);
-
-            var pageCount = GetPdfPageCountFallback(pdfPath);
-            var items = new List<DocumentItem>(pageCount);
-
-            for (var i = 0; i < pageCount; i++)
-            {
-                items.Add(new DocumentItem
-                {
-                    FileName = fileName,
-                    FilePath = pdfPath,
-                    SourcePdfPath = pdfPath,
-                    Type = DocumentType.PdfPage,
-                    PageNumber = i + 1,
-                    TotalPages = pageCount,
-                    FileSize = fileSize
-                });
-            }
-
-            return items;
+            Log.Warning(ex, "Windows.Data.Pdf could not open {Path}; falling back to PDFsharp for the page count", pdfPath);
+            pageCount = GetPdfPageCount(pdfPath);
         }
+
+        var items = new List<DocumentItem>(pageCount);
+        for (var i = 0; i < pageCount; i++)
+        {
+            var item = new DocumentItem
+            {
+                FileName = fileName,
+                FilePath = pdfPath,
+                SourcePdfPath = pdfPath,
+                Type = DocumentType.PdfPage,
+                PageNumber = i + 1,
+                TotalPages = pageCount,
+                FileSize = fileSize
+            };
+
+            if (loadThumbnails && pdfDocument != null)
+                item.Thumbnail = await RenderPdfPageThumbnailAsync(pdfDocument, i);
+
+            items.Add(item);
+        }
+
+        return items;
     }
 
-    private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(Windows.Data.Pdf.PdfDocument pdfDocument, int pageIndex)
+    /// <summary>Counts pages without rendering.</summary>
+    /// <remarks>
+    /// This used to answer "1" for a file it could not open, which produced a document item
+    /// pointing at a page that did not exist.
+    /// </remarks>
+    private static int GetPdfPageCount(string filePath)
+    {
+        using var document = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);
+        return document.PageCount;
+    }
+
+    /// <summary>
+    /// Renders a page thumbnail, or returns null if it cannot be rendered.
+    /// </summary>
+    /// <remarks>
+    /// Thumbnails are decoration. A page that will not render still belongs in the list, so
+    /// this degrades to no image rather than failing the load.
+    /// </remarks>
+    private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(PdfDocument pdfDocument, int pageIndex)
     {
         try
         {
@@ -284,51 +313,12 @@ public class DocumentService
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error rendering PDF page thumbnail: page {PageIndex}", pageIndex);
+            Log.Warning(ex, "No thumbnail for page {PageIndex}", pageIndex + 1);
             return null;
         }
     }
 
-    public async Task<List<DocumentItem>> LoadDocumentsFromPathsAsync(IEnumerable<string> paths)
-    {
-        var pathList = paths.Where(p => IsSupportedFile(p) && File.Exists(p)).ToList();
-
-        if (pathList.Count == 0)
-            return [];
-
-        var results = new (int Index, List<DocumentItem> Items)[pathList.Count];
-
-        await Parallel.ForEachAsync(
-   Enumerable.Range(0, pathList.Count),
-  new ParallelOptions
-  {
-      MaxDegreeOfParallelism = MaxDegreeOfParallelism
-  },
-async (index, ct) =>
-            {
-                var path = pathList[index];
-                var items = await CreateDocumentItemsAsync(path, loadThumbnails: false);
-                results[index] = (index, items);
-            });
-
-        var totalItems = 0;
-        foreach (var result in results)
-        {
-            totalItems += result.Items?.Count ?? 0;
-        }
-
-        var allItems = new List<DocumentItem>(totalItems);
-        for (var i = 0; i < results.Length; i++)
-        {
-            if (results[i].Items != null)
-            {
-                allItems.AddRange(results[i].Items);
-            }
-        }
-
-        return allItems;
-    }
-
+    /// <inheritdoc cref="RenderPdfPageThumbnailAsync" path="/remarks"/>
     private static async Task<BitmapImage?> LoadImageThumbnailAsync(string filePath)
     {
         try
@@ -342,23 +332,8 @@ async (index, ct) =>
         }
         catch (Exception ex)
         {
-            Log.Error(ex, "Error loading thumbnail for image: {Path}", filePath);
+            Log.Warning(ex, "No thumbnail for {Path}", filePath);
             return null;
-        }
-    }
-
-    private static int GetPdfPageCountFallback(string filePath)
-    {
-        try
-        {
-            using var reader = new ITextPdfReader(filePath);
-            using var document = new ITextPdfDocument(reader);
-            return document.GetNumberOfPages();
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error getting page count for PDF: {Path}", filePath);
-            return 1;
         }
     }
 

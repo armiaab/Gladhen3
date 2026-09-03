@@ -1,13 +1,15 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using Gladhen3.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -41,7 +43,13 @@ public sealed partial class MainWindow : Window
 
         DocumentGridView.ItemsSource = _documentItems;
         DocumentListView.ItemsSource = _documentItems;
+
+        // The estimate answers "how big will this be when I save it", so it follows the list
+        // itself rather than each of the dozen code paths that happen to mutate it.
+        _documentItems.CollectionChanged += DocumentItems_CollectionChanged;
+
         _isInitialized = true;
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusReady");
         _ = AppSettings.LoadAsync();
         UpdateUIState();
     }
@@ -56,6 +64,7 @@ public sealed partial class MainWindow : Window
 
             appWindow.SetIcon("Assets/Square44x44Logo.png");
         }
+        // Cosmetic: the window works perfectly well with the default icon.
         catch (Exception ex)
         {
             Log.Warning(ex, "Failed to set window icon");
@@ -79,14 +88,31 @@ public sealed partial class MainWindow : Window
         if (!_isInitialized) return;
 
         var hasItems = _documentItems.Count > 0;
-        EmptyStatePanel.Visibility = hasItems ? Visibility.Collapsed : Visibility.Visible;
+        FadeTo(EmptyStatePanel, hasItems ? 0 : 1);
 
         var imageCount = _documentItems.Count(d => d.Type == DocumentType.Image);
         var pdfPageCount = _documentItems.Count(d => d.Type == DocumentType.PdfPage);
-        ItemCountTextBlock.Text = string.Format(_resourceLoader.GetString("ItemCountFormat"), _documentItems.Count, imageCount, pdfPageCount);
+        ItemCountTextBlock.Text = DescribeContents(imageCount, pdfPageCount);
 
         SaveButton.IsEnabled = hasItems;
         UpdateSelectionInfo();
+    }
+
+    /// <summary>
+    /// Summarises what is in the list for the header subtitle.
+    /// </summary>
+    /// <remarks>
+    /// The single format string this replaced read "0 pages (0 images, 0 PDF pages)" on an
+    /// empty window and "12 pages (0 images, 12 PDF pages)" for one PDF - counting things
+    /// that are not there. Only the mixed case actually needs the breakdown.
+    /// </remarks>
+    private string DescribeContents(int imageCount, int pdfPageCount)
+    {
+        if (imageCount == 0 && pdfPageCount == 0) return string.Empty;
+        if (pdfPageCount == 0) return string.Format(_resourceLoader.GetString("ItemCountImagesOnly"), imageCount);
+        if (imageCount == 0) return string.Format(_resourceLoader.GetString("ItemCountPagesOnly"), pdfPageCount);
+
+        return string.Format(_resourceLoader.GetString("ItemCountFormat"), imageCount + pdfPageCount, imageCount, pdfPageCount);
     }
 
     private void UpdateViewToggle()
@@ -122,9 +148,11 @@ public sealed partial class MainWindow : Window
                 if (DocumentListView.SelectionMode == ListViewSelectionMode.Multiple)
                     DocumentListView.SelectedItems.Clear();
             }
-            catch (Exception ex)
+            // WinUI can throw while the selection is being rebuilt underneath a mode switch.
+            // The selection is about to be replaced anyway, so there is nothing to recover.
+            catch (COMException ex)
             {
-                Log.Warning(ex, "Error clearing selection");
+                Log.Debug(ex, "Selection was already being changed while clearing it");
             }
         }
 
@@ -147,13 +175,11 @@ public sealed partial class MainWindow : Window
         SelectionCountText.Text = count == 1 ? _resourceLoader.GetString("SelectionCountFormatSingle") : string.Format(_resourceLoader.GetString("SelectionCountFormatMultiple"), count);
     }
 
-    // Called from menu item
     private void ToggleSelectModeMenu_Click(object sender, RoutedEventArgs e)
     {
         SelectModeToggle.IsChecked = !SelectModeToggle.IsChecked;
     }
 
-    // Called when toggle button is checked
     private void SelectModeToggle_Checked(object sender, RoutedEventArgs e)
     {
         _isSelectMode = true;
@@ -161,12 +187,156 @@ public sealed partial class MainWindow : Window
         StatusTextBlock.Text = _resourceLoader.GetString("StatusSelectMode");
     }
 
-    // Called when toggle button is unchecked
     private void SelectModeToggle_Unchecked(object sender, RoutedEventArgs e)
     {
         _isSelectMode = false;
         UpdateSelectMode();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusReady");
+    }
+
+    #endregion
+
+    #region Output Size Estimate
+
+    /// <remarks>
+    /// Estimating runs the real encoder over a sample of the largest images, which costs a
+    /// few hundred milliseconds on a big scan. Dropping twenty files in one go must not queue
+    /// up twenty of those, so the work waits for the list to settle first.
+    /// </remarks>
+    private static readonly TimeSpan EstimateDebounce = TimeSpan.FromMilliseconds(500);
+
+    private DispatcherTimer? _estimateTimer;
+    private CancellationTokenSource? _estimateCts;
+
+    private void DocumentItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Reordering changes which page comes first, not how many bytes come out.
+        if (e.Action == NotifyCollectionChangedAction.Move) return;
+
+        ScheduleEstimate();
+    }
+
+    /// <summary>
+    /// Asks for a fresh estimate, replacing any run already under way.
+    /// </summary>
+    private void ScheduleEstimate()
+    {
+        if (!_isInitialized) return;
+
+        // Anything in flight is now answering a question about a list that no longer exists.
+        _estimateCts?.Cancel();
+
+        if (_documentItems.Count == 0)
+        {
+            _estimateTimer?.Stop();
+            FadeTo(EstimatePanel, 0);
+            return;
+        }
+
+        EstimateProgress.IsActive = true;
+        EstimateProgress.Visibility = Visibility.Visible;
+        EstimateIcon.Visibility = Visibility.Collapsed;
+        EstimatedSizeText.Text = _resourceLoader.GetString("EstimatedSizeWorking");
+        FadeTo(EstimatePanel, 1);
+
+        if (_estimateTimer == null)
+        {
+            _estimateTimer = new DispatcherTimer { Interval = EstimateDebounce };
+            _estimateTimer.Tick += EstimateTimer_Tick;
+        }
+
+        _estimateTimer.Stop();
+        _estimateTimer.Start();
+    }
+
+    private async void EstimateTimer_Tick(object? sender, object e)
+    {
+        _estimateTimer?.Stop();
+        await RunEstimateAsync();
+    }
+
+    private async Task RunEstimateAsync()
+    {
+        var items = _documentItems.ToList();
+        if (items.Count == 0) return;
+
+        var cts = new CancellationTokenSource();
+        _estimateCts = cts;
+        var token = cts.Token;
+
+        try
+        {
+            var bytes = await Task.Run(() => PdfService.EstimateOutputSize(items, token), token);
+            if (token.IsCancellationRequested) return;
+
+            EstimateProgress.IsActive = false;
+            EstimateProgress.Visibility = Visibility.Collapsed;
+            EstimateIcon.Visibility = Visibility.Visible;
+            EstimatedSizeText.Text = string.Format(
+                _resourceLoader.GetString("EstimatedSizeFormat"),
+                DocumentService.FormatFileSize((ulong)Math.Max(0, bytes)));
+        }
+        catch (OperationCanceledException)
+        {
+            // The list moved on while we were measuring; a newer run is already queued.
+        }
+        // An estimate is a convenience, not a precondition for saving. If one cannot be
+        // produced - an unreadable source, a codec that refuses - the label goes away
+        // rather than the failure being pushed at the user.
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not estimate output size");
+            if (!token.IsCancellationRequested) FadeTo(EstimatePanel, 0);
+        }
+        finally
+        {
+            if (ReferenceEquals(_estimateCts, cts))
+            {
+                _estimateCts = null;
+                cts.Dispose();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fades <paramref name="element"/> to <paramref name="opacity"/>, collapsing it once it
+    /// has faded out.
+    /// </summary>
+    /// <remarks>
+    /// The empty state sits on top of the item views and accepts drops, so leaving it at zero
+    /// opacity but still visible would silently swallow every pointer event aimed at the list.
+    /// The visibility flip therefore has to happen at the far end of the animation - and only
+    /// if the element really did end up transparent, since a later call may have reversed
+    /// direction while this one was still running.
+    /// </remarks>
+    private static void FadeTo(UIElement element, double opacity, double milliseconds = 150)
+    {
+        var fadingIn = opacity > 0;
+        if (fadingIn && element.Visibility == Visibility.Visible && element.Opacity == opacity) return;
+        if (!fadingIn && element.Visibility == Visibility.Collapsed) return;
+
+        if (fadingIn) element.Visibility = Visibility.Visible;
+
+        var animation = new DoubleAnimation
+        {
+            To = opacity,
+            Duration = new Duration(TimeSpan.FromMilliseconds(milliseconds)),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut },
+            EnableDependentAnimation = true
+        };
+        Storyboard.SetTarget(animation, element);
+        Storyboard.SetTargetProperty(animation, "Opacity");
+
+        var storyboard = new Storyboard();
+        storyboard.Children.Add(animation);
+        if (!fadingIn)
+        {
+            storyboard.Completed += (_, _) =>
+            {
+                if (element.Opacity <= 0.01) element.Visibility = Visibility.Collapsed;
+            };
+        }
+        storyboard.Begin();
     }
 
     #endregion
@@ -239,10 +409,10 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var items = await _documentService.CreateDocumentItemsBatchAsync(files, progress);
+            var loaded = await _documentService.CreateDocumentItemsBatchAsync(files, progress);
 
-            await AddItemsInBatchesAsync(items);
-            addedCount = items.Count;
+            await AddItemsInBatchesAsync(loaded.Items);
+            addedCount = loaded.Items.Count;
 
             UpdateUIState();
 
@@ -250,13 +420,18 @@ public sealed partial class MainWindow : Window
             {
                 StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusAddedPages"), addedCount);
 
-                _ = LoadThumbnailsInBackgroundAsync(items);
+                _ = LoadThumbnailsInBackgroundAsync(loaded.Items);
             }
+
+            await ReportSkippedFilesAsync(loaded.FailedFiles);
         }
+        // Event-handler boundary: this is the last place an exception can be turned into
+        // something the user can see rather than a silent no-op.
         catch (Exception ex)
         {
             Log.Error(ex, "Error adding files");
-            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleError"), _resourceLoader.GetString("DialogContentUnexpectedError"));
         }
     }
 
@@ -267,27 +442,31 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
+            var loaded = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
-            await AddItemsInBatchesAsync(newItems);
+            await AddItemsInBatchesAsync(loaded.Items);
 
             UpdateUIState();
 
-            if (newItems.Count > 0)
+            if (loaded.Items.Count > 0)
             {
-                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadedPages"), newItems.Count);
+                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadedPages"), loaded.Items.Count);
 
-                _ = LoadThumbnailsInBackgroundAsync(newItems);
+                _ = LoadThumbnailsInBackgroundAsync(loaded.Items);
             }
             else
             {
                 StatusTextBlock.Text = _resourceLoader.GetString("StatusNoSupportedFiles");
             }
+
+            await ReportSkippedFilesAsync(loaded.FailedFiles);
         }
+        // Event-handler boundary; the list is left as it was and the user is told.
         catch (Exception ex)
         {
             Log.Error(ex, "Error loading documents");
-            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleError"), _resourceLoader.GetString("DialogContentUnexpectedError"));
         }
     }
 
@@ -364,6 +543,8 @@ public sealed partial class MainWindow : Window
             if (thumbnail != null)
                 item.Thumbnail = thumbnail;
         }
+        // Thumbnails are decoration on a background task. A missing one costs a preview
+        // image, not the page it stands for.
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
@@ -409,12 +590,15 @@ public sealed partial class MainWindow : Window
                     await bitmap.SetSourceAsync(stream);
                     item.Thumbnail = bitmap;
                 }
+                // Per-page isolation: one page that will not render should not cost the
+                // other ninety-nine their thumbnails.
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "Error loading PDF page thumbnail: {Path} page {Page}", sourcePath, item.PageNumber);
                 }
             }
         }
+        // Background task with no caller to return to; the pages are already in the list.
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading PDF thumbnails for: {Path}", sourcePath);
@@ -436,6 +620,7 @@ public sealed partial class MainWindow : Window
             await bitmap.SetSourceAsync(stream);
             return bitmap;
         }
+        // As above: decoration only.
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading image thumbnail: {Path}", filePath);
@@ -476,6 +661,8 @@ public sealed partial class MainWindow : Window
             StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
             return;
         }
+        // The shell picker is out-of-process and can fail in ways that are not COM errors.
+        // Either way the user gets told the dialog would not open, rather than nothing.
         catch (Exception ex)
         {
             Log.Warning(ex, "Save file picker failed");
@@ -495,21 +682,33 @@ public sealed partial class MainWindow : Window
 
         StatusTextBlock.Text = _resourceLoader.GetString("StatusCreatingPdf");
         SaveButton.IsEnabled = false;
+        BusyBar.Visibility = Visibility.Visible;
         try
         {
             while (true)
             {
                 try
                 {
-                    await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
+                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
 
                     StatusTextBlock.Text = _resourceLoader.GetString("StatusPdfCreatedSuccessfully");
                     await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSuccess"), string.Format(_resourceLoader.GetString("DialogContentPdfSaved"), outputPath));
+
+                    // A partial save is still a save, but the user has to know what is missing.
+                    if (result.SkippedItems.Count > 0)
+                    {
+                        Log.Warning("{Count} item(s) omitted from {Path}", result.SkippedItems.Count, outputPath);
+                        await ShowDialogAsync(
+                            _resourceLoader.GetString("DialogTitleSomeFilesSkipped"),
+                            string.Format(_resourceLoader.GetString("DialogContentPagesSkipped"), FormatNameList(result.SkippedItems)));
+                    }
                     break;
                 }
-                catch (IOException ex)
+                // Only a locked destination is offered a retry - retrying anything else just
+                // repeats the same failure.
+                catch (PdfOperationException ex) when (ex.Reason == PdfFailureReason.FileInUse)
                 {
-                    Log.Warning(ex, "I/O error while saving PDF: {Path}", outputPath);
+                    Log.Warning(ex, "Destination in use: {Path}", outputPath);
 
                     var dialog = new ContentDialog
                     {
@@ -610,11 +809,22 @@ public sealed partial class MainWindow : Window
                         return;
                     }
                 }
+                // Expected, actionable failures carry a reason the UI can explain properly.
+                catch (PdfOperationException ex)
+                {
+                    Log.Warning(ex, "Could not create PDF ({Reason}): {Path}", ex.Reason, outputPath);
+                    var (title, message) = DescribeFailure(ex);
+                    StatusTextBlock.Text = _resourceLoader.GetString("StatusError").Replace("{0}", title);
+                    await ShowDialogAsync(title, message);
+                    return;
+                }
+                // Anything else is a defect rather than a situation, so the user gets a plain
+                // apology and the detail goes to the log instead of into a dialog.
                 catch (Exception ex)
                 {
-                    StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
-                    Log.Error(ex, "Error creating PDF");
-                    await ShowDialogAsync(_resourceLoader.GetString("DialogTitleError"), string.Format(_resourceLoader.GetString("DialogContentCreatePdfError"), ex.Message));
+                    Log.Error(ex, "Unexpected failure creating PDF: {Path}", outputPath);
+                    StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
+                    await ShowDialogAsync(_resourceLoader.GetString("DialogTitleError"), _resourceLoader.GetString("DialogContentUnexpectedError"));
                     return;
                 }
             }
@@ -622,6 +832,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             SaveButton.IsEnabled = true;
+            BusyBar.Visibility = Visibility.Collapsed;
         }
     }
 
@@ -704,6 +915,7 @@ public sealed partial class MainWindow : Window
                 await ShowPreviewDialogAsync(clickedItem);
             }
         }
+        // Event-handler boundary for an optional view; the list itself is unaffected.
         catch (Exception ex)
         {
             Log.Error(ex, "Error opening preview");
@@ -1007,6 +1219,8 @@ public sealed partial class MainWindow : Window
                     ApplyFitZoom();
                 }
             }
+            // Boundary for the preview pane, which replaces its own content with an error
+            // message rather than propagating.
             catch (Exception ex)
             {
                 Log.Error(ex, "Error loading preview");
@@ -1052,9 +1266,12 @@ public sealed partial class MainWindow : Window
                 var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
                 await Launcher.LaunchFileAsync(file);
             }
+            // Nothing visible happened if this failed, so the user is told rather than left
+            // wondering whether the button works.
             catch (Exception ex)
             {
-                Log.Error(ex, "Error opening file externally");
+                Log.Error(ex, "Could not open the file in another application");
+                StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
             }
         };
 
@@ -1148,9 +1365,11 @@ public sealed partial class MainWindow : Window
             await bitmap.SetSourceAsync(stream);
             return bitmap;
         }
+        // The caller falls back to the existing thumbnail, so a failure here costs sharpness
+        // rather than function.
         catch (Exception ex)
         {
-            Log.Error(ex, "Error rendering high-res PDF page");
+            Log.Warning(ex, "Falling back to the thumbnail: the full-size page would not render");
             return null;
         }
     }
@@ -1297,7 +1516,7 @@ public sealed partial class MainWindow : Window
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Gladhen3.Dialogs.SettingsDialog
+        var dialog = new Dialogs.SettingsDialog
         {
             XamlRoot = Content.XamlRoot
         };
@@ -1305,16 +1524,55 @@ public sealed partial class MainWindow : Window
         if (await dialog.ShowAsync() == ContentDialogResult.Primary)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusSettingsSaved");
+
+            // Compression and paper size are exactly what the estimate is measuring.
+            ScheduleEstimate();
         }
     }
 
     private async void AboutButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Gladhen3.Dialogs.AboutDialog
+        var dialog = new Dialogs.AboutDialog
         {
             XamlRoot = Content.XamlRoot
         };
         await dialog.ShowAsync();
+    }
+
+    /// <summary>
+    /// Turns a service-layer failure reason into a title and message worth showing a person.
+    /// </summary>
+    /// <remarks>
+    /// Mapping happens here, not in the service: the service has no business choosing English
+    /// text, and the UI needs something stable to switch on. Showing raw exception messages
+    /// was both untranslatable and, for anything unexpected, meaningless to the reader.
+    /// </remarks>
+    private (string Title, string Message) DescribeFailure(PdfOperationException failure)
+    {
+        var name = Path.GetFileName(failure.Path ?? string.Empty);
+
+        return failure.Reason switch
+        {
+            PdfFailureReason.FileInUse => (
+                _resourceLoader.GetString("DialogTitleFileInUse"),
+                string.Format(_resourceLoader.GetString("DialogContentFileInUse"), name)),
+
+            PdfFailureReason.AccessDenied => (
+                _resourceLoader.GetString("DialogTitleAccessDenied"),
+                string.Format(_resourceLoader.GetString("DialogContentAccessDenied"), name)),
+
+            PdfFailureReason.DirectoryNotFound => (
+                _resourceLoader.GetString("DialogTitleSaveFailed"),
+                string.Format(_resourceLoader.GetString("DialogContentDirectoryNotFound"), Path.GetDirectoryName(failure.Path ?? string.Empty))),
+
+            PdfFailureReason.NoPages => (
+                _resourceLoader.GetString("DialogTitleNoPages"),
+                _resourceLoader.GetString("DialogContentNoPages")),
+
+            _ => (
+                _resourceLoader.GetString("DialogTitleError"),
+                _resourceLoader.GetString("DialogContentUnexpectedError"))
+        };
     }
 
     private async Task ShowDialogAsync(string title, object content)
@@ -1336,13 +1594,30 @@ public sealed partial class MainWindow : Window
     private void Window_Closed(object sender, WindowEventArgs args)
     {
         Log.Information("Application closed");
+        _estimateTimer?.Stop();
+        _estimateCts?.Cancel();
         App.Cleanup();
-        _ = Log.CloseAndFlushAsync();
+        // Synchronous on purpose: the fire-and-forget async flush that was here raced the
+        // process exit, so the last entries - including anything about why it closed - could
+        // be lost exactly when they were most wanted.
+        Log.CloseAndFlush();
     }
 
-    private void LogButton_Click(object sender, RoutedEventArgs e)
+    private async void LogButton_Click(object sender, RoutedEventArgs e)
     {
-        FileService.OpenLogDirectory();
+        // FileService no longer swallows this, so pressing the button either opens the folder
+        // or says why it could not - rather than appearing to do nothing.
+        try
+        {
+            FileService.OpenLogDirectory();
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not open the log directory");
+            await ShowDialogAsync(
+                _resourceLoader.GetString("DialogTitleOpenLogsFailed"),
+                _resourceLoader.GetString("DialogContentOpenLogsFailed"));
+        }
     }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1350,9 +1625,6 @@ public sealed partial class MainWindow : Window
         Close();
     }
 
-    /// <summary>
-    /// Public method to add files from paths (used by single-instance IPC)
-    /// </summary>
     public async void AddFilesFromPaths(IEnumerable<string> paths)
     {
         try
@@ -1367,24 +1639,53 @@ public sealed partial class MainWindow : Window
 
             StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusReceivingFiles"), pathList.Count);
 
-            var newItems = await _documentService.LoadDocumentsFromPathsAsync(pathList);
+            var loaded = await _documentService.LoadDocumentsFromPathsAsync(pathList);
 
-            await AddItemsInBatchesAsync(newItems);
+            await AddItemsInBatchesAsync(loaded.Items);
 
             UpdateUIState();
 
-            if (newItems.Count > 0)
+            if (loaded.Items.Count > 0)
             {
-                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusAddedPagesFromAnotherInstance"), newItems.Count);
+                StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusAddedPagesFromAnotherInstance"), loaded.Items.Count);
 
-                _ = LoadThumbnailsInBackgroundAsync(newItems);
+                _ = LoadThumbnailsInBackgroundAsync(loaded.Items);
             }
+
+            await ReportSkippedFilesAsync(loaded.FailedFiles);
         }
+        // "async void" is forced by the event signature, so nothing above can observe a
+        // failure here. It stops at this method or it takes the process down.
         catch (Exception ex)
         {
             Log.Error(ex, "Error adding files from paths");
-            StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusError"), ex.Message);
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
         }
+    }
+
+    /// <summary>
+    /// Tells the user which files did not make it in, if any.
+    /// </summary>
+    private async Task ReportSkippedFilesAsync(IReadOnlyList<string> skipped)
+    {
+        if (skipped.Count == 0) return;
+
+        Log.Warning("{Count} file(s) skipped: {Files}", skipped.Count, string.Join(", ", skipped));
+        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusFilesFailed"), skipped.Count);
+
+        await ShowDialogAsync(
+            _resourceLoader.GetString("DialogTitleSomeFilesSkipped"),
+            string.Format(_resourceLoader.GetString("DialogContentSomeFilesSkipped"), FormatNameList(skipped)));
+    }
+
+    /// <summary>Caps a name list so a hundred failures do not produce an unreadable dialog.</summary>
+    private static string FormatNameList(IReadOnlyList<string> names)
+    {
+        const int maxShown = 10;
+        var shown = string.Join(Environment.NewLine, names.Take(maxShown));
+        return names.Count > maxShown
+            ? shown + Environment.NewLine + $"... and {names.Count - maxShown} more"
+            : shown;
     }
 
     #endregion

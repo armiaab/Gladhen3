@@ -7,9 +7,22 @@
 		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<Platforms>x86;x64;ARM64</Platforms>
 		<RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+		<!-- SIZE: without a concrete RID the RID-agnostic asset copy drops EVERY
+		     architecture's natives into EVERY package (x86 msix shipped arm64+x64 Skia). -->
+		<RuntimeIdentifier Condition="'$(Platform)' == 'x86'">win-x86</RuntimeIdentifier>
+		<RuntimeIdentifier Condition="'$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
+		<RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+		<SelfContained>false</SelfContained>
+		<WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
 		<UseWinUI>true</UseWinUI>
 		<EnableMsixTooling>true</EnableMsixTooling>
 		<Nullable>enable</Nullable>
+		<!-- Analyzers on: CA1031 (do not catch general exception types) is what would have
+		     flagged the log-and-swallow handlers this codebase had everywhere. Warnings only,
+		     so an unrelated finding never blocks a build. -->
+		<EnableNETAnalyzers>true</EnableNETAnalyzers>
+		<AnalysisLevel>latest</AnalysisLevel>
+		<AnalysisMode>Recommended</AnalysisMode>
 		<!-- Application icon for exe and shell extension -->
 		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -63,14 +76,24 @@
 		<ProjectCapability Include="Msix" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="itext7" Version="9.7.0" />
+		<!-- PDFsharp (MIT) replaces iText (AGPL). ~0.9 MB smaller and no copyleft
+		     obligation on a Store-shipped binary. -->
+		<PackageReference Include="PDFsharp" Version="6.2.4" />
 		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
 		<PackageReference Include="Microsoft.WindowsAppSDK" Version="2.3.1" />
 		<PackageReference Include="Serilog" Version="4.4.0" />
 		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
-		<PackageReference Include="SkiaSharp" Version="2.88.8" />
-		<PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="2.88.8" />
-		<PackageReference Include="System.Drawing.Common" Version="10.0.10" />
+		<!-- SkiaSharp removed: libSkiaSharp.dll alone was 3.48 MB of the package. All
+		     decode/resize/encode now goes through WIC (Windows.Graphics.Imaging), which
+		     ships in the OS and costs zero package bytes. -->
+		<!-- System.Drawing.Common was referenced but never used anywhere in the source. -->
+
+		<!-- SIZE: WindowsAppSDK 2.3.1 transitively drags DirectML.dll + onnxruntime.dll for
+		     win-x64, win-arm64 AND win-arm64ec into EVERY package (~49 MB compressed each,
+		     ~82% of the whole payload). This app contains no ML code whatsoever. -->
+		<PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="2.1.74" ExcludeAssets="all" />
+		<PackageReference Include="Microsoft.WindowsAppSDK.AI" Version="2.3.4" ExcludeAssets="all" />
+		<PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.1.74" ExcludeAssets="all" />
 	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Interop\" />
@@ -130,6 +153,10 @@
 		<!-- Fallback: copy from solution root if C++ build output doesn't exist -->
 		<Copy SourceFiles="$(ShellExtensionFallback)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="!Exists('$(ShellExtensionSource)') And Exists('$(ShellExtensionFallback)')" />
 	</Target>
+	<!-- SIZE: iText 9.x ships all 12 modules in one NuGet package. Gladhen3 only touches
+	     iText.IO.Image, iText.Kernel.Pdf and iText.Kernel.Pdf.Canvas. Drop the rest.
+	     itext.commons + itext.bouncy-castle-connector stay: kernel loads them at runtime
+	     (encrypted / signed PDF handling). -->
 	<ItemGroup>
 	  <PRIResource Remove=".github\**" />
 	</ItemGroup>

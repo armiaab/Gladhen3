@@ -1,22 +1,56 @@
 # Gladhen 3
-Gladhen 3 is winui3 application that allows you to convert, merge, and compress a pdf. Supported files: .png, .jpg, .jpeg, .pdf
+
+Gladhen 3 is a WinUI 3 application for building, merging, splitting and compressing PDFs on Windows. Drop images and PDFs in, arrange the pages, and save one file.
 
 ## Features
-- Convert multiple images to a single pdf file
-- Context menu integration
-- Drag and drop support
-- Supports png, jpg, jpeg, bmp, pdf formats
-- Cutomize the page size and orientation
-- Reorder images before conversion
-- Split pdf
-- Merge pdf with image or another pdf
-- Preview image and pdf files
-- Compress PDF
+
+- Convert one or many images into a single PDF
+- Merge PDFs with each other or with images
+- Split a PDF by removing the pages you don't want before saving
+- Compress the output with **Low / Medium / High** presets (300 / 150 / 96 DPI), with text left selectable
+- **See the estimated file size before you save**, updated as you add pages or change settings
+- Customise paper size (Automatic, A4, Letter, Legal, A3 or custom), orientation and margins
+- Reorder pages by dragging, or sort them by name or type
+- Thumbnail and list views, with a select mode for removing pages in bulk
+- Preview any page by double-clicking it
+- Explorer context menu integration — right-click files and choose *Open with Gladhen3*
+- Drag and drop straight into the window
+
+### Supported files
+
+**Images** — JPG, JPEG, PNG, BMP, GIF, TIFF, TIF, WEBP, HEIC, HEIF, ICO, WDP, HDP, JXR, DDS, RAW, CR2, NEF, ARW, DNG
+
+**Documents** — PDF
+
+The Explorer context menu is registered for JPG, JPEG, PNG, BMP, GIF, TIFF, TIF and PDF.
+
+### Keyboard shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl` + `O` | Add files |
+| `Ctrl` + `E` | Toggle select mode |
+| `Ctrl` + `A` | Select all |
+| `Delete` | Remove selected pages |
 
 ## Screenshots
-![Context Menu](./docs/contextmenu.png)
-![Dashboard](./docs/dashboard.png)
-![Main Window](./docs/mainmenu.png)
+
+Thumbnail view — every page of every file you have added, ready to be reordered:
+
+![Thumbnail view](./docs/thumbnail-view.png)
+
+List view, with the estimated output size next to the save button:
+
+![List view](./docs/list-view.png)
+
+Page setup for images, including custom sizes, orientation and margins:
+
+![PDF settings](./docs/pdf-settings.png)
+
+Right-click any supported file in Explorer:
+
+![Explorer context menu](./docs/context-menu.png)
 
 ## Installation
+
 [Microsoft Store](https://apps.microsoft.com/detail/9PKH3VS88B8Q?hl=en-us&gl=US&ocid=pdpshare)

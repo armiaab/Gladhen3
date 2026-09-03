@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Window
     x:Class="Gladhen3.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -113,22 +113,19 @@
             </MenuBar>
         </Grid>
 
-        <!--  Header  -->
-        <Grid Grid.Row="1" Margin="16,8,16,16">
+        <!--  Header: title on the left, the actions that act on the whole list on the right  -->
+        <Grid Grid.Row="1" Margin="16,4,16,12">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <StackPanel Grid.Column="0">
-                <TextBlock
-                    x:Uid="HeaderPages"
-                    FontSize="28"
-                    FontWeight="SemiBold" />
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <TextBlock x:Uid="HeaderPages" Style="{StaticResource PageTitleStyle}" />
                 <TextBlock
                     x:Name="ItemCountTextBlock"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    Style="{StaticResource SecondaryTextStyle}"
+                    Text="" />
             </StackPanel>
 
             <StackPanel
@@ -136,54 +133,64 @@
                 VerticalAlignment="Center"
                 Orientation="Horizontal"
                 Spacing="8">
-                <ToggleButton
-                    x:Name="SelectModeToggle"
-                    x:Uid="TooltipSelectMode"
-                    Width="36"
-                    Height="36"
-                    Checked="SelectModeToggle_Checked"
-                    CornerRadius="4"
-                    Unchecked="SelectModeToggle_Unchecked">
-                    <FontIcon FontSize="13" Glyph="&#xE762;" />
-                </ToggleButton>
 
-                <Border
-                    Width="1"
-                    Height="24"
-                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <!--
+                    Adding files was previously reachable only through the menu bar, which is
+                    the one thing a first-time user needs and the last place they look.
+                -->
+                <Button
+                    x:Name="AddFilesButton"
+                    x:Uid="TooltipAddFiles"
+                    Padding="12,6"
+                    Click="AddFilesButton_Click"
+                    CornerRadius="{StaticResource SmallCornerRadius}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="14" Glyph="&#xE710;" />
+                        <TextBlock x:Uid="ButtonAddFilesLabel" />
+                    </StackPanel>
+                </Button>
 
-                <ToggleButton
-                    x:Name="GridViewToggle"
-                    x:Uid="TooltipThumbnails"
-                    Width="36"
-                    Height="36"
-                    Checked="GridViewToggle_Checked"
-                    CornerRadius="4"
-                    IsChecked="True"
-                    Unchecked="GridViewToggle_Unchecked">
-                    <FontIcon FontSize="13" Glyph="&#xF0E2;" />
-                </ToggleButton>
-                <ToggleButton
-                    x:Name="ListViewToggle"
-                    x:Uid="TooltipList"
-                    Width="36"
-                    Height="36"
-                    Checked="ListViewToggle_Checked"
-                    CornerRadius="4"
-                    Unchecked="ListViewToggle_Unchecked">
-                    <FontIcon FontSize="13" Glyph="&#xE8FD;" />
-                </ToggleButton>
+                <!--  Related buttons share one bordered group instead of floating separately.  -->
+                <Border Style="{StaticResource ToolGroupStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <ToggleButton
+                            x:Name="SelectModeToggle"
+                            x:Uid="TooltipSelectMode"
+                            Checked="SelectModeToggle_Checked"
+                            Style="{StaticResource ToolToggleButtonStyle}"
+                            Unchecked="SelectModeToggle_Unchecked">
+                            <FontIcon FontSize="14" Glyph="&#xE762;" />
+                        </ToggleButton>
+
+                        <Border Margin="2,0" Style="{StaticResource ToolSeparatorStyle}" />
+
+                        <ToggleButton
+                            x:Name="GridViewToggle"
+                            x:Uid="TooltipThumbnails"
+                            Checked="GridViewToggle_Checked"
+                            IsChecked="True"
+                            Style="{StaticResource ToolToggleButtonStyle}"
+                            Unchecked="GridViewToggle_Unchecked">
+                            <FontIcon FontSize="14" Glyph="&#xF0E2;" />
+                        </ToggleButton>
+                        <ToggleButton
+                            x:Name="ListViewToggle"
+                            x:Uid="TooltipList"
+                            Checked="ListViewToggle_Checked"
+                            Style="{StaticResource ToolToggleButtonStyle}"
+                            Unchecked="ListViewToggle_Unchecked">
+                            <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+                        </ToggleButton>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </Grid>
 
         <!--  Content Area  -->
         <Border
             Grid.Row="2"
-            Margin="16,0,16,16"
-            Background="{ThemeResource LayerFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
+            Margin="{StaticResource PageMargin}"
+            Style="{StaticResource SurfaceBorderStyle}">
             <Grid>
                 <!--  Grid View  -->
                 <GridView
@@ -200,16 +207,26 @@
                     ReorderMode="Enabled"
                     SelectionChanged="DocumentView_SelectionChanged"
                     SelectionMode="None">
+                    <!--
+                        Pages arriving, leaving and being dragged into a new order are the
+                        three things that actually happen in this list, so each one gets a
+                        transition rather than snapping.
+                    -->
+                    <GridView.ItemContainerTransitions>
+                        <TransitionCollection>
+                            <AddDeleteThemeTransition />
+                            <ContentThemeTransition />
+                            <ReorderThemeTransition />
+                            <EntranceThemeTransition IsStaggeringEnabled="True" />
+                        </TransitionCollection>
+                    </GridView.ItemContainerTransitions>
                     <GridView.ItemTemplate>
                         <DataTemplate>
                             <Border
                                 Width="140"
                                 Height="175"
                                 Margin="4"
-                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                CornerRadius="6">
+                                Style="{StaticResource ItemCardStyle}">
                                 <Grid Margin="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="*" />
@@ -217,10 +234,7 @@
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
 
-                                    <Border
-                                        Grid.Row="0"
-                                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                        CornerRadius="4">
+                                    <Border Grid.Row="0" Style="{StaticResource ThumbnailWellStyle}">
                                         <Grid>
                                             <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
                                             <FontIcon
@@ -233,7 +247,7 @@
 
                                     <TextBlock
                                         Grid.Row="1"
-                                        Margin="0,6,0,0"
+                                        Margin="0,8,0,0"
                                         HorizontalAlignment="Center"
                                         FontSize="11"
                                         Text="{Binding FileName}"
@@ -242,9 +256,9 @@
 
                                     <TextBlock
                                         Grid.Row="2"
+                                        Margin="0,2,0,0"
                                         HorizontalAlignment="Center"
-                                        FontSize="10"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Style="{StaticResource TertiaryTextStyle}"
                                         Text="{Binding PageInfo}" />
                                 </Grid>
                             </Border>
@@ -273,6 +287,14 @@
                     SelectionChanged="DocumentView_SelectionChanged"
                     SelectionMode="None"
                     Visibility="Collapsed">
+                    <ListView.ItemContainerTransitions>
+                        <TransitionCollection>
+                            <AddDeleteThemeTransition />
+                            <ContentThemeTransition />
+                            <ReorderThemeTransition />
+                            <EntranceThemeTransition IsStaggeringEnabled="True" />
+                        </TransitionCollection>
+                    </ListView.ItemContainerTransitions>
                     <ListView.ItemTemplate>
                         <DataTemplate>
                             <Grid Padding="8,6">
@@ -287,8 +309,7 @@
                                     Grid.Column="0"
                                     Width="36"
                                     Height="44"
-                                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
-                                    CornerRadius="4">
+                                    Style="{StaticResource ThumbnailWellStyle}">
                                     <Grid>
                                         <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
                                         <FontIcon
@@ -305,11 +326,12 @@
                                     VerticalAlignment="Center">
                                     <TextBlock
                                         FontSize="13"
-                                        Text="{Binding DisplayName}"
-                                        TextTrimming="CharacterEllipsis" />
+                                        Text="{Binding FileName}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="NoWrap"
+                                        ToolTipService.ToolTip="{Binding DisplayName}" />
                                     <TextBlock
-                                        FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Style="{StaticResource TertiaryTextStyle}"
                                         Text="{Binding FilePath}"
                                         TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
@@ -318,93 +340,172 @@
                                     Grid.Column="2"
                                     Margin="8,0"
                                     VerticalAlignment="Center"
-                                    FontSize="11"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Style="{StaticResource SecondaryTextStyle}"
                                     Text="{Binding PageInfo}" />
                                 <TextBlock
                                     Grid.Column="3"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
-                                    FontSize="11"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    Text="{Binding FileSize}" />
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="{Binding SizeInfo}" />
                             </Grid>
                         </DataTemplate>
                     </ListView.ItemTemplate>
                 </ListView>
 
-                <!--  Empty State  -->
-                <StackPanel
+                <!--
+                    Empty state. It accepts drops itself: it covers the middle of the surface,
+                    so without its own handlers it would be a dead zone in the one place a
+                    first-time user is most likely to aim.
+                -->
+                <Grid
                     x:Name="EmptyStatePanel"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    Spacing="12">
-                    <FontIcon
+                    AllowDrop="True"
+                    Background="Transparent"
+                    DragOver="DocumentView_DragOver"
+                    Drop="DocumentView_Drop">
+                    <StackPanel
                         HorizontalAlignment="Center"
-                        FontSize="48"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                        Glyph="&#xE8B5;" />
-                    <TextBlock
-                        x:Uid="EmptyStateTitle"
-                        HorizontalAlignment="Center"
-                        FontSize="14"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock
-                        x:Uid="EmptyStateSubtitle"
-                        HorizontalAlignment="Center"
-                        FontSize="12"
-                        Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
-                </StackPanel>
+                        VerticalAlignment="Center"
+                        Spacing="4">
+                        <Border
+                            Width="72"
+                            Height="72"
+                            Margin="0,0,0,12"
+                            HorizontalAlignment="Center"
+                            Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource SurfaceCornerRadius}">
+                            <FontIcon
+                                FontSize="30"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE896;" />
+                        </Border>
+                        <TextBlock
+                            x:Uid="EmptyStateTitle"
+                            HorizontalAlignment="Center"
+                            Style="{StaticResource BodyStrongTextBlockStyle}" />
+                        <TextBlock
+                            x:Uid="EmptyStateSubtitle"
+                            HorizontalAlignment="Center"
+                            Style="{StaticResource TertiaryTextStyle}" />
+                        <Button
+                            x:Name="EmptyStateAddButton"
+                            x:Uid="EmptyStateAddFiles"
+                            Margin="0,12,0,0"
+                            Padding="16,7"
+                            HorizontalAlignment="Center"
+                            Click="AddFilesButton_Click"
+                            CornerRadius="{StaticResource SmallCornerRadius}"
+                            Style="{ThemeResource AccentButtonStyle}" />
+                    </StackPanel>
+                </Grid>
             </Grid>
         </Border>
 
         <!--  Bottom Bar  -->
-        <Grid
+        <Border
             Grid.Row="3"
-            Padding="16,12"
-            Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-            <StackPanel
-                x:Name="SelectionInfoPanel"
-                Grid.Column="0"
-                Orientation="Horizontal"
-                Spacing="8"
-                Visibility="Collapsed">
-                <Button x:Uid="TooltipRemoveSelected" Click="RemoveSelected_Click">
-                    <FontIcon FontSize="14" Glyph="&#xE74D;" />
-                </Button>
-                <TextBlock
-                    x:Name="SelectionCountText"
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                <Border
-                    Width="1"
-                    Height="20"
-                    Margin="8,0"
-                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-            </StackPanel>
+                <!--  A saving PDF is the one slow thing this app does; say so.  -->
+                <ProgressBar
+                    x:Name="BusyBar"
+                    Grid.Row="0"
+                    Height="2"
+                    IsIndeterminate="True"
+                    Visibility="Collapsed" />
 
-            <TextBlock
-                x:Name="StatusTextBlock"
-                x:Uid="StatusReady"
-                Grid.Column="1"
-                VerticalAlignment="Center"
-                FontSize="12"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Grid Grid.Row="1" Padding="{StaticResource BarPadding}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
 
-            <Button
-                x:Name="SaveButton"
-                x:Uid="ButtonSavePdf"
-                Grid.Column="2"
-                Padding="24,8"
-                Click="SaveButton_Click"
-                Style="{ThemeResource AccentButtonStyle}" />
-        </Grid>
+                    <StackPanel
+                        x:Name="SelectionInfoPanel"
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        Visibility="Collapsed">
+                        <Button
+                            x:Uid="TooltipRemoveSelected"
+                            Click="RemoveSelected_Click"
+                            Style="{StaticResource ToolButtonStyle}">
+                            <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                        </Button>
+                        <TextBlock
+                            x:Name="SelectionCountText"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SecondaryTextStyle}" />
+                        <Border Margin="4,0" Style="{StaticResource ToolSeparatorStyle}" />
+                    </StackPanel>
+
+                    <TextBlock
+                        x:Name="StatusTextBlock"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Style="{StaticResource SecondaryTextStyle}"
+                        TextTrimming="CharacterEllipsis" />
+
+                    <StackPanel
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="12">
+
+                        <!--
+                            Estimated output size. The point of the compression presets is a
+                            smaller file, and until now nothing told the user whether the
+                            setting they picked actually achieved one.
+                        -->
+                        <StackPanel
+                            x:Name="EstimatePanel"
+                            x:Uid="TooltipEstimatedSize"
+                            VerticalAlignment="Center"
+                            Opacity="0"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            Visibility="Collapsed">
+                            <ProgressRing
+                                x:Name="EstimateProgress"
+                                Width="12"
+                                Height="12"
+                                VerticalAlignment="Center"
+                                IsActive="False"
+                                Visibility="Collapsed" />
+                            <FontIcon
+                                x:Name="EstimateIcon"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="&#xE7C3;" />
+                            <TextBlock
+                                x:Name="EstimatedSizeText"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SecondaryTextStyle}" />
+                        </StackPanel>
+
+                        <Button
+                            x:Name="SaveButton"
+                            x:Uid="ButtonSavePdf"
+                            Padding="24,8"
+                            Click="SaveButton_Click"
+                            CornerRadius="{StaticResource SmallCornerRadius}"
+                            Style="{ThemeResource AccentButtonStyle}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Border>
     </Grid>
 </Window>
