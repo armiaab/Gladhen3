@@ -1,4 +1,4 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using PdfSharp.Drawing;
 using PdfSharp.Pdf;
 using PdfSharp.Pdf.IO;
@@ -17,15 +17,6 @@ using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
 
-/// <summary>
-/// PDF assembly + image compression.
-///
-/// Three deliberate design points:
-///  * The PDF layer is PDFsharp (MIT), not iText (AGPL).
-///  * The image layer is WIC (Windows.Graphics.Imaging), which ships in the OS, so there is
-///    no native imaging DLL in the package at all.
-///  * Peak memory is bounded by a budget rather than by page count. See InFlightBudgetBytes.
-/// </summary>
 public class PdfService
 {
     /// <summary>
@@ -39,8 +30,6 @@ public class PdfService
     /// </summary>
     private const long InFlightBudgetBytes = 384L * 1024 * 1024;
 
-    // Preset ladder: target raster DPI + JPEG quality. Anything above the DPI cap for the
-    // page an image is drawn on is simply wasted bytes.
     internal static int GetRasterDpi() => AppSettings.Current.ImageCompression switch
     {
         PdfImageCompression.Low => 300,
@@ -57,7 +46,6 @@ public class PdfService
         _ => 0.92
     };
 
-    /// <summary>Number of images to work on at once, given the worst-case cost of one.</summary>
     private static int LanesFor(long worstBytesPerImage)
     {
         if (worstBytesPerImage <= 0) return 1;
@@ -77,11 +65,14 @@ public class PdfService
         ArgumentNullException.ThrowIfNull(items);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
 
+        if (items.Any(i => i.Type == DocumentType.SectionBreak))
+            throw new ArgumentException("Section dividers must be removed before building a PDF.", nameof(items));
+
         EnsureFileIsWritable(outputPath);
         return BuildPdf(items, outputPath);
     }
 
-    private PdfBuildResult BuildPdf(List<DocumentItem> items, string outputPath)
+    private static PdfBuildResult BuildPdf(List<DocumentItem> items, string outputPath)
     {
         var level = AppSettings.Current.ImageCompression;
         var compress = level != PdfImageCompression.None;
@@ -108,15 +99,10 @@ public class PdfService
         var sourceForms = new Dictionary<string, XPdfForm>(StringComparer.OrdinalIgnoreCase);
         var alreadyOptimised = new HashSet<int>();
         var pagesAdded = 0;
-        // Items that could not be turned into a page. Dropping these silently produced a PDF
-        // with pages quietly missing, so they are reported back to the caller instead.
         var skipped = new List<string>();
 
         var pageLongInches = useCustomPageSize ? MaxPageLongEdgeInches() : 11.0;
         var cap = dpi > 0 ? (int)Math.Ceiling(pageLongInches * dpi) : 0;
-        // Source dimensions are not known until each file is opened, so budget for a large-ish
-        // camera image rather than assuming they are all small - a dozen concurrent 24 MP
-        // decodes would undo the whole point of the budget.
         var assumedSourcePx = Math.Max((long)cap * cap, 12_000_000L);
         var block = compress ? LanesFor((assumedSourcePx * 4) + ((long)cap * cap * 8)) : 32;
 
@@ -178,8 +164,6 @@ public class PdfService
                             pagesAdded++;
                         }
                     }
-                    // One unreadable or corrupt file must not abandon the whole document, so
-                    // every failure mode is isolated here - but it is recorded, not swallowed.
                     catch (Exception ex)
                     {
                         Log.Error(ex, "Failed to add item to PDF: {Path}", item.FilePath);
@@ -211,10 +195,6 @@ public class PdfService
         return new PdfBuildResult(pagesAdded, skipped);
     }
 
-    /// <summary>
-    /// Writes the document, translating the two failures the user can actually do something
-    /// about. Anything else propagates unchanged so it is visible as a defect.
-    /// </summary>
     private static void SaveDocument(PdfDocument document, string outputPath)
     {
         try
@@ -231,10 +211,6 @@ public class PdfService
         }
     }
 
-    /// <summary>
-    /// Disposes everything, reporting rather than hiding any failure. Cleanup runs while an
-    /// exception may already be in flight, so it must not throw a second one over the top.
-    /// </summary>
     private static void DisposeAll<T>(IEnumerable<T> disposables) where T : IDisposable
     {
         foreach (var item in disposables)
@@ -253,38 +229,26 @@ public class PdfService
     private static Dictionary<string, byte[]> EmptyEncoded()
         => new(StringComparer.OrdinalIgnoreCase);
 
-    // ---------------------------------------------------------------- size estimation
-
-    /// <summary>Roughly what a PDF costs beyond its page content: catalog, xref, trailer.</summary>
     private const long PdfOverheadBytes = 2048;
 
-    /// <summary>How many images to push through the real codec when sizing a job.</summary>
     private const int MaxSizeSamples = 3;
 
-    /// <summary>
-    /// Past this, a source is sized from a rule of thumb instead of being parsed. Parsing
-    /// costs the same memory as saving, and doing that on every settings change would undo
-    /// the work that made this service fit in a small process.
-    /// </summary>
     private const long SampleParseLimitBytes = 256L * 1024 * 1024;
 
-    /// <summary>
-    /// Predicts the size of the file <see cref="CreatePdfFromDocuments"/> would produce.
-    /// </summary>
-    /// <remarks>
-    /// The prediction comes from running a few of the user's own images through the real
-    /// encoder rather than from a fixed per-preset ratio: how well a page compresses depends
-    /// almost entirely on what is on it, and a table of constants would be confidently wrong
-    /// for the scans this app exists to shrink. Sampling the largest images makes the answer
-    /// track the bytes that actually matter.
-    ///
-    /// This is deliberately synchronous and cancellable - callers run it off the UI thread and
-    /// cancel it when the selection changes again.
-    /// </remarks>
     public static long EstimateOutputSize(IReadOnlyList<DocumentItem> items, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(items);
         if (items.Count == 0) return 0;
+
+        return EstimateSectionSizes([items], cancellationToken)[0];
+    }
+
+    public static IReadOnlyList<long> EstimateSectionSizes(
+        IReadOnlyList<IReadOnlyList<DocumentItem>> sections,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sections);
+        if (sections.Count == 0) return [];
 
         var compress = AppSettings.Current.ImageCompression != PdfImageCompression.None;
         var dpi = GetRasterDpi();
@@ -293,68 +257,122 @@ public class PdfService
         var pageLongInches = useCustomPageSize ? MaxPageLongEdgeInches() : 11.0;
         var cap = dpi > 0 ? (int)Math.Ceiling(pageLongInches * dpi) : 0;
 
-        var total = PdfOverheadBytes;
-
         var imagePaths = new List<string>();
-        var pdfGroups = new Dictionary<string, (List<int> Pages, int TotalPages)>(StringComparer.OrdinalIgnoreCase);
+        var pdfPages = new Dictionary<string, (SortedSet<int> Pages, int TotalPages)>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var item in items)
+        foreach (var section in sections)
         {
-            cancellationToken.ThrowIfCancellationRequested();
+            if (section == null) continue;
 
-            if (item.Type == DocumentType.Image)
+            foreach (var item in section)
             {
-                if (!imagePaths.Contains(item.FilePath, StringComparer.OrdinalIgnoreCase))
-                    imagePaths.Add(item.FilePath);
-            }
-            else if (item.Type == DocumentType.PdfPage)
-            {
-                var src = item.SourcePdfPath ?? item.FilePath;
-                if (string.IsNullOrEmpty(src)) continue;
+                cancellationToken.ThrowIfCancellationRequested();
 
-                if (!pdfGroups.TryGetValue(src, out var group))
+                if (item.Type == DocumentType.Image)
                 {
-                    group = ([], Math.Max(1, item.TotalPages));
-                    pdfGroups[src] = group;
+                    if (!imagePaths.Contains(item.FilePath, StringComparer.OrdinalIgnoreCase))
+                        imagePaths.Add(item.FilePath);
                 }
-                group.Pages.Add(item.PageNumber);
+                else if (item.Type == DocumentType.PdfPage)
+                {
+                    var src = item.SourcePdfPath ?? item.FilePath;
+                    if (string.IsNullOrEmpty(src)) continue;
+
+                    if (!pdfPages.TryGetValue(src, out var group))
+                    {
+                        group = ([], Math.Max(1, item.TotalPages));
+                        pdfPages[src] = group;
+                    }
+                    group.Pages.Add(item.PageNumber);
+                }
             }
         }
 
-        total += EstimateImages(imagePaths, compress, cap, quality, cancellationToken);
+        var imageRatio = compress ? MeasureImageRatio(imagePaths, cap, quality, cancellationToken) : 1.0;
 
-        foreach (var (path, group) in pdfGroups)
-            total += EstimatePdfPages(path, group.Pages, group.TotalPages, compress, dpi, quality, cancellationToken);
+        var profiles = new Dictionary<string, SourceProfile>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, group) in pdfPages)
+            profiles[path] = ProfileSource(path, group.Pages, group.TotalPages, compress, dpi, quality, cancellationToken);
 
-        return total;
+        var results = new long[sections.Count];
+        for (var i = 0; i < sections.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var section = sections[i];
+            if (section == null || section.Count == 0)
+            {
+                results[i] = 0;
+                continue;
+            }
+
+            var total = PdfOverheadBytes;
+            long imageBytes = 0;
+            var seenImages = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var pagesBySource = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var item in section)
+            {
+                if (item.Type == DocumentType.Image)
+                {
+                    if (seenImages.Add(item.FilePath))
+                        imageBytes += FileLengthOrZero(item.FilePath);
+                }
+                else if (item.Type == DocumentType.PdfPage)
+                {
+                    var src = item.SourcePdfPath ?? item.FilePath;
+                    if (string.IsNullOrEmpty(src)) continue;
+
+                    if (!pagesBySource.TryGetValue(src, out var pages))
+                    {
+                        pages = [];
+                        pagesBySource[src] = pages;
+                    }
+                    pages.Add(item.PageNumber);
+                }
+            }
+
+            total += (long)(imageBytes * imageRatio);
+
+            foreach (var (path, pages) in pagesBySource)
+            {
+                if (profiles.TryGetValue(path, out var profile))
+                    total += EstimateFromProfile(profile, pages, compress);
+            }
+
+            results[i] = total;
+        }
+
+        return results;
     }
 
-    private static long EstimateImages(List<string> paths, bool compress, int cap, double quality, CancellationToken cancellationToken)
+    private static long FileLengthOrZero(string path)
     {
-        if (paths.Count == 0) return 0;
+        var info = new FileInfo(path);
+        if (!info.Exists) return 0;
+
+        try
+        {
+            return info.Length;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Debug(ex, "Skipping {Path} while estimating: its size could not be read", path);
+            return 0;
+        }
+    }
+
+    private static double MeasureImageRatio(List<string> paths, int cap, double quality, CancellationToken cancellationToken)
+    {
+        if (paths.Count == 0) return 1.0;
 
         var sizes = new List<(string Path, long Length)>(paths.Count);
         foreach (var path in paths)
         {
-            try
-            {
-                var length = new FileInfo(path).Length;
-                if (length > 0) sizes.Add((path, length));
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                Log.Debug(ex, "Skipping {Path} while estimating", path);
-            }
+            var length = FileLengthOrZero(path);
+            if (length > 0) sizes.Add((path, length));
         }
 
-        long total = 0;
-        if (!compress)
-        {
-            foreach (var entry in sizes) total += entry.Length;
-            return total;
-        }
-
-        // The biggest files dominate the total, so they are the ones worth sampling.
         double ratioSum = 0;
         var sampled = 0;
         foreach (var entry in sizes.OrderByDescending(e => e.Length).Take(MaxSizeSamples))
@@ -375,35 +393,36 @@ public class PdfService
             }
         }
 
-        var ratio = sampled > 0 ? ratioSum / sampled : 1.0;
-        foreach (var entry in sizes) total += (long)(entry.Length * ratio);
-        return total;
+        return sampled > 0 ? ratioSum / sampled : 1.0;
     }
 
-    private static long EstimatePdfPages(string path, List<int> pageNumbers, int totalPages, bool compress, int dpi, double quality, CancellationToken cancellationToken)
+    private sealed class SourceProfile
     {
-        long fileLength;
-        try
-        {
-            fileLength = new FileInfo(path).Length;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            Log.Debug(ex, "Skipping {Path} while estimating", path);
-            return 0;
-        }
+        public long FileLength { get; init; }
+        public int TotalPages { get; init; }
+        public double ImageRatio { get; init; } = 1.0;
+        public Dictionary<int, long> PageImageBytes { get; init; } = [];
+        public bool Measured { get; init; }
+    }
 
-        var selectedFraction = totalPages > 0 ? Math.Min(1.0, (double)pageNumbers.Count / totalPages) : 1.0;
-        var selectedBytes = fileLength * selectedFraction;
+    private static SourceProfile ProfileSource(
+        string path,
+        IReadOnlyCollection<int> pageNumbers,
+        int totalPages,
+        bool compress,
+        int dpi,
+        double quality,
+        CancellationToken cancellationToken)
+    {
+        var fileLength = FileLengthOrZero(path);
+        var unmeasured = new SourceProfile { FileLength = fileLength, TotalPages = totalPages };
 
-        if (!compress)
-            return (long)selectedBytes;
+        if (fileLength == 0 || !compress) return unmeasured;
 
         if (fileLength > SampleParseLimitBytes)
         {
-            // Too big to parse just to answer a question the user has not committed to yet.
             Log.Debug("Estimating {Path} from a rule of thumb: {Size}B is past the parse limit", path, fileLength);
-            return (long)(selectedBytes * FallbackCompressionRatio());
+            return unmeasured;
         }
 
         try
@@ -412,6 +431,7 @@ public class PdfService
 
             var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
             var jobs = new List<ImageJob>();
+            var pageImageBytes = new Dictionary<int, long>();
 
             foreach (var pageNumber in pageNumbers)
             {
@@ -424,16 +444,12 @@ public class PdfService
                 var longInches = Math.Max(page.Width.Inch, page.Height.Inch);
                 if (longInches <= 0) longInches = 11.0;
 
+                var before = jobs.Count;
                 CollectImages(page.Elements.GetDictionary("/Resources") ?? page.Resources, longInches, seen, jobs, 0);
-            }
 
-            long imageBytes = 0;
-            foreach (var job in jobs) imageBytes += job.OriginalLength;
-
-            if (imageBytes == 0)
-            {
-                // Nothing here is an image, so compression has almost nothing to act on.
-                return (long)selectedBytes;
+                long added = 0;
+                for (var j = before; j < jobs.Count; j++) added += jobs[j].OriginalLength;
+                pageImageBytes[pageNumber] = added;
             }
 
             long sampledBefore = 0, sampledAfter = 0;
@@ -458,41 +474,60 @@ public class PdfService
                 job.Release();
             }
 
-            var ratio = sampledBefore > 0 ? (double)sampledAfter / sampledBefore : 1.0;
-
-            // Text, fonts and structure survive compression essentially untouched; only the
-            // image bytes move.
-            var nonImageBytes = Math.Max(0, selectedBytes - imageBytes);
-            var estimate = (long)(nonImageBytes + (imageBytes * ratio));
+            var profile = new SourceProfile
+            {
+                FileLength = fileLength,
+                TotalPages = totalPages,
+                ImageRatio = sampledBefore > 0 ? (double)sampledAfter / sampledBefore : 1.0,
+                PageImageBytes = pageImageBytes,
+                Measured = true
+            };
 
             if (fileLength > 32L * 1024 * 1024)
             {
-                // A big source was just parsed only to answer a question. Hand the memory back
-                // rather than leaving it resident behind an idle window.
                 doc.Dispose();
                 GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: false);
                 GC.WaitForPendingFinalizers();
             }
 
-            return estimate;
+            return profile;
         }
-        catch (OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // An estimate is a nicety. If the file will not open, fall back rather than
-            // failing the whole calculation - saving will report the real problem.
             Log.Debug(ex, "Falling back to a rule of thumb for {Path}", path);
-            return (long)(selectedBytes * FallbackCompressionRatio());
+            return unmeasured;
         }
     }
 
-    /// <summary>
-    /// Rough per-preset ratios, used only when a source is too large or too broken to sample.
-    /// Deliberately conservative: a number that is too low reads as a broken promise.
-    /// </summary>
+    private static long EstimateFromProfile(SourceProfile profile, List<int> pageNumbers, bool compress)
+    {
+        if (profile.FileLength == 0 || pageNumbers.Count == 0) return 0;
+
+        var selectedFraction = profile.TotalPages > 0
+            ? Math.Min(1.0, (double)pageNumbers.Count / profile.TotalPages)
+            : 1.0;
+        var selectedBytes = profile.FileLength * selectedFraction;
+
+        if (!compress) return (long)selectedBytes;
+        if (!profile.Measured) return (long)(selectedBytes * FallbackCompressionRatio());
+
+        long imageBytes = 0;
+        var counted = new HashSet<int>();
+        foreach (var pageNumber in pageNumbers)
+        {
+            if (counted.Add(pageNumber) && profile.PageImageBytes.TryGetValue(pageNumber, out var bytes))
+                imageBytes += bytes;
+        }
+
+        if (imageBytes == 0)
+        {
+            return (long)selectedBytes;
+        }
+
+        var nonImageBytes = Math.Max(0, selectedBytes - imageBytes);
+        return (long)(nonImageBytes + (imageBytes * profile.ImageRatio));
+    }
+
     private static double FallbackCompressionRatio() => AppSettings.Current.ImageCompression switch
     {
         PdfImageCompression.Low => 0.60,
@@ -527,9 +562,6 @@ public class PdfService
         PdfDocument? doc = null;
         try
         {
-            // A probe, not an operation: encrypted, damaged or otherwise unusual files fail
-            // here in whatever way PDFsharp sees fit, and every one of them simply means
-            // "use the page-import path instead". The caller is not left without a route.
             try
             {
                 doc = PdfReader.Open(sourcePath, PdfDocumentOpenMode.Modify);
@@ -657,8 +689,6 @@ public class PdfService
     {
         if (targetDpi <= 0) return;
 
-        // Collect references only - no pixel data is touched here. An XObject shared by N
-        // pages must only be processed once.
         var jobs = new List<ImageJob>();
         var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
@@ -693,15 +723,10 @@ public class PdfService
         {
             var end = Math.Min(jobs.Count, start + lanes);
 
-            // Reading the stream (and inflating it, for FlateDecode) touches the PDFsharp
-            // object model, so it stays on this thread; the workers only see byte arrays.
             for (var i = start; i < end; i++) jobs[i].Prepare();
 
             Parallel.For(start, end, new ParallelOptions { MaxDegreeOfParallelism = lanes }, i =>
             {
-                // Images are independent, and a codec that cannot handle one of them says so
-                // in whatever way it likes. Failing here just leaves that image untouched;
-                // letting it escape would abandon a document that is otherwise fine.
                 try
                 {
                     jobs[i].Recompress(targetDpi, quality);
@@ -716,16 +741,12 @@ public class PdfService
             {
                 var job = jobs[i];
                 before += job.OriginalLength;
-                // Require a real win. Swapping in a stream that is 0.1% smaller buys nothing
-                // and costs a second generation of JPEG loss.
                 if (job.NewBytes == null || job.NewBytes.Length >= job.OriginalLength * 0.98)
                 {
                     after += job.OriginalLength;
                 }
                 else
                 {
-                    // One malformed image must not sink the whole save - the in-place path
-                    // has no second attempt to fall back to.
                     try
                     {
                         job.Apply();
@@ -761,16 +782,7 @@ public class PdfService
             var dict = xobjects.Elements.GetDictionary(key);
             if (dict == null || !seen.Add(dict)) continue;
 
-            string subtype;
-            try
-            {
-                subtype = dict.Elements.GetName("/Subtype");
-            }
-            catch (InvalidOperationException ex)
-            {
-                Log.Debug(ex, "Skipping XObject {Key} with a malformed /Subtype", key);
-                continue;
-            }
+            var subtype = ReadName(dict, "/Subtype");
 
             if (subtype == "/Image")
             {
@@ -783,6 +795,21 @@ public class PdfService
             }
         }
     }
+
+    /// <summary>Reads a name-valued entry, or null when it is absent or is not a name.</summary>
+    /// <remarks>
+    /// <c>Elements.GetName</c> throws <see cref="InvalidOperationException"/> for anything
+    /// that is not a name, so using it here meant a malformed or unusual dictionary was
+    /// handled by throwing and catching once per XObject - exceptions as control flow, and
+    /// paid for on a path that walks every image in the document. Asking what the value
+    /// actually is costs nothing and says the same thing.
+    /// </remarks>
+    private static string? ReadName(PdfDictionary dict, string key) => dict.Elements.GetValue(key) switch
+    {
+        PdfName name => name.Value,
+        PdfNameObject nameObject => nameObject.Value,
+        _ => null
+    };
 
     private sealed class ImageJob
     {
@@ -932,7 +959,7 @@ public class PdfService
     }
 
 
-    private Dictionary<string, byte[]> PreEncodeImages(List<string> paths, int cap, double quality, int lanes)
+    private static Dictionary<string, byte[]> PreEncodeImages(List<string> paths, int cap, double quality, int lanes)
     {
         var results = new ConcurrentDictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
         Parallel.ForEach(paths, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, lanes) }, path =>
@@ -1084,9 +1111,6 @@ public class PdfService
 
     private static byte[]? WicEncodeJpeg(SoftwareBitmap bitmap, double quality, out int outWidth, out int outHeight)
     {
-        // ImageQuality only takes effect when handed to CreateAsync. Setting it afterwards
-        // through BitmapProperties writes metadata and silently does not change encoding -
-        // which is why the old quality slider barely moved the output size.
         var props = new BitmapPropertySet
         {
             { "ImageQuality", new BitmapTypedValue((float)quality, PropertyType.Single) }
@@ -1113,14 +1137,13 @@ public class PdfService
         return ReadAll(ras);
     }
 
-    private static void WriteAll(IRandomAccessStream stream, byte[] data)
+    private static void WriteAll(InMemoryRandomAccessStream stream, byte[] data)
     {
-        // Straight buffer write; DataWriter would stage another copy of the whole image.
         stream.WriteAsync(data.AsBuffer()).AsTask().GetAwaiter().GetResult();
         stream.Seek(0);
     }
 
-    private static byte[] ReadAll(IRandomAccessStream stream)
+    private static byte[] ReadAll(InMemoryRandomAccessStream stream)
     {
         var size = (uint)stream.Size;
         var bytes = new byte[size];
@@ -1130,8 +1153,6 @@ public class PdfService
         stream.ReadAsync(bytes.AsBuffer(), size, InputStreamOptions.None).AsTask().GetAwaiter().GetResult();
         return bytes;
     }
-
-    // ---------------------------------------------------------------- page geometry
 
     private static bool ResolveTargetLandscape(bool sourceLandscape) => AppSettings.Current.Orientation switch
     {

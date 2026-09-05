@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Trimming experiment: the WinRT projection marshals a native XAML PropertyChanged
+  listener back into managed code through ABI.System.ComponentModel. The trimmer
+  cannot see that edge (XAML subscribes at runtime), so it removes the ABI types and
+  every OnPropertyChanged raises InvalidCastException.
+-->
+<linker>
+  <assembly fullname="WinRT.Runtime" preserve="all" />
+  <assembly fullname="Microsoft.Windows.SDK.NET">
+    <type fullname="ABI.System.ComponentModel.PropertyChangedEventHandler" preserve="all" />
+    <type fullname="ABI.System.ComponentModel.INotifyPropertyChanged" preserve="all" />
+    <type fullname="ABI.System.ComponentModel.PropertyChangedEventArgs" preserve="all" />
+    <type fullname="ABI.System.Collections.Specialized.NotifyCollectionChangedEventHandler" preserve="all" />
+    <type fullname="ABI.System.Collections.Specialized.INotifyCollectionChanged" preserve="all" />
+  </assembly>
+  <assembly fullname="Gladhen3" preserve="all" />
+</linker>

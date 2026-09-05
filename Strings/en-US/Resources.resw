@@ -412,9 +412,6 @@ Drag to reorder, double-click to preview.</value>
   <data name="StatusSaveCancelled" xml:space="preserve">
     <value>Save cancelled</value>
   </data>
-  <data name="DialogContentSaveFailedPickerException" xml:space="preserve">
-    <value>Unable to open the save dialog: {0}</value>
-  </data>
   <data name="StatusCancelled" xml:space="preserve">
     <value>Cancelled</value>
   </data>
@@ -446,17 +443,11 @@ Drag to reorder, double-click to preview.</value>
   <data name="DialogButtonCancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
-  <data name="DialogContentSaveFailedPickerShort" xml:space="preserve">
-    <value>Unable to open the save dialog. Try again or restart the app.</value>
-  </data>
   <data name="DialogTitleAccessDenied" xml:space="preserve">
     <value>Access Denied</value>
   </data>
   <data name="DialogContentAccessDenied" xml:space="preserve">
     <value>Access denied saving to '{0}'. Check permissions or choose a different location.</value>
-  </data>
-  <data name="DialogContentSaveFailedFileInUse" xml:space="preserve">
-    <value>Unable to save the pdf file, the file is used by another process. Please close the file in the other application and try again.</value>
   </data>
   <data name="DialogTitleError" xml:space="preserve">
     <value>Error</value>
@@ -618,5 +609,110 @@ Drag to reorder, double-click to preview.</value>
   </data>
   <data name="ItemCountPagesOnly" xml:space="preserve">
     <value>{0} PDF page(s)</value>
+  </data>
+  <data name="MenuSplit.Title" xml:space="preserve">
+    <value>Split</value>
+  </data>
+  <data name="MenuSplitHere.Text" xml:space="preserve">
+    <value>Split before this page</value>
+  </data>
+  <data name="MenuSplitBySource.Text" xml:space="preserve">
+    <value>Split by source file</value>
+  </data>
+  <data name="MenuSplitEveryN.Text" xml:space="preserve">
+    <value>Split every N pages...</value>
+  </data>
+  <data name="MenuSplitIntoN.Text" xml:space="preserve">
+    <value>Split into N files...</value>
+  </data>
+  <data name="MenuRemoveAllSplits.Text" xml:space="preserve">
+    <value>Remove all splits</value>
+  </data>
+  <data name="TooltipRemoveSplit.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove this split</value>
+  </data>
+  <data name="SectionNameBox.PlaceholderText" xml:space="preserve">
+    <value>File name</value>
+  </data>
+  <data name="SectionDefaultNamePrefix" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="SectionPageCount" xml:space="preserve">
+    <value>{0} page(s)</value>
+  </data>
+  <data name="SectionEmpty" xml:space="preserve">
+    <value>empty - nothing to save</value>
+  </data>
+  <data name="OutputFileCount" xml:space="preserve">
+    <value>{0} files</value>
+  </data>
+  <data name="StatusNoPagesToSplit" xml:space="preserve">
+    <value>There are no pages to split.</value>
+  </data>
+  <data name="StatusPickPageToSplit" xml:space="preserve">
+    <value>Select the page that should start the next file.</value>
+  </data>
+  <data name="StatusSplitInto" xml:space="preserve">
+    <value>Split into {0} document(s).</value>
+  </data>
+  <data name="StatusSplitRemoved" xml:space="preserve">
+    <value>Split removed.</value>
+  </data>
+  <data name="StatusSplitsRemoved" xml:space="preserve">
+    <value>All splits removed.</value>
+  </data>
+  <data name="StatusNoSplitsToRemove" xml:space="preserve">
+    <value>The list is not split.</value>
+  </data>
+  <data name="StatusSavingSection" xml:space="preserve">
+    <value>Saving {0} of {1}: {2}</value>
+  </data>
+  <data name="StatusSectionsSaved" xml:space="preserve">
+    <value>{0} PDF(s) created successfully</value>
+  </data>
+  <data name="StatusSectionsPartlySaved" xml:space="preserve">
+    <value>{0} saved, {1} could not be written</value>
+  </data>
+  <data name="DialogTitleSplitEveryN" xml:space="preserve">
+    <value>Split every N pages</value>
+  </data>
+  <data name="DialogLabelPagesPerFile" xml:space="preserve">
+    <value>Pages per file</value>
+  </data>
+  <data name="DialogTitleSplitIntoN" xml:space="preserve">
+    <value>Split into N files</value>
+  </data>
+  <data name="DialogLabelNumberOfFiles" xml:space="preserve">
+    <value>Number of files</value>
+  </data>
+  <data name="DialogTitleOverwriteFiles" xml:space="preserve">
+    <value>Replace existing files?</value>
+  </data>
+  <data name="DialogContentOverwriteFiles" xml:space="preserve">
+    <value>{0} file(s) in this folder will be replaced:
+
+{1}</value>
+  </data>
+  <data name="DialogButtonReplace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="DialogContentSectionsSaved" xml:space="preserve">
+    <value>{0} PDF(s) were saved to:
+
+{1}</value>
+  </data>
+  <data name="DialogContentSectionsAllFailed" xml:space="preserve">
+    <value>None of the documents could be written:
+
+{0}</value>
+  </data>
+  <data name="DialogContentSectionsPartlySaved" xml:space="preserve">
+    <value>{0} PDF(s) were saved to:
+
+{1}
+
+These could not be written:
+
+{2}</value>
   </data>
 </root>

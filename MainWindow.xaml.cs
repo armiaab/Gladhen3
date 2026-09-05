@@ -64,8 +64,11 @@ public sealed partial class MainWindow : Window
 
             appWindow.SetIcon("Assets/Square44x44Logo.png");
         }
-        // Cosmetic: the window works perfectly well with the default icon.
-        catch (Exception ex)
+        // Cosmetic: the window works perfectly well with the default icon. Narrow on
+        // purpose - the asset ships inside the package, so the only thing that can really go
+        // wrong here is the shell refusing the handle. Anything else is a defect and is left
+        // to escape rather than being written off as a missing icon.
+        catch (COMException ex)
         {
             Log.Warning(ex, "Failed to set window icon");
         }
@@ -87,14 +90,18 @@ public sealed partial class MainWindow : Window
     {
         if (!_isInitialized) return;
 
-        var hasItems = _documentItems.Count > 0;
-        FadeTo(EmptyStatePanel, hasItems ? 0 : 1);
+        // Section bands are rows but not pages, so a list holding nothing but a leftover
+        // divider is still empty as far as the empty state and the Save button are concerned.
+        RefreshSections();
+
+        var hasPages = Pages.Any();
+        FadeTo(EmptyStatePanel, hasPages ? 0 : 1);
 
         var imageCount = _documentItems.Count(d => d.Type == DocumentType.Image);
         var pdfPageCount = _documentItems.Count(d => d.Type == DocumentType.PdfPage);
         ItemCountTextBlock.Text = DescribeContents(imageCount, pdfPageCount);
 
-        SaveButton.IsEnabled = hasItems;
+        SaveButton.IsEnabled = hasPages;
         UpdateSelectionInfo();
     }
 
@@ -210,8 +217,16 @@ public sealed partial class MainWindow : Window
 
     private void DocumentItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Reordering changes which page comes first, not how many bytes come out.
-        if (e.Action == NotifyCollectionChangedAction.Move) return;
+        // Counts only. Inserting a divider from here would be a mutation raised from the
+        // collection's own notification, which ObservableCollection refuses once the views are
+        // also subscribed, and naming has to see the finished structure rather than one
+        // insertion at a time; RefreshSections does both from the places that can.
+        UpdateSectionSummaries();
+
+        // Reordering changes which page comes first, not how many bytes come out - unless the
+        // list is cut into several documents, where dragging a page across a divider moves its
+        // bytes out of one file and into another.
+        if (e.Action == NotifyCollectionChangedAction.Move && !HasSections) return;
 
         ScheduleEstimate();
     }
@@ -226,10 +241,11 @@ public sealed partial class MainWindow : Window
         // Anything in flight is now answering a question about a list that no longer exists.
         _estimateCts?.Cancel();
 
-        if (_documentItems.Count == 0)
+        if (!Pages.Any())
         {
             _estimateTimer?.Stop();
             FadeTo(EstimatePanel, 0);
+            OutputCountText.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -257,8 +273,13 @@ public sealed partial class MainWindow : Window
 
     private async Task RunEstimateAsync()
     {
-        var items = _documentItems.ToList();
-        if (items.Count == 0) return;
+        // One measurement covering every section, so the bands and the total cannot
+        // disagree and a source document is not re-parsed once per output file.
+        var sections = PdfSection.Split(_documentItems);
+        var writable = sections.Where(s => !s.IsEmpty).ToList();
+        if (writable.Count == 0) return;
+
+        var payload = writable.Select(s => (IReadOnlyList<DocumentItem>)s.Items).ToList();
 
         var cts = new CancellationTokenSource();
         _estimateCts = cts;
@@ -266,15 +287,36 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var bytes = await Task.Run(() => PdfService.EstimateOutputSize(items, token), token);
+            var sizes = await Task.Run(() => PdfService.EstimateSectionSizes(payload, token), token);
             if (token.IsCancellationRequested) return;
+
+            long total = 0;
+            for (var i = 0; i < writable.Count && i < sizes.Count; i++)
+            {
+                total += sizes[i];
+
+                if (writable[i].BreakItem is { } band)
+                {
+                    band.SectionEstimate = string.Format(
+                        _resourceLoader.GetString("EstimatedSizeFormat"),
+                        DocumentService.FormatFileSize((ulong)Math.Max(0, sizes[i])));
+                }
+            }
 
             EstimateProgress.IsActive = false;
             EstimateProgress.Visibility = Visibility.Collapsed;
             EstimateIcon.Visibility = Visibility.Visible;
             EstimatedSizeText.Text = string.Format(
                 _resourceLoader.GetString("EstimatedSizeFormat"),
-                DocumentService.FormatFileSize((ulong)Math.Max(0, bytes)));
+                DocumentService.FormatFileSize((ulong)Math.Max(0, total)));
+
+            // The total means something different once it is spread over several files, so it
+            // says how many rather than leaving the reader to assume one.
+            var multiple = writable.Count > 1;
+            OutputCountText.Text = multiple
+                ? string.Format(_resourceLoader.GetString("OutputFileCount"), writable.Count)
+                : string.Empty;
+            OutputCountText.Visibility = multiple ? Visibility.Visible : Visibility.Collapsed;
         }
         catch (OperationCanceledException)
         {
@@ -632,53 +674,76 @@ public sealed partial class MainWindow : Window
 
     #region PDF Operations
 
-    private async void SaveButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_documentItems.Count == 0)
-        {
-            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleNoPages"), _resourceLoader.GetString("DialogContentNoPages"));
-            return;
-        }
+    /// <summary>What came back from asking the user where to save.</summary>
+    private enum DestinationOutcome { Picked, Cancelled, Failed }
 
-        var savePicker = new FileSavePicker
+    /// <summary>
+    /// Asks the user where to write the PDF.
+    /// </summary>
+    /// <remarks>
+    /// This existed three times over in the save path - once up front and once in each of the
+    /// two "choose another location" branches - each with its own copy of the picker setup and
+    /// its own catch, and one of those copies had drifted onto the wrong error message. The
+    /// picker runs out of process and can fail as a COM error or as anything else the shell
+    /// decides to surface, so the catch stays general; but there is one of it now, and the
+    /// user is told the same thing wherever the picker was opened from.
+    /// </remarks>
+    private async Task<(DestinationOutcome Outcome, string Path)> PickPdfDestinationAsync(string? suggestedName)
+    {
+        var picker = new FileSavePicker
         {
             SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = _resourceLoader.GetString("SuggestedFileNameDocument")
+            SuggestedFileName = suggestedName ?? _resourceLoader.GetString("SuggestedFileNameDocument")
         };
-        savePicker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
-
-        InitializeWithWindow.Initialize(savePicker, WindowNative.GetWindowHandle(this));
+        picker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
 
         StorageFile file;
         try
         {
-            file = await savePicker.PickSaveFileAsync();
+            file = await picker.PickSaveFileAsync();
         }
-        catch (COMException comEx)
-        {
-            Log.Warning(comEx, "Save file picker failed (COMException)");
-            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), _resourceLoader.GetString("DialogContentSaveFailedPicker"));
-            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
-            return;
-        }
-        // The shell picker is out-of-process and can fail in ways that are not COM errors.
-        // Either way the user gets told the dialog would not open, rather than nothing.
         catch (Exception ex)
         {
             Log.Warning(ex, "Save file picker failed");
-            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), string.Format(_resourceLoader.GetString("DialogContentSaveFailedPickerException"), ex.Message));
+            await ShowDialogAsync(
+                _resourceLoader.GetString("DialogTitleSaveFailed"),
+                _resourceLoader.GetString("DialogContentSaveFailedPicker"));
             StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
-            return;
+            return (DestinationOutcome.Failed, string.Empty);
         }
 
         if (file == null)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
+            return (DestinationOutcome.Cancelled, string.Empty);
+        }
+
+        return (DestinationOutcome.Picked, file.Path);
+    }
+
+    private async void SaveButton_Click(object sender, RoutedEventArgs e)
+    {
+        // Sections are derived here rather than stored, so with no dividers in the list this
+        // is one section holding every page and the save below is exactly what it always was.
+        var sections = PdfSection.Split(_documentItems).Where(s => !s.IsEmpty).ToList();
+
+        if (sections.Count == 0)
+        {
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleNoPages"), _resourceLoader.GetString("DialogContentNoPages"));
             return;
         }
 
-        var items = _documentItems.ToList();
-        var outputPath = file.Path;
+        if (sections.Count > 1)
+        {
+            await SaveSectionsAsync(sections);
+            return;
+        }
+
+        var (outcome, outputPath) = await PickPdfDestinationAsync(null);
+        if (outcome != DestinationOutcome.Picked) return;
+
+        var items = sections[0].Items;
 
         StatusTextBlock.Text = _resourceLoader.GetString("StatusCreatingPdf");
         SaveButton.IsEnabled = false;
@@ -720,45 +785,18 @@ public sealed partial class MainWindow : Window
                         XamlRoot = Content.XamlRoot
                     };
 
-                    var result = await dialog.ShowAsync();
-                    if (result == ContentDialogResult.Primary)
-                    {
-                        continue;
-                    }
-                    else if (result == ContentDialogResult.Secondary)
-                    {
-                        var newPicker = new FileSavePicker
-                        {
-                            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-                            SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
-                        };
-                        newPicker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
-                        InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
+                    var choice = await Dialogs.DialogHost.ShowAsync(dialog);
+                    if (choice == ContentDialogResult.Primary) continue;
 
-                        try
-                        {
-                            var newFile = await newPicker.PickSaveFileAsync();
-                            if (newFile == null)
-                            {
-                                StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
-                                return;
-                            }
-                            outputPath = newFile.Path;
-                            continue;
-                        }
-                        catch (COMException comEx)
-                        {
-                            Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), _resourceLoader.GetString("DialogContentSaveFailedPickerShort"));
-                            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
-                            return;
-                        }
-                    }
-                    else
+                    if (choice != ContentDialogResult.Secondary)
                     {
                         StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
                         return;
                     }
+
+                    var (inUseOutcome, inUsePath) = await PickPdfDestinationAsync(Path.GetFileNameWithoutExtension(outputPath));
+                    if (inUseOutcome != DestinationOutcome.Picked) return;
+                    outputPath = inUsePath;
                 }
                 catch (UnauthorizedAccessException ex)
                 {
@@ -768,46 +806,20 @@ public sealed partial class MainWindow : Window
                     {
                         Title = _resourceLoader.GetString("DialogTitleAccessDenied"),
                         Content = string.Format(_resourceLoader.GetString("DialogContentAccessDenied"), Path.GetFileName(outputPath)),
-                        PrimaryButtonText = "Choose Location",
+                        PrimaryButtonText = _resourceLoader.GetString("DialogButtonChooseLocation"),
                         CloseButtonText = _resourceLoader.GetString("DialogButtonCancel"),
                         XamlRoot = Content.XamlRoot
                     };
 
-                    var result = await dialog.ShowAsync();
-                    if (result == ContentDialogResult.Primary)
-                    {
-                        var newPicker = new FileSavePicker
-                        {
-                            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-                            SuggestedFileName = Path.GetFileNameWithoutExtension(outputPath)
-                        };
-                        newPicker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
-                        InitializeWithWindow.Initialize(newPicker, WindowNative.GetWindowHandle(this));
-
-                        try
-                        {
-                            var newFile = await newPicker.PickSaveFileAsync();
-                            if (newFile == null)
-                            {
-                                StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
-                                return;
-                            }
-                            outputPath = newFile.Path;
-                            continue;
-                        }
-                        catch (COMException comEx)
-                        {
-                            Log.Warning(comEx, "Save file picker failed (COMException) when choosing new location");
-                            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSaveFailed"), _resourceLoader.GetString("DialogContentSaveFailedFileInUse"));
-                            StatusTextBlock.Text = _resourceLoader.GetString("StatusSaveCancelled");
-                            return;
-                        }
-                    }
-                    else
+                    if (await Dialogs.DialogHost.ShowAsync(dialog) != ContentDialogResult.Primary)
                     {
                         StatusTextBlock.Text = _resourceLoader.GetString("StatusCancelled");
                         return;
                     }
+
+                    var (deniedOutcome, deniedPath) = await PickPdfDestinationAsync(Path.GetFileNameWithoutExtension(outputPath));
+                    if (deniedOutcome != DestinationOutcome.Picked) return;
+                    outputPath = deniedPath;
                 }
                 // Expected, actionable failures carry a reason the UI can explain properly.
                 catch (PdfOperationException ex)
@@ -1328,7 +1340,7 @@ public sealed partial class MainWindow : Window
 
         await LoadItemAsync(startIndex);
 
-        await dialog.ShowAsync();
+        await Dialogs.DialogHost.ShowAsync(dialog);
     }
 
     private static async Task<BitmapImage?> RenderPdfPageHighResAsync(
@@ -1384,12 +1396,27 @@ public sealed partial class MainWindow : Window
 
     private void DocumentView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
     {
-        if (args.DropResult == Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move)
-            StatusTextBlock.Text = _resourceLoader.GetString("StatusReorderComplete");
+        if (args.DropResult != Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move) return;
+
+        // A drag can move a page across a divider, or move the divider itself, so the bands
+        // have to be re-derived. This fires after the collection has settled, which is why the
+        // divider-inserting half of the refresh is safe to run here and not in CollectionChanged.
+        RefreshSections();
+        StatusTextBlock.Text = _resourceLoader.GetString("StatusReorderComplete");
     }
 
     private void DocumentView_DragOver(object sender, DragEventArgs e)
     {
+        // Only a drop from outside the app is an "add". This used to be unconditional, so
+        // dragging a page into a new position - the thing this list exists for - was reported
+        // back as a Copy and captioned "Drop files here to add them", and DragUIOverride is
+        // not even available on an internal reorder.
+        if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+        {
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
+            return;
+        }
+
         e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
         e.DragUIOverride.Caption = _resourceLoader.GetString("DragDropAdd");
         e.DragUIOverride.IsContentVisible = true;
@@ -1472,18 +1499,48 @@ public sealed partial class MainWindow : Window
         StatusTextBlock.Text = count > 0 ? string.Format(_resourceLoader.GetString("StatusRemovedPages"), count) : _resourceLoader.GetString("StatusNoPagesToRemove");
     }
 
+    /// <summary>
+    /// Sorts the pages, leaving the section dividers where they are.
+    /// </summary>
+    /// <remarks>
+    /// Each run between two dividers is sorted on its own. Sorting the whole list would drag
+    /// pages across dividers and silently re-file them into a different output document -
+    /// and would sort the dividers themselves into the middle of it.
+    /// </remarks>
     private void SortDocuments<T>(Func<DocumentItem, T?> keySelector, bool ascending) where T : IComparable
     {
-        var sorted = ascending
-            ? _documentItems.OrderBy(keySelector).ToList()
-            : _documentItems.OrderByDescending(keySelector).ToList();
+        var ordered = new List<DocumentItem>(_documentItems.Count);
+        var run = new List<DocumentItem>();
 
-        for (var target = 0; target < sorted.Count; target++)
+        void FlushRun()
         {
-            var current = _documentItems.IndexOf(sorted[target]);
+            if (run.Count == 0) return;
+            ordered.AddRange(ascending ? run.OrderBy(keySelector) : run.OrderByDescending(keySelector));
+            run.Clear();
+        }
+
+        foreach (var item in _documentItems)
+        {
+            if (item.Type == DocumentType.SectionBreak)
+            {
+                FlushRun();
+                ordered.Add(item);
+            }
+            else
+            {
+                run.Add(item);
+            }
+        }
+        FlushRun();
+
+        for (var target = 0; target < ordered.Count; target++)
+        {
+            var current = _documentItems.IndexOf(ordered[target]);
             if (current != target)
                 _documentItems.Move(current, target);
         }
+
+        UpdateSectionSummaries();
     }
 
     private void SortByFileNameAsc_Click(object sender, RoutedEventArgs e)
@@ -1521,7 +1578,7 @@ public sealed partial class MainWindow : Window
             XamlRoot = Content.XamlRoot
         };
 
-        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        if (await Dialogs.DialogHost.ShowAsync(dialog) == ContentDialogResult.Primary)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusSettingsSaved");
 
@@ -1536,7 +1593,7 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = Content.XamlRoot
         };
-        await dialog.ShowAsync();
+        await Dialogs.DialogHost.ShowAsync(dialog);
     }
 
     /// <summary>
@@ -1584,7 +1641,7 @@ public sealed partial class MainWindow : Window
             CloseButtonText = _resourceLoader.GetString("DialogButtonOK"),
             XamlRoot = Content.XamlRoot
         };
-        await dialog.ShowAsync();
+        await Dialogs.DialogHost.ShowAsync(dialog);
     }
 
     #endregion
@@ -1597,10 +1654,7 @@ public sealed partial class MainWindow : Window
         _estimateTimer?.Stop();
         _estimateCts?.Cancel();
         App.Cleanup();
-        // Synchronous on purpose: the fire-and-forget async flush that was here raced the
-        // process exit, so the last entries - including anything about why it closed - could
-        // be lost exactly when they were most wanted.
-        Log.CloseAndFlush();
+        Services.AppLog.Shutdown();
     }
 
     private async void LogButton_Click(object sender, RoutedEventArgs e)

@@ -43,15 +43,7 @@ public class DocumentService
 
     private static readonly FrozenSet<string> _imageExtSet =
         ImageExtensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Maximum degree of parallelism for file loading operations
-    /// </summary>
     private const int MaxDegreeOfParallelism = 4;
-
-    /// <summary>
-    /// Thumbnail width for rendering
-    /// </summary>
     private const uint ThumbnailWidth = 200;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -84,7 +76,7 @@ public class DocumentService
     /// </remarks>
     /// <exception cref="FileNotFoundException">The file no longer exists.</exception>
     /// <exception cref="IOException">The file could not be read.</exception>
-    public async Task<List<DocumentItem>> CreateDocumentItemsAsync(string filePath, bool loadThumbnails = true)
+    public static async Task<List<DocumentItem>> CreateDocumentItemsAsync(string filePath, bool loadThumbnails = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
 
@@ -99,7 +91,7 @@ public class DocumentService
     /// Creates document items from a <see cref="StorageFile"/> with optional thumbnail loading.
     /// </summary>
     /// <inheritdoc cref="CreateDocumentItemsAsync(string, bool)" path="/exception"/>
-    public async Task<List<DocumentItem>> CreateDocumentItemsAsync(StorageFile file, bool loadThumbnails = true)
+    public static async Task<List<DocumentItem>> CreateDocumentItemsAsync(StorageFile file, bool loadThumbnails = true)
     {
         ArgumentNullException.ThrowIfNull(file);
 
@@ -107,7 +99,7 @@ public class DocumentService
         return await CreateItemsAsync(file.Path, file.Name, FormatFileSize(basicProperties.Size), loadThumbnails);
     }
 
-    private async Task<List<DocumentItem>> CreateItemsAsync(string filePath, string fileName, string fileSize, bool loadThumbnails)
+    private async static Task<List<DocumentItem>> CreateItemsAsync(string filePath, string fileName, string fileSize, bool loadThumbnails)
     {
         if (IsImageFile(filePath))
         {
@@ -133,10 +125,7 @@ public class DocumentService
         return [];
     }
 
-    /// <summary>
-    /// Batch load multiple files with progress reporting using parallel processing.
-    /// </summary>
-    public async Task<DocumentLoadResult> CreateDocumentItemsBatchAsync(
+    public static async Task<DocumentLoadResult> CreateDocumentItemsBatchAsync(
         IReadOnlyList<StorageFile> files,
         IProgress<(int current, int total, string fileName)>? progress = null,
         CancellationToken cancellationToken = default)
@@ -168,7 +157,7 @@ public class DocumentService
         return Collect(results, failures);
     }
 
-    public async Task<DocumentLoadResult> LoadDocumentsFromPathsAsync(IEnumerable<string> paths)
+    public static async Task<DocumentLoadResult> LoadDocumentsFromPathsAsync(IEnumerable<string> paths)
     {
         ArgumentNullException.ThrowIfNull(paths);
 
@@ -192,14 +181,6 @@ public class DocumentService
         return Collect(results, failures);
     }
 
-    /// <summary>
-    /// Runs one file's load, isolating its failure from the rest of the batch.
-    /// </summary>
-    /// <remarks>
-    /// This is the one place a general catch is right: the files are independent, a single
-    /// unreadable one should not cost the user the other ninety-nine, and the name is recorded
-    /// so the outcome is reported rather than hidden.
-    /// </remarks>
     private static async Task<List<DocumentItem>?> LoadOneAsync(Func<Task<List<DocumentItem>>> load, string name, ConcurrentBag<string> failures)
     {
         try
@@ -241,9 +222,6 @@ public class DocumentService
             pdfDocument = await PdfDocument.LoadFromFileAsync(file);
             pageCount = (int)pdfDocument.PageCount;
         }
-        // The OS renderer refuses some otherwise valid PDFs. PDFsharp can still count their
-        // pages, so this is a real fallback rather than an error being buried - and if that
-        // fails too the exception is allowed out.
         catch (Exception ex)
         {
             Log.Warning(ex, "Windows.Data.Pdf could not open {Path}; falling back to PDFsharp for the page count", pdfPath);
@@ -273,11 +251,6 @@ public class DocumentService
         return items;
     }
 
-    /// <summary>Counts pages without rendering.</summary>
-    /// <remarks>
-    /// This used to answer "1" for a file it could not open, which produced a document item
-    /// pointing at a page that did not exist.
-    /// </remarks>
     private static int GetPdfPageCount(string filePath)
     {
         using var document = PdfReader.Open(filePath, PdfDocumentOpenMode.Import);

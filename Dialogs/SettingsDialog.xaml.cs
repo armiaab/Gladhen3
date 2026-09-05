@@ -176,6 +176,6 @@ public sealed partial class SettingsDialog : ContentDialog
             CloseButtonText = _resourceLoader.GetString("DialogButtonOK"),
             XamlRoot = XamlRoot
         };
-        await dialog.ShowAsync();
+        await DialogHost.ShowAsync(dialog);
     }
 }

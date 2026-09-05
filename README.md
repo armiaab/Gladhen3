@@ -53,4 +53,10 @@ Right-click any supported file in Explorer:
 
 ## Installation
 
-[Microsoft Store](https://apps.microsoft.com/detail/9PKH3VS88B8Q?hl=en-us&gl=US&ocid=pdpshare)
+[Get it from the Microsoft Store](https://apps.microsoft.com/detail/9PKH3VS88B8Q?hl=en-us&gl=US&ocid=pdpshare)
+
+Install and run — there is nothing else to download. The .NET runtime is carried inside the
+package, and the Windows App Runtime is a framework dependency the Store installs for you.
+
+Requires Windows 10 version 1809 (build 17763) or newer, x64 or x86. The download is about
+43 MB for x64 and 40 MB for x86; the Store sends only the one your PC needs.

@@ -11,7 +11,6 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Windows.Storage;
 
 namespace Gladhen3;
 
@@ -30,7 +29,7 @@ public partial class App : Application
     {
         Instance = this;
         InitializeComponent();
-        InitializeLogger();
+        Services.AppLog.Initialize();
         HookGlobalExceptionHandlers();
     }
 
@@ -49,13 +48,13 @@ public partial class App : Application
         UnhandledException += (_, e) =>
         {
             Log.Fatal(e.Exception, "Unhandled exception on the UI thread");
-            Log.CloseAndFlush();
+            Services.AppLog.Shutdown();
         };
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             Log.Fatal(e.ExceptionObject as Exception, "Unhandled exception (terminating={Terminating})", e.IsTerminating);
-            Log.CloseAndFlush();
+            Services.AppLog.Shutdown();
         };
 
         TaskScheduler.UnobservedTaskException += (_, e) =>
@@ -64,33 +63,6 @@ public partial class App : Application
             Log.Error(e.Exception, "Unobserved task exception");
             e.SetObserved();
         };
-    }
-
-    private static void InitializeLogger()
-    {
-        try
-        {
-            var logFilePath = Path.Combine(
-            ApplicationData.Current.LocalFolder.Path,
-                    "Logs",
-              "gladhen3-.log");
-
-            Log.Logger = new LoggerConfiguration()
-             .MinimumLevel.Debug()
-             .WriteTo.File(logFilePath,
-             rollingInterval: RollingInterval.Day,
-           retainedFileCountLimit: 7,
-                outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
-       .CreateLogger();
-
-            Log.Information("Application started");
-        }
-        // Nothing else can be done about a logger that will not start - there is nowhere to
-        // report it to - and it must not stop the app from running.
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Failed to initialize logger: {ex.Message}");
-        }
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
@@ -104,6 +76,10 @@ public partial class App : Application
         {
             Log.Information("Another instance is running, sending files to existing instance");
             SendFilesToExistingInstance(filePaths);
+            // Environment.Exit runs no finalizers, so the log has to be flushed by hand here
+            // or this instance's entries - including any failure handing the files over -
+            // never reach the file.
+            Services.AppLog.Shutdown();
             Environment.Exit(0);
             return;
         }
@@ -218,15 +194,10 @@ public partial class App : Application
     {
         if (_mainWindow == null) return;
 
-        // Queued onto the dispatcher, so there is no caller left to propagate to.
-        try
-        {
-            _mainWindow.AddFilesFromPaths(filePaths);
-        }
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Could not add {Count} file(s) sent by another instance", filePaths.Count);
-        }
+        // No try/catch: AddFilesFromPaths is "async void", so it never throws back to this
+        // caller - an exception inside it goes to the synchronization context, not up the
+        // stack - and it already reports its own failures. Wrapping it caught nothing.
+        _mainWindow.AddFilesFromPaths(filePaths);
     }
 
     private void BringWindowToFront()

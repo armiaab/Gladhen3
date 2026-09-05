@@ -2,7 +2,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using Serilog;
-using Windows.Storage;
 
 namespace Gladhen3.Services;
 
@@ -19,7 +18,7 @@ public static class FileService
     /// <exception cref="System.ComponentModel.Win32Exception">No handler could open the folder.</exception>
     public static void OpenLogDirectory()
     {
-        var logDirectory = Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
+        var logDirectory = AppLog.Directory;
 
         Directory.CreateDirectory(logDirectory);
 

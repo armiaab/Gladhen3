@@ -5,6 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:selectors="using:Gladhen3.Selectors"
     Title="Gladhen3"
     Closed="Window_Closed"
     mc:Ignorable="d">
@@ -103,6 +104,19 @@
                     <MenuFlyoutItem x:Uid="MenuSortTypeAsc" Click="SortByTypeAsc_Click" />
                     <MenuFlyoutItem x:Uid="MenuSortTypeDesc" Click="SortByTypeDesc_Click" />
                 </MenuBarItem>
+                <MenuBarItem x:Uid="MenuSplit">
+                    <MenuFlyoutItem x:Uid="MenuSplitHere" Click="SplitHere_Click">
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="Enter" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Uid="MenuSplitBySource" Click="SplitBySource_Click" />
+                    <MenuFlyoutItem x:Uid="MenuSplitEveryN" Click="SplitEveryN_Click" />
+                    <MenuFlyoutItem x:Uid="MenuSplitIntoN" Click="SplitIntoN_Click" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Uid="MenuRemoveAllSplits" Click="RemoveAllSplits_Click" />
+                </MenuBarItem>
                 <MenuBarItem x:Uid="MenuTools">
                     <MenuFlyoutItem x:Uid="MenuSettings" Click="SettingsButton_Click" />
                     <MenuFlyoutItem x:Uid="MenuLogs" Click="LogButton_Click" />
@@ -192,6 +206,256 @@
             Margin="{StaticResource PageMargin}"
             Style="{StaticResource SurfaceBorderStyle}">
             <Grid>
+                <Grid.Resources>
+                    <!--
+                        Pages and section dividers share one collection so that the built-in
+                        drag reorder keeps working, so the row template is chosen per item.
+                    -->
+                    <DataTemplate x:Key="GridPageTemplate">
+                        <Border
+                            Width="140"
+                            Height="175"
+                            Margin="4"
+                            AutomationProperties.Name="{Binding DisplayName}"
+                            Style="{StaticResource ItemCardStyle}">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0" Style="{StaticResource ThumbnailWellStyle}">
+                                    <Grid>
+                                        <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                                        <FontIcon
+                                            FontSize="36"
+                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                            Glyph="{Binding TypeIcon}"
+                                            Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}}" />
+                                    </Grid>
+                                </Border>
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Margin="0,8,0,0"
+                                    HorizontalAlignment="Center"
+                                    FontSize="11"
+                                    Text="{Binding FileName}"
+                                    TextTrimming="CharacterEllipsis"
+                                    ToolTipService.ToolTip="{Binding DisplayName}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Margin="0,2,0,0"
+                                    HorizontalAlignment="Center"
+                                    Style="{StaticResource TertiaryTextStyle}"
+                                    Text="{Binding PageInfo}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <!--
+                        A wrapping grid cannot be made to break a line, so the divider reads as
+                        a card of its own rather than as a rule across the surface. The list
+                        view is the one that shows sections properly.
+                    -->
+                    <DataTemplate x:Key="GridSectionTemplate">
+                        <Border
+                            Width="140"
+                            Height="175"
+                            Margin="4"
+                            AutomationProperties.Name="{Binding SectionName}"
+                            Background="{ThemeResource AccentAcrylicBackgroundFillColorBaseBrush}"
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource CardCornerRadius}">
+                            <Grid Margin="8">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <Grid Grid.Row="0">
+                                    <FontIcon
+                                        HorizontalAlignment="Left"
+                                        FontSize="16"
+                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        Glyph="&#xE8B7;" />
+                                    <Button
+                                        x:Uid="TooltipRemoveSplit"
+                                        Padding="4"
+                                        HorizontalAlignment="Right"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="RemoveSectionBreak_Click">
+                                        <FontIcon FontSize="10" Glyph="&#xE711;" />
+                                    </Button>
+                                </Grid>
+
+                                <TextBox
+                                    Grid.Row="1"
+                                    Margin="0,6,0,0"
+                                    VerticalAlignment="Top"
+                                    x:Uid="SectionNameBox"
+                                    AcceptsReturn="False"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="12"
+                                    LostFocus="SectionName_LostFocus"
+                                    Text="{Binding SectionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    TextWrapping="Wrap" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Style="{StaticResource TertiaryTextStyle}"
+                                    Text="{Binding SectionSummary}" />
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Style="{StaticResource TertiaryTextStyle}"
+                                    Text="{Binding SectionEstimate}" />
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <DataTemplate x:Key="ListPageTemplate">
+                        <Grid Padding="8,6" AutomationProperties.Name="{Binding DisplayName}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="70" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border
+                                Grid.Column="0"
+                                Width="36"
+                                Height="44"
+                                Style="{StaticResource ThumbnailWellStyle}">
+                                <Grid>
+                                    <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                                    <FontIcon
+                                        FontSize="18"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Glyph="{Binding TypeIcon}"
+                                        Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}}" />
+                                </Grid>
+                            </Border>
+
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="10,0,0,0"
+                                VerticalAlignment="Center">
+                                <TextBlock
+                                    FontSize="13"
+                                    Text="{Binding FileName}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
+                                    ToolTipService.ToolTip="{Binding DisplayName}" />
+                                <TextBlock
+                                    Style="{StaticResource TertiaryTextStyle}"
+                                    Text="{Binding FilePath}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+
+                            <TextBlock
+                                Grid.Column="2"
+                                Margin="8,0"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SecondaryTextStyle}"
+                                Text="{Binding PageInfo}" />
+                            <TextBlock
+                                Grid.Column="3"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Style="{StaticResource SecondaryTextStyle}"
+                                Text="{Binding SizeInfo}" />
+                        </Grid>
+                    </DataTemplate>
+
+                    <!--
+                        The band that starts an output file. Its name is edited in place: the
+                        name IS the file name, so making the user open a dialog to set the one
+                        thing this row exists for would be perverse.
+                    -->
+                    <DataTemplate x:Key="ListSectionTemplate">
+                        <Border
+                            Margin="0,6,0,2"
+                            Padding="10,7"
+                            AutomationProperties.Name="{Binding SectionName}"
+                            Background="{ThemeResource AccentAcrylicBackgroundFillColorBaseBrush}"
+                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource SmallCornerRadius}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <FontIcon
+                                    Grid.Column="0"
+                                    VerticalAlignment="Center"
+                                    FontSize="15"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Glyph="&#xE8B7;" />
+
+                                <TextBox
+                                    x:Uid="SectionNameBox"
+                                    Grid.Column="1"
+                                    Margin="10,0,0,0"
+                                    VerticalAlignment="Center"
+                                    AcceptsReturn="False"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    FontSize="13"
+                                    FontWeight="SemiBold"
+                                    LostFocus="SectionName_LostFocus"
+                                    Text="{Binding SectionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                <TextBlock
+                                    Grid.Column="2"
+                                    Margin="8,0"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="{Binding SectionSummary}" />
+
+                                <TextBlock
+                                    Grid.Column="3"
+                                    Margin="8,0"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource SecondaryTextStyle}"
+                                    Text="{Binding SectionEstimate}" />
+
+                                <Button
+                                    x:Uid="TooltipRemoveSplit"
+                                    Grid.Column="4"
+                                    Padding="6"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="RemoveSectionBreak_Click">
+                                    <FontIcon FontSize="11" Glyph="&#xE711;" />
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+
+                    <selectors:DocumentTemplateSelector
+                        x:Key="GridTemplateSelector"
+                        PageTemplate="{StaticResource GridPageTemplate}"
+                        SectionBreakTemplate="{StaticResource GridSectionTemplate}" />
+                    <selectors:DocumentTemplateSelector
+                        x:Key="ListTemplateSelector"
+                        PageTemplate="{StaticResource ListPageTemplate}"
+                        SectionBreakTemplate="{StaticResource ListSectionTemplate}" />
+                </Grid.Resources>
+
                 <!--  Grid View  -->
                 <GridView
                     x:Name="DocumentGridView"
@@ -204,6 +468,9 @@
                     DragItemsStarting="DocumentView_DragItemsStarting"
                     DragOver="DocumentView_DragOver"
                     Drop="DocumentView_Drop"
+                    GotFocus="DocumentView_GotFocus"
+                    ItemTemplateSelector="{StaticResource GridTemplateSelector}"
+                    PreviewKeyDown="DocumentView_PreviewKeyDown"
                     ReorderMode="Enabled"
                     SelectionChanged="DocumentView_SelectionChanged"
                     SelectionMode="None">
@@ -220,50 +487,6 @@
                             <EntranceThemeTransition IsStaggeringEnabled="True" />
                         </TransitionCollection>
                     </GridView.ItemContainerTransitions>
-                    <GridView.ItemTemplate>
-                        <DataTemplate>
-                            <Border
-                                Width="140"
-                                Height="175"
-                                Margin="4"
-                                Style="{StaticResource ItemCardStyle}">
-                                <Grid Margin="8">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="*" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-
-                                    <Border Grid.Row="0" Style="{StaticResource ThumbnailWellStyle}">
-                                        <Grid>
-                                            <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
-                                            <FontIcon
-                                                FontSize="36"
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                Glyph="{Binding TypeIcon}"
-                                                Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}}" />
-                                        </Grid>
-                                    </Border>
-
-                                    <TextBlock
-                                        Grid.Row="1"
-                                        Margin="0,8,0,0"
-                                        HorizontalAlignment="Center"
-                                        FontSize="11"
-                                        Text="{Binding FileName}"
-                                        TextTrimming="CharacterEllipsis"
-                                        ToolTipService.ToolTip="{Binding DisplayName}" />
-
-                                    <TextBlock
-                                        Grid.Row="2"
-                                        Margin="0,2,0,0"
-                                        HorizontalAlignment="Center"
-                                        Style="{StaticResource TertiaryTextStyle}"
-                                        Text="{Binding PageInfo}" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </GridView.ItemTemplate>
                     <GridView.ItemsPanel>
                         <ItemsPanelTemplate>
                             <ItemsWrapGrid Orientation="Horizontal" />
@@ -283,10 +506,18 @@
                     DragItemsStarting="DocumentView_DragItemsStarting"
                     DragOver="DocumentView_DragOver"
                     Drop="DocumentView_Drop"
+                    GotFocus="DocumentView_GotFocus"
+                    ItemTemplateSelector="{StaticResource ListTemplateSelector}"
+                    PreviewKeyDown="DocumentView_PreviewKeyDown"
                     ReorderMode="Enabled"
                     SelectionChanged="DocumentView_SelectionChanged"
                     SelectionMode="None"
                     Visibility="Collapsed">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.ItemContainerTransitions>
                         <TransitionCollection>
                             <AddDeleteThemeTransition />
@@ -295,62 +526,6 @@
                             <EntranceThemeTransition IsStaggeringEnabled="True" />
                         </TransitionCollection>
                     </ListView.ItemContainerTransitions>
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
-                            <Grid Padding="8,6">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="44" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="70" />
-                                </Grid.ColumnDefinitions>
-
-                                <Border
-                                    Grid.Column="0"
-                                    Width="36"
-                                    Height="44"
-                                    Style="{StaticResource ThumbnailWellStyle}">
-                                    <Grid>
-                                        <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
-                                        <FontIcon
-                                            FontSize="18"
-                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                            Glyph="{Binding TypeIcon}"
-                                            Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}}" />
-                                    </Grid>
-                                </Border>
-
-                                <StackPanel
-                                    Grid.Column="1"
-                                    Margin="10,0,0,0"
-                                    VerticalAlignment="Center">
-                                    <TextBlock
-                                        FontSize="13"
-                                        Text="{Binding FileName}"
-                                        TextTrimming="CharacterEllipsis"
-                                        TextWrapping="NoWrap"
-                                        ToolTipService.ToolTip="{Binding DisplayName}" />
-                                    <TextBlock
-                                        Style="{StaticResource TertiaryTextStyle}"
-                                        Text="{Binding FilePath}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-
-                                <TextBlock
-                                    Grid.Column="2"
-                                    Margin="8,0"
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    Text="{Binding PageInfo}" />
-                                <TextBlock
-                                    Grid.Column="3"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Center"
-                                    Style="{StaticResource SecondaryTextStyle}"
-                                    Text="{Binding SizeInfo}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
                 </ListView>
 
                 <!--
@@ -469,6 +644,13 @@
                             smaller file, and until now nothing told the user whether the
                             setting they picked actually achieved one.
                         -->
+                        <!--  Only shown once there is more than one file to describe.  -->
+                        <TextBlock
+                            x:Name="OutputCountText"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SecondaryTextStyle}"
+                            Visibility="Collapsed" />
+
                         <StackPanel
                             x:Name="EstimatePanel"
                             x:Uid="TooltipEstimatedSize"

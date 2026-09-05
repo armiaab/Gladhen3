@@ -12,7 +12,16 @@
 		<RuntimeIdentifier Condition="'$(Platform)' == 'x86'">win-x86</RuntimeIdentifier>
 		<RuntimeIdentifier Condition="'$(Platform)' == 'x64'">win-x64</RuntimeIdentifier>
 		<RuntimeIdentifier Condition="'$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
-		<SelfContained>false</SelfContained>
+		<!-- DEPLOYMENT: this MUST stay true. .NET has no MSIX framework package, so a
+		     framework-dependent build makes the Store install succeed and then the app
+		     refuse to start until the user hunts down the .NET Desktop Runtime by hand.
+		     Only <PackageDependency> entries (i.e. Microsoft.WindowsAppRuntime) are
+		     resolved automatically, which is why the App SDK never had this problem.
+		     Carrying the runtime costs ~32 MB per package and removes the prerequisite. -->
+		<SelfContained>true</SelfContained>
+		<!-- The App SDK stays framework-dependent on purpose: it IS an MSIX framework
+		     package, so the Store provisions it for free. Bundling it would add ~30 MB
+		     to every package and buy nothing. -->
 		<WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
 		<UseWinUI>true</UseWinUI>
 		<EnableMsixTooling>true</EnableMsixTooling>
@@ -95,6 +104,11 @@
 		<PackageReference Include="Microsoft.WindowsAppSDK.AI" Version="2.3.4" ExcludeAssets="all" />
 		<PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.1.74" ExcludeAssets="all" />
 	</ItemGroup>
+	<!-- Only consulted when PublishTrimmed is on; harmless otherwise. Kept so that the
+	     breakage found while measuring trimming does not have to be rediscovered. -->
+	<ItemGroup>
+	  <TrimmerRootDescriptor Include="ILLink.Descriptors.xml" />
+	</ItemGroup>
 	<ItemGroup>
 	  <Folder Include="Interop\" />
 	</ItemGroup>
@@ -123,6 +137,14 @@
 	<!-- Publish Properties -->
 	<PropertyGroup>
 		<PublishReadyToRun>false</PublishReadyToRun>
+		<!-- Trimming works and is tempting - it takes the self-contained x64 package from
+		     43.18 MB to 10.70 MB - but it is left off deliberately. Every one of this
+		     window's 81 data bindings is a classic {Binding}, resolved by name at runtime,
+		     so the trimmer cannot see them. It is off by default because the failure mode
+		     is silent: a trimmed-away binding renders blank instead of throwing, in Release
+		     only, with nothing at build time to warn you. Turning it on is a one-line change
+		     (ILLink.Descriptors.xml already carries the roots the WinRT projection needs),
+		     but it needs a full pass over every screen each time the XAML changes. -->
 		<PublishTrimmed>false</PublishTrimmed>
 		<GenerateAppInstallerFile>False</GenerateAppInstallerFile>
 		<!-- Store uploads are signed by Microsoft after certification; local signing would
