@@ -44,9 +44,6 @@ public class AppSettings
         };
     }
 
-    /// <summary>
-    /// Gets custom width in points (72 points = 1 inch)
-    /// </summary>
     public double GetCustomWidthInPoints() => CustomSizeUnit switch
     {
         UnitSize.Millimetre => CustomWidth * MmToPoints,
@@ -55,9 +52,6 @@ public class AppSettings
         _ => CustomWidth * MmToPoints
     };
 
-    /// <summary>
-    /// Gets custom height in points (72 points = 1 inch)
-    /// </summary>
     public double GetCustomHeightInPoints() => CustomSizeUnit switch
     {
         UnitSize.Millimetre => CustomHeight * MmToPoints,
@@ -66,9 +60,6 @@ public class AppSettings
         _ => CustomHeight * MmToPoints
     };
 
-    /// <summary>
-    /// Gets the unit name for display
-    /// </summary>
     public string GetUnitName()
     {
         return CustomSizeUnit switch
@@ -80,14 +71,6 @@ public class AppSettings
         };
     }
 
-    /// <summary>
-    /// Loads persisted settings, falling back to defaults.
-    /// </summary>
-    /// <remarks>
-    /// Continuing with defaults is the correct behaviour here: a missing or corrupt settings
-    /// file must not stop the app from starting. Only the failures that mean exactly that are
-    /// handled - anything else is a defect and is allowed to surface.
-    /// </remarks>
     public static async Task LoadAsync()
     {
         try
@@ -112,13 +95,6 @@ public class AppSettings
         }
     }
 
-    /// <summary>Writes the current settings.</summary>
-    /// <remarks>
-    /// Failures propagate. Silently discarding them meant a user could change a setting, see
-    /// no error, and find it reverted on next launch.
-    /// </remarks>
-    /// <exception cref="IOException">The settings file could not be written.</exception>
-    /// <exception cref="UnauthorizedAccessException">The settings file could not be written.</exception>
     public static async Task SaveAsync()
     {
         var folder = ApplicationData.Current.LocalFolder;

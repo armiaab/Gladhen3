@@ -5,6 +5,7 @@ using Serilog;
 using Serilog.Events;
 using Windows.ApplicationModel;
 using Windows.Storage;
+using Windows.UI.Popups;
 
 namespace Gladhen3.Services;
 
@@ -26,7 +27,6 @@ public static class AppLog
     private const string OutputTemplate =
         "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
 
-    /// <summary>The folder log files are written to.</summary>
     public static string Directory { get; } =
         Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
 
@@ -34,7 +34,7 @@ public static class AppLog
     /// Configures the logger and records what is running, so a log a user sends back
     /// identifies its own build.
     /// </summary>
-    public static void Initialize()
+    public static async void Initialize()
     {
 #if DEBUG
         const LogEventLevel minimumLevel = LogEventLevel.Debug;
@@ -57,6 +57,9 @@ public static class AppLog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            //TODO: This is a bit of a chicken-and-egg problem: the log folder is in LocalFolder, which is
+            // not available until the app is initialized.
+            await new MessageDialog("Message: Failed to initialize logging.").ShowAsync();
             return;
         }
 

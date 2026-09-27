@@ -4,10 +4,6 @@ using System;
 
 namespace Gladhen3.Converters;
 
-/// <summary>
-/// Returns Visible when value is null, Collapsed otherwise.
-/// Used to show fallback icons when thumbnail is not available.
-/// </summary>
 public class NullToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, string language)
@@ -21,9 +17,6 @@ public class NullToVisibilityConverter : IValueConverter
     }
 }
 
-/// <summary>
-/// Returns Visible when value is not null, Collapsed otherwise.
-/// </summary>
 public class NotNullToVisibilityConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, string language)

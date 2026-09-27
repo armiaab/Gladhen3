@@ -20,28 +20,10 @@ using WinRT.Interop;
 
 namespace Gladhen3;
 
-/// <summary>
-/// Splitting one page list into several PDFs.
-/// </summary>
-/// <remarks>
-/// The page list stays flat and the dividers live in it as ordinary rows, so dragging a
-/// divider moves a split point and dragging a page past one re-files it - both handled by
-/// the reorder the list already had. Nothing here keeps a second ordering in step with the
-/// first, because there is no second ordering.
-/// </remarks>
 public sealed partial class MainWindow
 {
-    /// <summary>True once the list is cut into more than one output document.</summary>
     private bool HasSections => _documentItems.Any(d => d.Type == DocumentType.SectionBreak);
-
     private IEnumerable<DocumentItem> Pages => _documentItems.Where(d => d.Type != DocumentType.SectionBreak);
-
-    /// <summary>The last row that held keyboard focus.</summary>
-    /// <remarks>
-    /// Opening a menu takes focus away from the list, so by the time a Split command runs
-    /// nothing in the list is focused any more and asking the focus manager returns a menu
-    /// item. The row the user last put the caret on is what they still mean.
-    /// </remarks>
     private DocumentItem? _lastFocusedItem;
 
     #region Section maintenance
@@ -53,15 +35,6 @@ public sealed partial class MainWindow
         SectionName = name
     };
 
-    /// <summary>
-    /// Re-derives the bands after a structural change, and may insert a divider.
-    /// </summary>
-    /// <remarks>
-    /// Must not be called from inside <c>CollectionChanged</c>: the views are subscribed to
-    /// the same collection, and <see cref="System.Collections.ObjectModel.ObservableCollection{T}"/>
-    /// refuses a mutation raised from its own notification once more than one handler is
-    /// attached. <see cref="UpdateSectionSummaries"/> is the half that is safe there.
-    /// </remarks>
     private void RefreshSections()
     {
         EnsureLeadingBreak();
@@ -69,15 +42,6 @@ public sealed partial class MainWindow
         UpdateSectionSummaries();
     }
 
-    /// <summary>
-    /// Gives the pages above the first divider a band of their own.
-    /// </summary>
-    /// <remarks>
-    /// Dragging the topmost divider down the list is an ordinary thing to do, and it leaves a
-    /// run of pages that is still an output file but has nothing to name it. Rather than
-    /// inventing a nameless file at save time, the run gets a real divider it can be renamed
-    /// on. Nothing happens when the list is not split at all.
-    /// </remarks>
     private void EnsureLeadingBreak()
     {
         if (_documentItems.Count == 0) return;
@@ -87,15 +51,6 @@ public sealed partial class MainWindow
         _documentItems.Insert(0, CreateSectionBreak(string.Empty));
     }
 
-    /// <summary>
-    /// Names every band that has not been named yet, in one pass.
-    /// </summary>
-    /// <remarks>
-    /// One pass, and only from <see cref="RefreshSections"/>. Whether a section needs a part
-    /// number depends on what the other sections turned out to be, so naming each band as it
-    /// is inserted - which is what happens if this runs on every collection change - hands
-    /// every one of them the same "report 1". A name the user typed is never touched.
-    /// </remarks>
     private void NameUnnamedSections()
     {
         var sections = PdfSection.Split(_documentItems);
@@ -133,14 +88,6 @@ public sealed partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// Refreshes the page count on each band.
-    /// </summary>
-    /// <remarks>
-    /// Touches item properties only, never the collection, so unlike the rest of
-    /// <see cref="RefreshSections"/> this is safe to call from a CollectionChanged handler -
-    /// which is where it has to run, so the counts follow a drag as it happens.
-    /// </remarks>
     private void UpdateSectionSummaries()
     {
         foreach (var section in PdfSection.Split(_documentItems))
@@ -155,7 +102,6 @@ public sealed partial class MainWindow
         }
     }
 
-    /// <summary>Where the dividers sit, counted in pages rather than rows.</summary>
     private List<int> CurrentBreakPagePositions()
     {
         var positions = new List<int>();
@@ -179,14 +125,6 @@ public sealed partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// Rebuilds the dividers so that one starts at each of <paramref name="pagePositions"/>.
-    /// </summary>
-    /// <remarks>
-    /// Positions are page offsets, not row indices, so callers never have to reason about the
-    /// dividers they are themselves inserting. With the old ones gone the two coincide, and
-    /// inserting back to front keeps the earlier offsets valid.
-    /// </remarks>
     private void ApplyBreakPositions(IEnumerable<int> pagePositions)
     {
         var pageCount = Pages.Count();
@@ -206,14 +144,6 @@ public sealed partial class MainWindow
         UpdateUIState();
     }
 
-    /// <summary>
-    /// Walks up from a visual to the row it belongs to.
-    /// </summary>
-    /// <remarks>
-    /// Uses the visual tree, not <see cref="FrameworkElement.Parent"/>: inside a generated
-    /// item container the logical parent is frequently null, so a walk up Parent gives up
-    /// before it reaches the ListViewItem that carries the DocumentItem.
-    /// </remarks>
     private static DocumentItem? ItemFromVisual(object? source)
     {
         var current = source as DependencyObject;
@@ -230,7 +160,6 @@ public sealed partial class MainWindow
         return null;
     }
 
-    /// <summary>The row the user is acting on: the selection if there is one, else the focus.</summary>
     private DocumentItem? CurrentTargetItem()
     {
         var view = _isGridView ? (ListViewBase)DocumentGridView : DocumentListView;
@@ -406,13 +335,6 @@ public sealed partial class MainWindow
         StatusTextBlock.Text = _resourceLoader.GetString("StatusSplitRemoved");
     }
 
-    /// <summary>
-    /// Puts a name back when the box is left empty.
-    /// </summary>
-    /// <remarks>
-    /// An empty band would be saved as "Document 3", which is not what an empty box suggests
-    /// will happen. Filling it in on the way out makes the file name visible before the save.
-    /// </remarks>
     private void SectionName_LostFocus(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { DataContext: DocumentItem band }) return;
@@ -459,18 +381,6 @@ public sealed partial class MainWindow
 
     #region Keyboard reorder
 
-    /// <summary>
-    /// Moves the focused row with Ctrl+Shift+Up/Down.
-    /// </summary>
-    /// <remarks>
-    /// Dragging was the only way to change the order, which made it unreachable without a
-    /// mouse and painful over a long list. It matters more now than it did: with the list cut
-    /// into several documents, a row position decides which file it ends up in.
-    ///
-    /// This is the tunnelling PreviewKeyDown rather than KeyDown because a ListViewItem
-    /// consumes the arrow keys for focus navigation and marks them handled, so a bubbling
-    /// handler on the list never sees them.
-    /// </remarks>
     private void DocumentView_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (e.Key != VirtualKey.Up && e.Key != VirtualKey.Down) return;
@@ -537,15 +447,6 @@ public sealed partial class MainWindow
         return folder.Path;
     }
 
-    /// <summary>
-    /// Writes one PDF per section into a folder the user picks.
-    /// </summary>
-    /// <remarks>
-    /// Failures are collected rather than raised as they happen. One unwritable destination
-    /// out of ten must not abandon the other nine, and because every dialog in this app is
-    /// serialised behind <see cref="Dialogs.DialogHost"/>, reporting each one separately would
-    /// make the user dismiss a queue of them. There is exactly one summary at the end.
-    /// </remarks>
     private async Task SaveSectionsAsync(List<PdfSection> sections)
     {
         var folder = await PickOutputFolderAsync();
@@ -555,9 +456,7 @@ public sealed partial class MainWindow
 
         var existing = new List<string>();
         for (var i = 0; i < sections.Count; i++)
-        {
             if (File.Exists(Path.Combine(folder, names[i]))) existing.Add(names[i]);
-        }
 
         if (existing.Count > 0)
         {

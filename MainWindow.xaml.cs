@@ -25,7 +25,6 @@ namespace Gladhen3;
 public sealed partial class MainWindow : Window
 {
     private readonly ObservableCollection<DocumentItem> _documentItems = [];
-    private readonly DocumentService _documentService = new();
     private readonly PdfService _pdfService = new();
     private readonly Microsoft.Windows.ApplicationModel.Resources.ResourceLoader _resourceLoader = new();
     private bool _isGridView = true;
@@ -451,7 +450,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var loaded = await _documentService.CreateDocumentItemsBatchAsync(files, progress);
+            var loaded = await DocumentService.CreateDocumentItemsBatchAsync(files, progress);
 
             await AddItemsInBatchesAsync(loaded.Items);
             addedCount = loaded.Items.Count;
@@ -484,7 +483,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var loaded = await _documentService.LoadDocumentsFromPathsAsync(pathList);
+            var loaded = await DocumentService.LoadDocumentsFromPathsAsync(pathList);
 
             await AddItemsInBatchesAsync(loaded.Items);
 
@@ -1693,7 +1692,7 @@ public sealed partial class MainWindow : Window
 
             StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusReceivingFiles"), pathList.Count);
 
-            var loaded = await _documentService.LoadDocumentsFromPathsAsync(pathList);
+            var loaded = await DocumentService.LoadDocumentsFromPathsAsync(pathList);
 
             await AddItemsInBatchesAsync(loaded.Items);
 

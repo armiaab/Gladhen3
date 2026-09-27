@@ -17,14 +17,6 @@ using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
 
-/// <summary>
-/// The result of loading a batch of files.
-/// </summary>
-/// <param name="Items">Everything that loaded.</param>
-/// <param name="FailedFiles">
-/// Names of files that could not be read. One unreadable file should not abandon the rest of
-/// a batch, but the user still has to be told which of their files did not arrive.
-/// </param>
 public sealed record DocumentLoadResult(List<DocumentItem> Items, IReadOnlyList<string> FailedFiles);
 
 public class DocumentService
@@ -66,16 +58,6 @@ public class DocumentService
         return IsImageFile(path) || IsPdfFile(path);
     }
 
-    /// <summary>
-    /// Creates document items with thumbnail loading deferred for better performance.
-    /// </summary>
-    /// <remarks>
-    /// Failures propagate. This used to log and return an empty list, so a file that could not
-    /// be read was indistinguishable from a file with no pages, and the caller had no way to
-    /// tell the user anything had gone wrong.
-    /// </remarks>
-    /// <exception cref="FileNotFoundException">The file no longer exists.</exception>
-    /// <exception cref="IOException">The file could not be read.</exception>
     public static async Task<List<DocumentItem>> CreateDocumentItemsAsync(string filePath, bool loadThumbnails = true)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -87,10 +69,6 @@ public class DocumentService
         return await CreateItemsAsync(filePath, fileInfo.Name, FormatFileSize((ulong)fileInfo.Length), loadThumbnails);
     }
 
-    /// <summary>
-    /// Creates document items from a <see cref="StorageFile"/> with optional thumbnail loading.
-    /// </summary>
-    /// <inheritdoc cref="CreateDocumentItemsAsync(string, bool)" path="/exception"/>
     public static async Task<List<DocumentItem>> CreateDocumentItemsAsync(StorageFile file, bool loadThumbnails = true)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -257,13 +235,6 @@ public class DocumentService
         return document.PageCount;
     }
 
-    /// <summary>
-    /// Renders a page thumbnail, or returns null if it cannot be rendered.
-    /// </summary>
-    /// <remarks>
-    /// Thumbnails are decoration. A page that will not render still belongs in the list, so
-    /// this degrades to no image rather than failing the load.
-    /// </remarks>
     private static async Task<BitmapImage?> RenderPdfPageThumbnailAsync(PdfDocument pdfDocument, int pageIndex)
     {
         try
@@ -291,7 +262,6 @@ public class DocumentService
         }
     }
 
-    /// <inheritdoc cref="RenderPdfPageThumbnailAsync" path="/remarks"/>
     private static async Task<BitmapImage?> LoadImageThumbnailAsync(string filePath)
     {
         try

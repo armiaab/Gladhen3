@@ -153,9 +153,6 @@ public sealed partial class SettingsDialog : ContentDialog
             AppSettings.Current.CustomMarginBottom = BottomMarginBox.Value;
         }
 
-        // An "async void" handler is the end of the line: nothing can observe an exception
-        // thrown past this point, so it takes the process down. Settings not persisting is
-        // worth telling the user about, but it is not worth crashing over.
         try
         {
             await AppSettings.SaveAsync();

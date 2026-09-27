@@ -6,6 +6,7 @@ using Serilog;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO.Compression;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -19,15 +20,6 @@ namespace Gladhen3.Services;
 
 public class PdfService
 {
-    /// <summary>
-    /// Ceiling for image data being decoded/encoded at any one moment.
-    ///
-    /// Concurrency is derived from this instead of from ProcessorCount. Fanning out to one
-    /// image per core meant a 12-core machine held twelve full-resolution bitmaps at once,
-    /// and because every image in the document was also collected up front, peak working set
-    /// grew linearly with the document: 1.85 GB for a 148 MB scan. That is an out-of-memory
-    /// crash in the x86 package, which only has a 2 GB address space.
-    /// </summary>
     private const long InFlightBudgetBytes = 384L * 1024 * 1024;
 
     internal static int GetRasterDpi() => AppSettings.Current.ImageCompression switch
@@ -52,14 +44,6 @@ public class PdfService
         return Math.Clamp((int)(InFlightBudgetBytes / worstBytesPerImage), 1, Environment.ProcessorCount);
     }
 
-    /// <summary>Builds a PDF at <paramref name="outputPath"/> from <paramref name="items"/>.</summary>
-    /// <returns>What was written, including any items that had to be skipped.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="items"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="outputPath"/> is empty or blank.</exception>
-    /// <exception cref="PdfOperationException">
-    /// The PDF could not be written for a reason the user can act on; inspect
-    /// <see cref="PdfOperationException.Reason"/> rather than the message.
-    /// </exception>
     public PdfBuildResult CreatePdfFromDocuments(List<DocumentItem> items, string outputPath)
     {
         ArgumentNullException.ThrowIfNull(items);
@@ -88,16 +72,20 @@ public class PdfService
             return new PdfBuildResult(items.Count, []);
 
         using var output = new PdfDocument();
-        output.Options.CompressContentStreams = true;
+        output.Options.CompressContentStreams = false; // done in TerminateFlateStreams, correctly
         output.Options.NoCompression = false;
         output.Options.FlateEncodeMode = PdfFlateEncodeMode.BestCompression;
         output.Options.EnableCcittCompressionForBilevelImages = true;
-        output.Info.Title = "Created with Gladhen3";
-        output.Info.Creator = "Gladhen3";
 
         var sourceDocs = new Dictionary<string, PdfDocument>(StringComparer.OrdinalIgnoreCase);
         var sourceForms = new Dictionary<string, XPdfForm>(StringComparer.OrdinalIgnoreCase);
         var alreadyOptimised = new HashSet<int>();
+
+        // Where each source page ended up, so that bookmarks can be re-pointed at it once every
+        // page is in. Keyed by source and page number rather than by page object, because two
+        // different documents can hand out the same object id.
+        var importedPages = new Dictionary<(string Source, int PageNumber), ImportedPage>();
+        var imagePagesAdded = 0;
         var pagesAdded = 0;
         var skipped = new List<string>();
 
@@ -135,6 +123,7 @@ public class PdfService
                         {
                             if (AddImagePage(output, item.FilePath, encoded, useCustomPageSize))
                                 alreadyOptimised.Add(output.PageCount - 1);
+                            imagePagesAdded++;
                             pagesAdded++;
                         }
                         else if (item.Type == DocumentType.PdfPage)
@@ -160,7 +149,10 @@ public class PdfService
                                 continue;
                             }
 
-                            AddPdfPage(output, srcDoc.Pages[idx], useCustomPageSize, src, item.PageNumber, sourceForms);
+                            // Last one wins if the same page was added twice: a bookmark can only
+                            // point at one of them, and the later copy is the one further down.
+                            importedPages[(src, item.PageNumber)] =
+                                AddPdfPage(output, srcDoc.Pages[idx], useCustomPageSize, src, item.PageNumber, sourceForms);
                             pagesAdded++;
                         }
                     }
@@ -173,6 +165,11 @@ public class PdfService
 
                 encoded.Clear();
             }
+
+            // Inside the try on purpose: both of these read the source documents, and the
+            // finally below closes them.
+            CopyOutlines(output, sourceDocs, importedPages);
+            CopyDocumentInfo(output, sourceDocs, imagePagesAdded == 0 && sourceDocs.Count == 1);
         }
         finally
         {
@@ -197,6 +194,8 @@ public class PdfService
 
     private static void SaveDocument(PdfDocument document, string outputPath)
     {
+        TerminateFlateStreams(document);
+
         try
         {
             document.Save(outputPath);
@@ -209,6 +208,159 @@ public class PdfService
         {
             throw new PdfOperationException(PdfFailureReason.AccessDenied, $"'{Path.GetFileName(outputPath)}' could not be written.", ex) { Path = outputPath };
         }
+    }
+
+    /// <summary>
+    /// Terminates the flate streams PDFsharp leaves unfinished.
+    /// </summary>
+    /// <remarks>
+    /// PDFsharp 6.2.4 writes a zlib header and a complete deflate payload, then omits the
+    /// four-byte Adler-32 that ends a zlib stream. Readers that inflate raw deflate and stop at
+    /// its end marker - poppler, pdfium, Acrobat - never notice. Readers that expect the whole
+    /// zlib stream the PDF specification asks for report "premature end of data in flate
+    /// filter", once per stream: on an 859-page book that is 1718 complaints, which is what
+    /// MuPDF-based viewers print. Every file the library writes is affected, including ones it
+    /// authors from nothing, and 6.2.4 is the newest release.
+    ///
+    /// The four bytes are appended here rather than the stream re-compressed, so PDFsharp's own
+    /// compression is preserved exactly and the file grows by four bytes per stream. A stream
+    /// that already ends correctly is left untouched, which is how anything imported unchanged
+    /// from a source document comes through.
+    /// </remarks>
+    private static void TerminateFlateStreams(PdfDocument document)
+    {
+        var repaired = 0;
+        var compressed = 0;
+
+        foreach (var obj in document.Internals.GetAllObjects())
+        {
+            if (obj is not PdfDictionary dict || dict.Stream == null) continue;
+
+            // Not yet encoded. PDFsharp would deflate this during Save - after this pass, and
+            // without terminating it - so it is compressed here instead, where it can be done
+            // correctly. CompressContentStreams is off for exactly this reason.
+            if (!dict.Elements.ContainsKey("/Filter"))
+            {
+                // XMP is conventionally left readable so tools can find it without a codec.
+                if (dict.Elements.GetString("/Type") == "/Metadata") continue;
+
+                var plain = dict.Stream.Value;
+                if (plain is not { Length: > 0 }) continue;
+
+                byte[] deflated;
+                try
+                {
+                    deflated = ZlibCompress(plain);
+                }
+                catch (Exception ex)
+                {
+                    Log.Debug(ex, "Leaving a {Length}-byte stream uncompressed", plain.Length);
+                    continue;
+                }
+
+                // On a short stream the zlib wrapper costs more than it saves, and PDFsharp
+                // compressed these anyway - which is how a 40-byte page became 66 broken bytes.
+                if (deflated.Length >= plain.Length) continue;
+
+                dict.Stream.Value = deflated;
+                dict.Elements.SetName("/Filter", "/FlateDecode");
+                dict.Elements.SetInteger("/Length", deflated.Length);
+                compressed++;
+                continue;
+            }
+
+            // A single /FlateDecode only. A filter chain is someone else's arrangement and the
+            // arithmetic below does not describe it.
+            if (dict.Elements.GetName("/Filter") != "/FlateDecode") continue;
+
+            var raw = dict.Stream.Value;
+            if (raw is not { Length: > 2 }) continue;
+
+            // zlib header: low nibble 8 (deflate) and the two bytes a multiple of 31.
+            if ((raw[0] & 0x0F) != 8 || (((raw[0] << 8) | raw[1]) % 31) != 0) continue;
+
+            byte[] payload;
+            try
+            {
+                payload = InflateRawDeflate(raw);
+            }
+            // Per-item isolation: anything that is not a plain zlib header over a complete
+            // deflate payload is left exactly as it was.
+            catch (Exception ex)
+            {
+                Log.Debug(ex, "Leaving a {Length}-byte flate stream alone", raw.Length);
+                continue;
+            }
+
+            var checksum = Adler32(payload);
+
+            // Already terminated - the last four bytes are the checksum the payload implies.
+            if (raw.Length >= 6 &&
+                raw[^4] == (byte)(checksum >> 24) && raw[^3] == (byte)(checksum >> 16) &&
+                raw[^2] == (byte)(checksum >> 8) && raw[^1] == (byte)checksum)
+            {
+                continue;
+            }
+
+            var terminated = new byte[raw.Length + 4];
+            System.Buffer.BlockCopy(raw, 0, terminated, 0, raw.Length);
+            terminated[raw.Length] = (byte)(checksum >> 24);
+            terminated[raw.Length + 1] = (byte)(checksum >> 16);
+            terminated[raw.Length + 2] = (byte)(checksum >> 8);
+            terminated[raw.Length + 3] = (byte)checksum;
+
+            dict.Stream.Value = terminated;
+            dict.Elements.SetInteger("/Length", terminated.Length);
+            repaired++;
+        }
+
+        if (repaired > 0 || compressed > 0)
+            Log.Debug("Streams finalised: {Compressed} compressed, {Repaired} terminated", compressed, repaired);
+    }
+
+    private static byte[] ZlibCompress(byte[] data)
+    {
+        using var output = new MemoryStream();
+        using (var zlib = new ZLibStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+            zlib.Write(data, 0, data.Length);
+
+        return output.ToArray();
+    }
+
+    /// <summary>Inflates the deflate payload sitting behind a two-byte zlib header.</summary>
+    private static byte[] InflateRawDeflate(byte[] zlib)
+    {
+        using var input = new MemoryStream(zlib, 2, zlib.Length - 2, writable: false);
+        using var inflate = new DeflateStream(input, CompressionMode.Decompress);
+        using var output = new MemoryStream(zlib.Length * 4);
+        inflate.CopyTo(output);
+        return output.ToArray();
+    }
+
+    /// <summary>Adler-32 over the uncompressed bytes, as RFC 1950 requires at the stream's end.</summary>
+    private static uint Adler32(byte[] data)
+    {
+        const uint Modulus = 65521;
+        // Largest run that cannot overflow the accumulators before the modulo is applied.
+        const int MaxRun = 5552;
+
+        uint a = 1, b = 0;
+        var offset = 0;
+
+        while (offset < data.Length)
+        {
+            var run = Math.Min(MaxRun, data.Length - offset);
+            for (var i = 0; i < run; i++)
+            {
+                a += data[offset + i];
+                b += a;
+            }
+            a %= Modulus;
+            b %= Modulus;
+            offset += run;
+        }
+
+        return (b << 16) | a;
     }
 
     private static void DisposeAll<T>(IEnumerable<T> disposables) where T : IDisposable
@@ -574,7 +726,7 @@ public class PdfService
 
             if (doc.PageCount != expectedPages) return false;
 
-            doc.Options.CompressContentStreams = true;
+            doc.Options.CompressContentStreams = false; // done in TerminateFlateStreams, correctly
             doc.Options.NoCompression = false;
             doc.Options.FlateEncodeMode = PdfFlateEncodeMode.BestCompression;
             doc.Options.EnableCcittCompressionForBilevelImages = true;
@@ -646,12 +798,14 @@ public class PdfService
         }
     }
 
-    private static void AddPdfPage(PdfDocument output, PdfPage sourcePage, bool useCustomPageSize, string sourcePath, int pageNumber, Dictionary<string, XPdfForm> formCache)
+    /// <summary>Adds one source page to <paramref name="output"/>.</summary>
+    /// <returns>The page it became, and how its coordinate space moved to get there.</returns>
+    private static ImportedPage AddPdfPage(PdfDocument output, PdfPage sourcePage, bool useCustomPageSize, string sourcePath, int pageNumber, Dictionary<string, XPdfForm> formCache)
     {
         if (!useCustomPageSize && AppSettings.Current.Orientation == PdfPaperOrientation.Automatic)
         {
-            output.AddPage(sourcePage);
-            return;
+            // Imported whole, so its own coordinate space comes with it untouched.
+            return new ImportedPage(output.AddPage(sourcePage), PageTransform.Identity);
         }
 
         var srcW = sourcePage.Width.Point;
@@ -681,8 +835,236 @@ public class PdfService
         var scale = Math.Min(availW / srcW, availH / srcH);
         var drawW = srcW * scale;
         var drawH = srcH * scale;
+        var left = (pageW - drawW) / 2d;
+        var top = (pageH - drawH) / 2d;
 
-        gfx.DrawImage(form, (pageW - drawW) / 2d, (pageH - drawH) / 2d, drawW, drawH);
+        gfx.DrawImage(form, left, top, drawW, drawH);
+
+        // The content was scaled and centred, so anything addressing this page by coordinate has
+        // to move with it. XGraphics measures "top" down from the top edge while PDF user space
+        // counts up from the bottom, hence the flip on the vertical offset.
+        return new ImportedPage(page, new PageTransform(scale, left, pageH - top - drawH));
+    }
+
+    // ------------------------------------------------------- bookmarks and document identity
+
+    /// <summary>
+    /// How a source page's coordinate space was mapped onto the page that now holds it.
+    /// </summary>
+    /// <remarks>
+    /// Only ever anything but <see cref="Identity"/> when the page was redrawn at a different
+    /// size: the content is scaled and centred, so a destination written in the source page's
+    /// coordinates has to move the same way or the bookmark lands on the right page in the
+    /// wrong place. Importing a page whole leaves its space alone.
+    /// </remarks>
+    private readonly record struct PageTransform(double Scale, double OffsetX, double OffsetY)
+    {
+        public static PageTransform Identity => new(1d, 0d, 0d);
+
+        public double MapX(double x) => OffsetX + (x * Scale);
+
+        public double MapY(double y) => OffsetY + (y * Scale);
+    }
+
+    /// <summary>A page in the rebuilt document, and how its source got there.</summary>
+    private readonly record struct ImportedPage(PdfPage Page, PageTransform Transform);
+
+    /// <summary>A cyclic or absurd outline tree must not be able to recurse this into the stack.</summary>
+    private const int MaxOutlineDepth = 32;
+
+    /// <summary>
+    /// Copies the bookmarks of every source document onto the rebuilt one.
+    /// </summary>
+    /// <remarks>
+    /// Bookmarks hang off the document catalog rather than off any page, so a document
+    /// assembled out of imported pages starts with none of them - for a textbook that is most
+    /// of what made the file navigable, and it happened even when the user only changed the
+    /// page size. Destinations are re-pointed at the pages that actually made it into this
+    /// output, so a subset or one file of a split keeps the bookmarks that still have somewhere
+    /// to go and drops only the ones that do not.
+    /// </remarks>
+    private static void CopyOutlines(
+        PdfDocument output,
+        Dictionary<string, PdfDocument> sourceDocs,
+        Dictionary<(string Source, int PageNumber), ImportedPage> importedPages)
+    {
+        var copied = 0;
+
+        foreach (var (path, sourceDoc) in sourceDocs)
+        {
+            PdfOutlineCollection roots;
+            try
+            {
+                roots = sourceDoc.Outlines;
+            }
+            // Per-source isolation: an unreadable outline in one file is not a reason to lose
+            // the bookmarks of the others, or the pages that were just built.
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Could not read the bookmarks of {Path}", path);
+                continue;
+            }
+
+            if (roots.Count == 0) continue;
+
+            // A destination names a page object, but the output is keyed by page number, so the
+            // source's object ids have to be turned back into numbers first.
+            var pageNumbers = new Dictionary<PdfObjectID, int>();
+            for (var i = 0; i < sourceDoc.PageCount; i++)
+            {
+                var reference = sourceDoc.Pages[i].Reference;
+                if (reference != null) pageNumbers[reference.ObjectID] = i + 1;
+            }
+
+            copied += CopyOutlineLevel(roots, output.Outlines, path, pageNumbers, importedPages, 0);
+        }
+
+        if (copied > 0) Log.Information("Bookmarks carried over: {Count}", copied);
+    }
+
+    private static int CopyOutlineLevel(
+        PdfOutlineCollection source,
+        PdfOutlineCollection target,
+        string sourcePath,
+        Dictionary<PdfObjectID, int> pageNumbers,
+        Dictionary<(string Source, int PageNumber), ImportedPage> importedPages,
+        int depth)
+    {
+        if (depth >= MaxOutlineDepth)
+        {
+            Log.Warning("Stopped at bookmark depth {Depth} in {Path}: deeper than any real outline", depth, sourcePath);
+            return 0;
+        }
+
+        var copied = 0;
+
+        foreach (var entry in source)
+        {
+            var destination = ResolveOutlineTarget(entry, sourcePath, pageNumbers, importedPages);
+
+            if (destination is not { } imported)
+            {
+                // The page it pointed at is not in this document. Its children may still have
+                // somewhere to go, so they are lifted to this level rather than vanishing with
+                // a parent that happened to land on a removed page.
+                copied += CopyOutlineLevel(entry.Outlines, target, sourcePath, pageNumbers, importedPages, depth + 1);
+                continue;
+            }
+
+            var copy = target.Add(entry.Title ?? string.Empty, imported.Page, entry.Opened, entry.Style);
+            if (!entry.TextColor.IsEmpty) copy.TextColor = entry.TextColor;
+
+            ApplyDestination(copy, entry, imported.Transform);
+            copied++;
+
+            copied += CopyOutlineLevel(entry.Outlines, copy.Outlines, sourcePath, pageNumbers, importedPages, depth + 1);
+        }
+
+        return copied;
+    }
+
+    private static ImportedPage? ResolveOutlineTarget(
+        PdfOutline entry,
+        string sourcePath,
+        Dictionary<PdfObjectID, int> pageNumbers,
+        Dictionary<(string Source, int PageNumber), ImportedPage> importedPages)
+    {
+        PdfPage? destinationPage;
+        try
+        {
+            destinationPage = entry.DestinationPage;
+        }
+        // Per-item isolation: a named destination the reader cannot resolve, or an entry whose
+        // action does not go to a page at all. That one bookmark is dropped, not the rest.
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Bookmark '{Title}' in {Path} has no destination this can follow", entry.Title, sourcePath);
+            return null;
+        }
+
+        if (destinationPage?.Reference == null) return null;
+        if (!pageNumbers.TryGetValue(destinationPage.Reference.ObjectID, out var pageNumber)) return null;
+
+        return importedPages.TryGetValue((sourcePath, pageNumber), out var imported) ? imported : null;
+    }
+
+    /// <summary>
+    /// Carries the destination across, moving whatever coordinates it carries with the page.
+    /// </summary>
+    /// <remarks>
+    /// Only the fields the destination type actually defines are written: the others would put
+    /// numbers into slots that type does not have. Most outlines use /Fit, which is the whole
+    /// page and needs nothing.
+    /// </remarks>
+    private static void ApplyDestination(PdfOutline copy, PdfOutline source, PageTransform transform)
+    {
+        copy.PageDestinationType = source.PageDestinationType;
+
+        switch (source.PageDestinationType)
+        {
+            case PdfPageDestinationType.Xyz:
+                if (source.Left.HasValue) copy.Left = transform.MapX(source.Left.Value);
+                if (source.Top.HasValue) copy.Top = transform.MapY(source.Top.Value);
+                copy.Zoom = source.Zoom;
+                break;
+
+            case PdfPageDestinationType.FitH:
+            case PdfPageDestinationType.FitBH:
+                if (source.Top.HasValue) copy.Top = transform.MapY(source.Top.Value);
+                break;
+
+            case PdfPageDestinationType.FitV:
+            case PdfPageDestinationType.FitBV:
+                if (source.Left.HasValue) copy.Left = transform.MapX(source.Left.Value);
+                break;
+
+            case PdfPageDestinationType.FitR:
+                if (source.Left.HasValue) copy.Left = transform.MapX(source.Left.Value);
+                if (source.Top.HasValue) copy.Top = transform.MapY(source.Top.Value);
+                copy.Right = transform.MapX(source.Right);
+                copy.Bottom = transform.MapY(source.Bottom);
+                break;
+
+            default:
+                // Fit and FitB take the whole page and carry no coordinates.
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Gives the rebuilt document the identity of the one it came from.
+    /// </summary>
+    /// <remarks>
+    /// Only when every page came from a single PDF. A merge of three books has no one title,
+    /// and a viewer shows Info.Title in its window in place of the file name, so inventing one
+    /// is worse than leaving it empty - which is what the old fixed "Created with Gladhen3"
+    /// title did to every file this app ever wrote.
+    /// </remarks>
+    private static void CopyDocumentInfo(PdfDocument output, Dictionary<string, PdfDocument> sourceDocs, bool singleSource)
+    {
+        output.Info.Creator = "Gladhen3";
+
+        if (!singleSource) return;
+
+        try
+        {
+            var source = sourceDocs.Values.First().Info;
+
+            if (!string.IsNullOrEmpty(source.Title)) output.Info.Title = source.Title;
+            if (!string.IsNullOrEmpty(source.Author)) output.Info.Author = source.Author;
+            if (!string.IsNullOrEmpty(source.Subject)) output.Info.Subject = source.Subject;
+            if (!string.IsNullOrEmpty(source.Keywords)) output.Info.Keywords = source.Keywords;
+
+            // "Creator" means the application that made the original content, which is still
+            // whatever produced the source. This file's own producer is recorded separately.
+            if (!string.IsNullOrEmpty(source.Creator)) output.Info.Creator = source.Creator;
+        }
+        // The document information dictionary is optional and frequently malformed. Losing it
+        // is cosmetic; failing the save over it would not be.
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Could not carry the document information across");
+        }
     }
 
     internal static void CompressDocumentImages(PdfDocument doc, int targetDpi, double quality, HashSet<int>? skipPages = null)
@@ -796,14 +1178,6 @@ public class PdfService
         }
     }
 
-    /// <summary>Reads a name-valued entry, or null when it is absent or is not a name.</summary>
-    /// <remarks>
-    /// <c>Elements.GetName</c> throws <see cref="InvalidOperationException"/> for anything
-    /// that is not a name, so using it here meant a malformed or unusual dictionary was
-    /// handled by throwing and catching once per XObject - exceptions as control flow, and
-    /// paid for on a path that walks every image in the document. Asking what the value
-    /// actually is costs nothing and says the same thing.
-    /// </remarks>
     private static string? ReadName(PdfDictionary dict, string key) => dict.Elements.GetValue(key) switch
     {
         PdfName name => name.Value,
@@ -1008,9 +1382,6 @@ public class PdfService
             : WicEncodeJpeg(bitmap, quality, out _, out _);
     }
 
-    /// <summary>Decodes at (or just above) the requested long edge rather than at full
-    /// resolution. For JPEG this lets WIC scale in the DCT domain, which is both far cheaper
-    /// and far less memory than decoding everything and resampling afterwards.</summary>
     private static SoftwareBitmap? DecodeScaled(BitmapDecoder decoder, int maxLongEdge, BitmapAlphaMode alphaMode)
     {
         var transform = new BitmapTransform();
@@ -1042,11 +1413,6 @@ public class PdfService
         return DecodeScaled(decoder, maxLongEdge, BitmapAlphaMode.Ignore);
     }
 
-    /// <summary>
-    /// Wraps raw 8-bit grey or RGB samples (already Flate-decoded) as a BGRA bitmap,
-    /// box-averaging down to the target long edge on the way. Building the bitmap at full
-    /// resolution and scaling in the encoder allocated the full-size buffer for nothing.
-    /// </summary>
     private static SoftwareBitmap? RawToBitmap(byte[] samples, int width, int height, int components, int maxLongEdge)
     {
         if (samples == null || samples.LongLength < (long)width * height * components) return null;
@@ -1121,7 +1487,6 @@ public class PdfService
     private static byte[]? WicEncodePng(SoftwareBitmap bitmap, out int outWidth, out int outHeight)
         => WicEncode(BitmapEncoder.PngEncoderId, null, bitmap, out outWidth, out outHeight);
 
-    /// <summary>Encodes at the bitmap's own size; scaling already happened at decode time.</summary>
     private static byte[]? WicEncode(Guid encoderId, BitmapPropertySet? props, SoftwareBitmap bitmap, out int outWidth, out int outHeight)
     {
         outWidth = bitmap.PixelWidth;
@@ -1207,14 +1572,6 @@ public class PdfService
         return Math.Clamp(cap, 1, srcLong);
     }
 
-    /// <summary>
-    /// Fails early, before any work is done, if the destination cannot be written.
-    /// </summary>
-    /// <remarks>
-    /// This is a courtesy check, not a guarantee: the file can still be locked between here
-    /// and the save, which is why <see cref="SaveDocument"/> translates the same failures.
-    /// </remarks>
-    /// <exception cref="PdfOperationException">The destination is missing, locked, or denied.</exception>
     internal static void EnsureFileIsWritable(string filePath)
     {
         if (!File.Exists(filePath))
