@@ -16,11 +16,13 @@ a page for all of them.
 - **Rotate** pages left, right or 180°. A turned page is saved with its rotation flag
   (`/Rotate`), so nothing on it is redrawn or recompressed.
 - **Normalize orientation** turns every page so it reads the right way up: scans fed in
-  sideways or upside down, phone photos, PDFs assembled from turned pages. With nothing
-  selected it checks every page. A PDF's own text says which way it runs; pictures of pages are
-  read by Windows' built-in text recognition, every way round. A page it cannot judge, such as
-  a photo with no text, is left as it is, and *Select them* picks those out for a look. One
-  undo puts everything back.
+  sideways or upside down, phone photos, handwritten notes, PDFs assembled from turned pages.
+  With nothing selected it checks every page. A PDF's own text says which way it runs; pictures
+  of pages are judged by a small AI model that recognises a turned page without having to read
+  it, so it works on handwriting too. Windows' text recognition can back it up on pages the
+  model is unsure of. A page it cannot judge, such as a photo with no text, is left as it is,
+  and *Select them* picks those out for a look. One undo puts everything back. The model can be
+  changed in **Tools > Settings**; see [Orientation models](#orientation-models).
 - **Duplicate** pages, or **insert a blank page** the size of the page before it.
 - **Reverse** the order of the selected pages, or of every page. This fixes a stack that went
   through the scanner face down.
@@ -85,10 +87,11 @@ but never saved.
 Photos are placed the way they were taken: the orientation a phone records with each picture is
 honoured whether or not the image is compressed.
 
-*Normalize orientation* reads pictures with the text recognition that comes with most Windows
-display languages. Windows has none for Indonesian, so on a PC set up in Indonesian alone, add
-English (or any other language) in Settings > Time & language > Language & region. PDF pages
-with a text layer are checked without it.
+*Normalize orientation* runs its model on Windows ML, which is part of Windows, so it needs
+nothing installed. The optional back-up uses the text recognition that comes with most Windows
+display languages; Windows has none for Indonesian, so on a PC set up in Indonesian alone it is
+simply skipped, or can be added with English (or any other language) in Settings > Time &
+language > Language & region.
 
 The Explorer context menu appears on JPG, JPEG, PNG, BMP, GIF, TIFF, TIF and PDF files.
 
@@ -154,7 +157,8 @@ Install and run — there is nothing else to download. The .NET runtime is carri
 package, and the Windows App Runtime is a framework dependency the Store installs for you.
 
 Requires Windows 10 version 1809 (build 17763) or newer, x64 or x86. The download is about
-43 MB for x64 and 40 MB for x86; the Store sends only the one your PC needs.
+50 MB for x64 and 46 MB for x86, 6 MB of which is the orientation model; the Store sends only
+the one your PC needs.
 
 ## For developers
 
@@ -163,3 +167,56 @@ Requires Windows 10 version 1809 (build 17763) or newer, x64 or x86. The downloa
   a missing placeholder throws when the message is shown. ResXManager shows the gaps.
 - **Codecs**: see [`CodecSdk/README.md`](CodecSdk/README.md) for the interface, the checks
   Gladhen 3 runs on a codec's output, and a sample to start from.
+
+## Orientation models
+
+*Normalize orientation* judges pictures of pages with an image classifier that has four
+outputs, one per quarter turn. The built-in one is
+[PP-LCNet_x1_0_doc_ori](https://huggingface.co/PaddlePaddle/PP-LCNet_x1_0_doc_ori_onnx) from
+PaddlePaddle, trained on document images.
+
+**Using another model.** In **Tools > Settings**, choose **Add model…** and pick an `.onnx`
+file — for example
+[docTR's page orientation model](https://huggingface.co/Felix92/onnxtr-mobilenet-v3-small-page-orientation)
+also works. Before a model is added, Gladhen 3 shows it three sample pages at every quarter turn.
+That works out how the model wants its input (cropped, fitted or stretched; which
+normalisation; RGB or BGR) and what each of its outputs means, so a model whose "90" means
+anticlockwise works too. A model that cannot read the sample pages consistently is refused:
+one that turns pages the wrong way is worse than none.
+
+To skip the guessing, put a description beside the model with the same name
+(`my-model.json` for `my-model.onnx`). Its labels are still checked against the sample pages.
+
+```json
+{
+  "name": "My orientation model",
+  "width": 224,
+  "height": 224,
+  "resize": "Crop",
+  "cropShare": 0.875,
+  "channels": "RGB",
+  "scale": 0.00392156862745098,
+  "mean": [0.485, 0.456, 0.406],
+  "std": [0.229, 0.224, 0.225],
+  "labels": [0, 90, 180, 270],
+  "minimumConfidence": 0.7
+}
+```
+
+- `resize`: `Crop` scales the short side to `width / cropShare` and cuts out the centre;
+  `Fit` scales the long side to fit and pads with black; `Stretch` scales to the input exactly.
+- Each channel is fed as `(pixel × scale − mean) / std`.
+- `labels`: for each output, in order, how far the page it saw is turned clockwise.
+- A page is turned only when the model, shown it at all four turns, gives the same answer every
+  time and its averaged probability reaches `minimumConfidence`.
+
+Models run on Windows ML, so a model has to use an ONNX opset the PC's version of Windows
+supports. The built-in model uses opset 7, which every supported Windows version runs; newer
+models may need Windows 11.
+
+## Third-party
+
+- **PP-LCNet_x1_0_doc_ori** © PaddlePaddle Authors, Apache License 2.0. Shipped unchanged as
+  `Assets/Models/pp-lcnet-doc-ori.onnx`; the licence is beside it.
+- **PDFsharp** © empira Software GmbH, MIT License.
+- **Serilog** © Serilog Contributors, Apache License 2.0.

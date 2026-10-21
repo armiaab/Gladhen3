@@ -1055,7 +1055,7 @@ Double-click a page to open it in the viewer, drag pages to reorder them, and ri
     <value>{0} already upright</value>
   </data>
   <data name="NormalizeLeftAlone" xml:space="preserve">
-    <value>{0} unchanged (no text to go by)</value>
+    <value>{0} unchanged (couldn&apos;t tell which way up)</value>
   </data>
   <data name="NormalizeFailed" xml:space="preserve">
     <value>{0} couldn&apos;t be read</value>
@@ -1076,5 +1076,91 @@ Add a language that includes it, such as English, under Settings &gt; Time &amp;
   </data>
   <data name="NormalizeNotChecked" xml:space="preserve">
     <value>{0} not checked (no text recognition)</value>
+  </data>
+  <data name="SettingsDialog_NormalizeLabel.Text" xml:space="preserve">
+    <value>Normalize orientation reads pictures of pages with</value>
+  </data>
+  <data name="SettingsOrientationBuiltIn" xml:space="preserve">
+    <value>Built-in AI model (PP-LCNet)</value>
+  </data>
+  <data name="SettingsOrientationModelFormat" xml:space="preserve">
+    <value>AI model: {0}</value>
+  </data>
+  <data name="SettingsOrientationUnavailableFormat" xml:space="preserve">
+    <value>{0} (unavailable)</value>
+  </data>
+  <data name="SettingsOrientationTextRecognition" xml:space="preserve">
+    <value>Windows text recognition only</value>
+  </data>
+  <data name="SettingsOrientationTextRecognitionMissing" xml:space="preserve">
+    <value>Windows text recognition only (not installed)</value>
+  </data>
+  <data name="SettingsDialog_AddModel.Content" xml:space="preserve">
+    <value>Add model…</value>
+  </data>
+  <data name="SettingsDialog_RemoveModel.Content" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="SettingsDialog_ModelDocs.Content" xml:space="preserve">
+    <value>About models</value>
+  </data>
+  <data name="SettingsDialog_TextRecognitionFallback.Content" xml:space="preserve">
+    <value>When the model can&apos;t tell, also try Windows text recognition</value>
+  </data>
+  <data name="SettingsDialog_ModelNote.Text" xml:space="preserve">
+    <value>A model is an ONNX image classifier with four outputs, one per quarter turn, such as PP-LCNet_x1_0_doc_ori on Hugging Face. A model you add is first tried on sample pages, which also works out how to feed it; one that gets them wrong is not added.</value>
+  </data>
+  <data name="SettingsModelChecking" xml:space="preserve">
+    <value>Trying {0} on the sample pages…</value>
+  </data>
+  <data name="SettingsModelAdded" xml:space="preserve">
+    <value>Added {0}. It read every sample page the right way up.</value>
+  </data>
+  <data name="SettingsModelAddFailed" xml:space="preserve">
+    <value>{0} wasn&apos;t added: {1}</value>
+  </data>
+  <data name="SettingsModelRemoved" xml:space="preserve">
+    <value>Removed {0}.</value>
+  </data>
+  <data name="SettingsModelRemoveFailed" xml:space="preserve">
+    <value>{0} wasn&apos;t removed: {1}</value>
+  </data>
+  <data name="SettingsModelUnusable" xml:space="preserve">
+    <value>{0} can&apos;t be used: {1}</value>
+  </data>
+  <data name="ModelReason_NotFound" xml:space="preserve">
+    <value>the model file is missing. Add it again.</value>
+  </data>
+  <data name="ModelReason_LoadFailed" xml:space="preserve">
+    <value>Windows couldn&apos;t open it as an ONNX model.</value>
+  </data>
+  <data name="ModelReason_NeedsNewerWindows" xml:space="preserve">
+    <value>Windows couldn&apos;t run it. It uses ONNX opset {0}, which may need a newer version of Windows.</value>
+  </data>
+  <data name="ModelReason_WrongShape" xml:space="preserve">
+    <value>it doesn&apos;t take a colour picture and give four answers, one per quarter turn.</value>
+  </data>
+  <data name="ModelReason_FailedCheck" xml:space="preserve">
+    <value>it couldn&apos;t tell which way up the sample pages were, so it would turn pages the wrong way.</value>
+  </data>
+  <data name="ModelReason_AlreadyInstalled" xml:space="preserve">
+    <value>a model with that file name has already been added.</value>
+  </data>
+  <data name="ModelReason_InUse" xml:space="preserve">
+    <value>a check that is still running is using it.</value>
+  </data>
+  <data name="ModelReason_Unknown" xml:space="preserve">
+    <value>something went wrong. The log has the details.</value>
+  </data>
+  <data name="StatusNormalizeModelFailed" xml:space="preserve">
+    <value>Normalize didn&apos;t run: the orientation model can&apos;t be used</value>
+  </data>
+  <data name="DialogTitleModelUnavailable" xml:space="preserve">
+    <value>The orientation model can&apos;t be used</value>
+  </data>
+  <data name="DialogContentModelUnavailable" xml:space="preserve">
+    <value>No page was changed: {0}
+
+Choose another way of reading pages in Tools &gt; Settings.</value>
   </data>
 </root>

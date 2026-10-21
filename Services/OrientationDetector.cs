@@ -21,13 +21,16 @@ public enum OrientationEvidence
     /// <summary>The PDF's own text: which way the content stream draws it.</summary>
     TextLayer,
 
-    /// <summary>Reading the page as a picture, every way round.</summary>
+    /// <summary>An orientation model, looking at the page as a picture.</summary>
+    Model,
+
+    /// <summary>Windows' text recognition, reading the page as a picture every way round.</summary>
     Recognition,
 
-    /// <summary>Looked, and found no text to go by, or none that agreed with itself.</summary>
+    /// <summary>Looked, and could not tell: no text, or nothing that agreed with itself.</summary>
     Undecided,
 
-    /// <summary>The page needed reading as a picture, and Windows has no text recognizer installed.</summary>
+    /// <summary>The page needed text recognition, and Windows has none installed.</summary>
     NoRecognizer,
 
     /// <summary>The page could not be opened or read at all.</summary>
@@ -48,15 +51,32 @@ public sealed record PageToCheck(DocumentItem Item, DocumentType Type, string Pa
         => new(item, item.Type, item.SourcePdfPath ?? item.FilePath, item.PageNumber, item.Rotation);
 }
 
+/// <summary>How pictures of pages are judged.</summary>
+/// <param name="Method">
+/// <see cref="OrientationModels.BuiltInId"/>, an added model's id, or
+/// <see cref="OrientationModels.TextRecognitionId"/> for no model at all.
+/// </param>
+/// <param name="TextRecognitionFallback">
+/// When the model cannot tell, whether to try Windows' text recognition as well.
+/// </param>
+public sealed record OrientationOptions(string Method, bool TextRecognitionFallback)
+{
+    public static OrientationOptions Default { get; } = new(OrientationModels.BuiltInId, true);
+
+    public bool UsesModel => Method != OrientationModels.TextRecognitionId;
+}
+
 /// <summary>
 /// Works out which way up each page is meant to be read, so that "normalize" can turn every
 /// page upright in one go.
 /// </summary>
 /// <remarks>
 /// A PDF page with a text layer is answered from it: exact, and costs no more than parsing the
-/// page. Everything else - photos, scans, PDFs of scans - is rendered and read by Windows' own
-/// text recognizer at each of the four turns. Pages that give no clear answer are left alone:
-/// turning a page the wrong way is worse than not turning it.
+/// page. Everything else - photos, scans, PDFs of scans, handwriting - is looked at as a picture
+/// by an orientation model, a small image classifier that recognises how a page is turned
+/// without having to read it. Windows' text recognition can back the model up, or stand in for
+/// it. Pages that give no clear answer are left alone: turning a page the wrong way is worse
+/// than not turning it.
 /// </remarks>
 public sealed class OrientationDetector : IDisposable
 {
@@ -78,7 +98,7 @@ public sealed class OrientationDetector : IDisposable
     /// <summary>The long side of a picture handed to the recognizer. More is slower, not more accurate.</summary>
     private const int MaxEdge = 2400;
 
-    /// <summary>Recognizers run side by side, one per thread; past four the gain is small.</summary>
+    /// <summary>Pages checked side by side, one model session and recognizer each; past four the gain is small.</summary>
     private static int Lanes => Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
 
     // Shared by the lanes, so that a 200 MB scan is opened once rather than once per lane.
@@ -87,19 +107,35 @@ public sealed class OrientationDetector : IDisposable
     private readonly Dictionary<string, Windows.Data.Pdf.PdfDocument> _renderDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _renderGate = new(1, 1);
 
+    /// <summary>One lane's own tools: neither a model session nor a recognizer takes two pages at once.</summary>
+    /// <param name="TextRecognitionOnly">No model was asked for, so a missing recognizer is worth saying.</param>
+    internal sealed record Tools(ImageOrientationModel.Session? Model, OcrEngine? Recognizer, bool TextRecognitionOnly);
+
     /// <summary>Checks every page, reporting each finding as it is made, several pages at a time.</summary>
     /// <param name="found">Told about each page as soon as it is checked, in no particular order.</param>
-    public static async Task DetectAsync(IReadOnlyList<PageToCheck> pages, IProgress<(PageToCheck Page, OrientationFinding Finding)> found, CancellationToken cancellationToken)
+    /// <exception cref="OrientationModelException">
+    /// The chosen model cannot be loaded. Thrown before any page is checked.
+    /// </exception>
+    public static async Task DetectAsync(
+        IReadOnlyList<PageToCheck> pages,
+        OrientationOptions options,
+        IProgress<(PageToCheck Page, OrientationFinding Finding)> found,
+        CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(pages);
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(found);
 
+        using var model = options.UsesModel ? OrientationModels.Open(options.Method) : null;
         using var detector = new OrientationDetector();
         var next = -1;
 
         async Task RunLaneAsync()
         {
-            var recognizer = TextRecognitionOrientation.CreateEngine();
+            using var session = model?.CreateSession();
+            var recognizer = model == null || options.TextRecognitionFallback ? TextRecognitionOrientation.CreateEngine() : null;
+            var tools = new Tools(session, recognizer, model == null);
+
             int index;
             while ((index = Interlocked.Increment(ref next)) < pages.Count)
             {
@@ -109,7 +145,7 @@ public sealed class OrientationDetector : IDisposable
                 OrientationFinding finding;
                 try
                 {
-                    finding = await detector.DetectAsync(page, recognizer, cancellationToken);
+                    finding = await detector.DetectAsync(page, tools, cancellationToken);
                 }
                 // Per-item isolation: a page that cannot be opened is reported as such, and the
                 // rest are still checked.
@@ -127,45 +163,50 @@ public sealed class OrientationDetector : IDisposable
     }
 
     /// <summary>Checks one page.</summary>
-    /// <param name="recognizer">This lane's own recognizer, or null if Windows has none.</param>
-    internal async Task<OrientationFinding> DetectAsync(PageToCheck page, OcrEngine? recognizer, CancellationToken cancellationToken)
+    internal async Task<OrientationFinding> DetectAsync(PageToCheck page, Tools tools, CancellationToken cancellationToken)
     {
+        TextLayerReading? reading = null;
         switch (page.Type)
         {
             case DocumentType.PdfPage:
-            {
-                var reading = ReadTextLayer(page);
+                reading = ReadTextLayer(page);
                 if (reading != null && IsTrusted(reading) && reading.Turn(TrustedCharacters) is { } fromText)
                     return new OrientationFinding(fromText, OrientationEvidence.TextLayer);
-
-                if (recognizer != null)
-                {
-                    var picture = await RenderPdfPageAsync(page);
-                    if (await TextRecognitionOrientation.DetectAsync(recognizer, picture, page.Rotation, cancellationToken) is { } fromPicture)
-                        return new OrientationFinding(fromPicture, OrientationEvidence.Recognition);
-                }
-
-                // A few characters in agreement still beat a guess.
-                if (reading?.Turn(FallbackCharacters) is { } fromFewer)
-                    return new OrientationFinding(fromFewer, OrientationEvidence.TextLayer);
-
-                return new OrientationFinding(null, recognizer == null ? OrientationEvidence.NoRecognizer : OrientationEvidence.Undecided);
-            }
+                break;
 
             case DocumentType.Image:
-            {
-                if (recognizer == null) return new OrientationFinding(null, OrientationEvidence.NoRecognizer);
-
-                var picture = await DecodeImageAsync(page.Path);
-                return await TextRecognitionOrientation.DetectAsync(recognizer, picture, page.Rotation, cancellationToken) is { } turn
-                    ? new OrientationFinding(turn, OrientationEvidence.Recognition)
-                    : new OrientationFinding(null, OrientationEvidence.Undecided);
-            }
+                break;
 
             default:
                 // Blank pages and dividers have nothing to read.
                 return new OrientationFinding(null, OrientationEvidence.Undecided);
         }
+
+        if (tools.Model != null || tools.Recognizer != null)
+        {
+            using var picture = page.Type == DocumentType.PdfPage ? await RenderPdfPageAsync(page) : PagePicture.OpenImage(page.Path);
+            await picture.InitializeAsync();
+
+            if (tools.Model != null)
+            {
+                var read = tools.Model.Read(await picture.ForModelAsync(tools.Model.Spec));
+                if (read.Turn is { } fromModel) return new OrientationFinding(fromModel, OrientationEvidence.Model);
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (tools.Recognizer != null &&
+                await TextRecognitionOrientation.DetectAsync(tools.Recognizer, await picture.GrayAsync(MaxEdge), page.Rotation, cancellationToken) is { } fromText)
+            {
+                return new OrientationFinding(fromText, OrientationEvidence.Recognition);
+            }
+        }
+
+        // A few characters in agreement still beat a guess.
+        if (reading?.Turn(FallbackCharacters) is { } fromFewer)
+            return new OrientationFinding(fromFewer, OrientationEvidence.TextLayer);
+
+        return new OrientationFinding(null, tools.TextRecognitionOnly && tools.Recognizer == null ? OrientationEvidence.NoRecognizer : OrientationEvidence.Undecided);
     }
 
     /// <summary>
@@ -203,10 +244,11 @@ public sealed class OrientationDetector : IDisposable
         }
     }
 
-    /// <summary>The page as a viewer shows it - turned by its own /Rotate - in grey.</summary>
-    private async Task<GrayBitmap> RenderPdfPageAsync(PageToCheck page)
+    /// <summary>The page as a viewer shows it - turned by its own /Rotate.</summary>
+    private async Task<PagePicture> RenderPdfPageAsync(PageToCheck page)
     {
-        using var rendered = new InMemoryRandomAccessStream();
+        var rendered = new InMemoryRandomAccessStream();
+        var done = false;
 
         // Only the rendering itself is one at a time; decoding it is each lane's own business.
         await _renderGate.WaitAsync();
@@ -231,23 +273,47 @@ public sealed class OrientationDetector : IDisposable
                 DestinationHeight = (uint)Math.Max(1, Math.Round(pdfPage.Size.Height * scale)),
                 BitmapEncoderId = BitmapEncoder.BmpEncoderId
             });
+            done = true;
         }
         finally
         {
             _renderGate.Release();
+
+            // The stream becomes the caller's only once it is handed over.
+            if (!done) rendered.Dispose();
         }
 
-        var decoder = await BitmapDecoder.CreateAsync(rendered);
-        return await GrayBitmap.DecodeAsync(decoder, MaxEdge, ExifOrientationMode.IgnoreExifOrientation);
+        return new PagePicture(rendered, ExifOrientationMode.IgnoreExifOrientation);
     }
 
-    /// <summary>The photo as the viewer shows it, EXIF turn included, in grey.</summary>
-    private static async Task<GrayBitmap> DecodeImageAsync(string path)
+    /// <summary>
+    /// A page as a picture, decoded on demand: small and in colour for a model, large and grey
+    /// for text recognition. Rendering or opening it is the expensive part, so it is done once.
+    /// </summary>
+    private sealed class PagePicture(IRandomAccessStream stream, ExifOrientationMode exif, IDisposable? owner = null) : IDisposable
     {
-        using var stream = File.OpenRead(path);
-        using var ras = stream.AsRandomAccessStream();
-        var decoder = await BitmapDecoder.CreateAsync(ras);
-        return await GrayBitmap.DecodeAsync(decoder, MaxEdge, ExifOrientationMode.RespectExifOrientation);
+        private BitmapDecoder? _decoder;
+
+        /// <summary>A photo as the viewer shows it, EXIF turn included.</summary>
+        public static PagePicture OpenImage(string path)
+        {
+            var file = File.OpenRead(path);
+            return new PagePicture(file.AsRandomAccessStream(), ExifOrientationMode.RespectExifOrientation, file);
+        }
+
+        public async Task InitializeAsync() => _decoder = await BitmapDecoder.CreateAsync(stream);
+
+        public Task<BgraPicture> ForModelAsync(OrientationModelSpec spec) => BgraPicture.DecodeAsync(Decoder, spec, exif);
+
+        public Task<GrayBitmap> GrayAsync(int maxEdge) => GrayBitmap.DecodeAsync(Decoder, maxEdge, exif);
+
+        private BitmapDecoder Decoder => _decoder ?? throw new InvalidOperationException("InitializeAsync first.");
+
+        public void Dispose()
+        {
+            stream.Dispose();
+            owner?.Dispose();
+        }
     }
 
     public void Dispose()

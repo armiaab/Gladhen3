@@ -1055,7 +1055,7 @@ Klik dua kali sebuah halaman untuk membukanya di penampil, seret halaman untuk m
     <value>{0} sudah tegak</value>
   </data>
   <data name="NormalizeLeftAlone" xml:space="preserve">
-    <value>{0} tidak diubah (tidak ada teks sebagai acuan)</value>
+    <value>{0} tidak diubah (arahnya tidak dapat dipastikan)</value>
   </data>
   <data name="NormalizeFailed" xml:space="preserve">
     <value>{0} tidak dapat dibaca</value>
@@ -1076,5 +1076,91 @@ Tambahkan bahasa yang menyertakannya, misalnya bahasa Inggris, di Pengaturan &gt
   </data>
   <data name="NormalizeNotChecked" xml:space="preserve">
     <value>{0} tidak diperiksa (tidak ada pengenalan teks)</value>
+  </data>
+  <data name="SettingsDialog_NormalizeLabel.Text" xml:space="preserve">
+    <value>Normalkan orientasi membaca gambar halaman dengan</value>
+  </data>
+  <data name="SettingsOrientationBuiltIn" xml:space="preserve">
+    <value>Model AI bawaan (PP-LCNet)</value>
+  </data>
+  <data name="SettingsOrientationModelFormat" xml:space="preserve">
+    <value>Model AI: {0}</value>
+  </data>
+  <data name="SettingsOrientationUnavailableFormat" xml:space="preserve">
+    <value>{0} (tidak tersedia)</value>
+  </data>
+  <data name="SettingsOrientationTextRecognition" xml:space="preserve">
+    <value>Pengenalan teks Windows saja</value>
+  </data>
+  <data name="SettingsOrientationTextRecognitionMissing" xml:space="preserve">
+    <value>Pengenalan teks Windows saja (belum terpasang)</value>
+  </data>
+  <data name="SettingsDialog_AddModel.Content" xml:space="preserve">
+    <value>Tambah model…</value>
+  </data>
+  <data name="SettingsDialog_RemoveModel.Content" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="SettingsDialog_ModelDocs.Content" xml:space="preserve">
+    <value>Tentang model</value>
+  </data>
+  <data name="SettingsDialog_TextRecognitionFallback.Content" xml:space="preserve">
+    <value>Jika model tidak yakin, coba juga pengenalan teks Windows</value>
+  </data>
+  <data name="SettingsDialog_ModelNote.Text" xml:space="preserve">
+    <value>Model adalah pengklasifikasi gambar ONNX dengan empat keluaran, satu untuk setiap putaran seperempat, misalnya PP-LCNet_x1_0_doc_ori di Hugging Face. Model yang Anda tambahkan dicoba dulu pada halaman contoh, yang sekaligus menentukan cara memberinya masukan; model yang salah menebak tidak ditambahkan.</value>
+  </data>
+  <data name="SettingsModelChecking" xml:space="preserve">
+    <value>Mencoba {0} pada halaman contoh…</value>
+  </data>
+  <data name="SettingsModelAdded" xml:space="preserve">
+    <value>{0} ditambahkan. Model ini membaca setiap halaman contoh dengan arah yang benar.</value>
+  </data>
+  <data name="SettingsModelAddFailed" xml:space="preserve">
+    <value>{0} tidak ditambahkan: {1}</value>
+  </data>
+  <data name="SettingsModelRemoved" xml:space="preserve">
+    <value>{0} dihapus.</value>
+  </data>
+  <data name="SettingsModelRemoveFailed" xml:space="preserve">
+    <value>{0} tidak dihapus: {1}</value>
+  </data>
+  <data name="SettingsModelUnusable" xml:space="preserve">
+    <value>{0} tidak dapat digunakan: {1}</value>
+  </data>
+  <data name="ModelReason_NotFound" xml:space="preserve">
+    <value>file model tidak ditemukan. Tambahkan lagi.</value>
+  </data>
+  <data name="ModelReason_LoadFailed" xml:space="preserve">
+    <value>Windows tidak dapat membukanya sebagai model ONNX.</value>
+  </data>
+  <data name="ModelReason_NeedsNewerWindows" xml:space="preserve">
+    <value>Windows tidak dapat menjalankannya. Model ini memakai ONNX opset {0}, yang mungkin memerlukan versi Windows yang lebih baru.</value>
+  </data>
+  <data name="ModelReason_WrongShape" xml:space="preserve">
+    <value>model ini tidak menerima gambar berwarna dan memberi empat jawaban, satu untuk setiap putaran seperempat.</value>
+  </data>
+  <data name="ModelReason_FailedCheck" xml:space="preserve">
+    <value>model ini tidak dapat menentukan arah halaman contoh, sehingga bisa memutar halaman ke arah yang salah.</value>
+  </data>
+  <data name="ModelReason_AlreadyInstalled" xml:space="preserve">
+    <value>model dengan nama file itu sudah ditambahkan.</value>
+  </data>
+  <data name="ModelReason_InUse" xml:space="preserve">
+    <value>model sedang dipakai oleh pemeriksaan yang masih berjalan.</value>
+  </data>
+  <data name="ModelReason_Unknown" xml:space="preserve">
+    <value>terjadi kesalahan. Detailnya ada di log.</value>
+  </data>
+  <data name="StatusNormalizeModelFailed" xml:space="preserve">
+    <value>Normalisasi tidak berjalan: model orientasi tidak dapat digunakan</value>
+  </data>
+  <data name="DialogTitleModelUnavailable" xml:space="preserve">
+    <value>Model orientasi tidak dapat digunakan</value>
+  </data>
+  <data name="DialogContentModelUnavailable" xml:space="preserve">
+    <value>Tidak ada halaman yang diubah: {0}
+
+Pilih cara lain untuk membaca halaman di Alat &gt; Pengaturan.</value>
   </data>
 </root>

@@ -18,6 +18,15 @@ public class AppSettings
     /// name of a codec DLL. See <see cref="Services.ImageCodecs"/>.
     /// </summary>
     public string ImageCodec { get; set; } = Services.ImageCodecs.JpegId;
+
+    /// <summary>
+    /// How normalize judges pictures of pages: the built-in model, "model:" and the file name of
+    /// one the user added, or text recognition alone. See <see cref="Services.OrientationModels"/>.
+    /// </summary>
+    public string OrientationMethod { get; set; } = Services.OrientationModels.BuiltInId;
+
+    /// <summary>Whether Windows' text recognition gets a say on pages the model cannot judge.</summary>
+    public bool OrientationTextRecognitionFallback { get; set; } = true;
     public double CustomWidth { get; set; } = 210;
     public double CustomHeight { get; set; } = 297;
     public UnitSize CustomSizeUnit { get; set; } = UnitSize.Millimetre;

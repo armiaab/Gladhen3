@@ -35,6 +35,8 @@ public sealed partial class SettingsDialog : ContentDialog
         MarginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
         CompressionCombo.SelectedIndex = (int)AppSettings.Current.ImageCompression;
         PopulateMethods(AppSettings.Current.ImageCodec);
+        PopulateOrientationMethods(AppSettings.Current.OrientationMethod);
+        TextRecognitionFallbackCheck.IsChecked = AppSettings.Current.OrientationTextRecognitionFallback;
 
         // Matched on the language alone: Windows stores "id-ID" back as "id".
         var language = PrimarySubtag(Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride);
@@ -296,6 +298,168 @@ public sealed partial class SettingsDialog : ContentDialog
 
     #endregion
 
+    #region Normalize
+
+    /// <summary>Fills the list: the built-in model, every added model, then text recognition.</summary>
+    private void PopulateOrientationMethods(string selectedId)
+    {
+        OrientationMethodCombo.Items.Clear();
+        OrientationMethodCombo.Items.Add(new ComboBoxItem { Content = _resourceLoader.GetString("SettingsOrientationBuiltIn"), Tag = OrientationModels.BuiltInId });
+
+        var models = new List<OrientationModelInfo>();
+        try
+        {
+            models.AddRange(OrientationModels.List());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Could not read the model folder {Path}", OrientationModels.ModelDirectory);
+        }
+
+        // A model chosen earlier but since deleted from outside the app is still shown, marked,
+        // so that the setting does not quietly turn into the built-in one behind the user's back.
+        if (OrientationModels.IsModel(selectedId) && !models.Exists(m => m.Id == selectedId))
+            models.Add(new OrientationModelInfo(selectedId, selectedId[OrientationModels.ModelPrefix.Length..], null, OrientationModelFailureReason.NotFound));
+
+        foreach (var model in models)
+        {
+            var item = new ComboBoxItem
+            {
+                Content = model.LoadFailure == null
+                    ? string.Format(_resourceLoader.GetString("SettingsOrientationModelFormat"), model.Name)
+                    : string.Format(_resourceLoader.GetString("SettingsOrientationUnavailableFormat"), model.FileName),
+                Tag = model.Id,
+                DataContext = model
+            };
+            ToolTipService.SetToolTip(item, model.FileName);
+            OrientationMethodCombo.Items.Add(item);
+        }
+
+        OrientationMethodCombo.Items.Add(new ComboBoxItem
+        {
+            Content = _resourceLoader.GetString(TextRecognitionOrientation.IsAvailable ? "SettingsOrientationTextRecognition" : "SettingsOrientationTextRecognitionMissing"),
+            Tag = OrientationModels.TextRecognitionId
+        });
+
+        OrientationMethodCombo.SelectedItem = OrientationMethodCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == selectedId)
+            ?? OrientationMethodCombo.Items[0];
+    }
+
+    private OrientationModelInfo? SelectedModel => (OrientationMethodCombo.SelectedItem as ComboBoxItem)?.DataContext as OrientationModelInfo;
+
+    private string SelectedOrientationMethod => (OrientationMethodCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OrientationModels.BuiltInId;
+
+    private void OrientationMethodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var model = SelectedModel;
+        RemoveModelButton.IsEnabled = model != null;
+
+        // Falling back to text recognition means nothing when text recognition is the method.
+        TextRecognitionFallbackCheck.IsEnabled = SelectedOrientationMethod != OrientationModels.TextRecognitionId;
+
+        if (model?.LoadFailure is { } failure)
+        {
+            ShowModelMessage(InfoBarSeverity.Warning, string.Format(
+                _resourceLoader.GetString("SettingsModelUnusable"), model.FileName, OrientationModelText.Reason(_resourceLoader, failure)));
+        }
+        else if (ModelInfoBar.Severity == InfoBarSeverity.Warning)
+        {
+            ModelInfoBar.IsOpen = false;
+        }
+    }
+
+    private async void AddModel_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker { ViewMode = PickerViewMode.List, SuggestedStartLocation = PickerLocationId.Downloads };
+        picker.FileTypeFilter.Add(".onnx");
+        InitializeWithWindow.Initialize(picker, _ownerWindow);
+
+        var fileName = string.Empty;
+
+        // Event-handler boundary: async void, and every outcome is reported in the dialog itself
+        // - a second ContentDialog cannot open while this one is up.
+        try
+        {
+            var file = await picker.PickSingleFileAsync();
+            if (file == null) return;
+            fileName = file.Name;
+
+            // Trying a model on the sample pages every way it might want feeding takes a few seconds.
+            AddModelButton.IsEnabled = false;
+            ModelProgress.IsActive = true;
+            ModelProgress.Visibility = Visibility.Visible;
+            ShowModelMessage(InfoBarSeverity.Informational, string.Format(_resourceLoader.GetString("SettingsModelChecking"), fileName));
+
+            var installed = await Task.Run(() => OrientationModels.InstallAsync(file.Path));
+
+            PopulateOrientationMethods(installed.Id);
+            ShowModelMessage(InfoBarSeverity.Success, string.Format(_resourceLoader.GetString("SettingsModelAdded"), installed.Name));
+        }
+        catch (OrientationModelException ex)
+        {
+            Log.Warning(ex, "Orientation model {File} refused ({Reason})", fileName, ex.Reason);
+            ShowModelMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsModelAddFailed"), fileName, OrientationModelText.Reason(_resourceLoader, ex)));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not add orientation model {File}", fileName);
+            ShowModelMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsModelAddFailed"), fileName, OrientationModelText.Reason(_resourceLoader, OrientationModelFailureReason.Unknown)));
+        }
+        finally
+        {
+            AddModelButton.IsEnabled = true;
+            ModelProgress.IsActive = false;
+            ModelProgress.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private async void RemoveModel_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedModel is not { } model) return;
+
+        var name = model.Name ?? model.FileName;
+
+        // Event-handler boundary, as above.
+        try
+        {
+            OrientationModels.Uninstall(model.Id);
+
+            // The saved method goes with its model, whether or not OK is pressed: left pointing
+            // at a file that no longer exists, normalize would refuse to run.
+            if (AppSettings.Current.OrientationMethod == model.Id)
+            {
+                AppSettings.Current.OrientationMethod = OrientationModels.BuiltInId;
+                await AppSettings.SaveAsync();
+            }
+
+            PopulateOrientationMethods(OrientationModels.BuiltInId);
+            ShowModelMessage(InfoBarSeverity.Success, string.Format(_resourceLoader.GetString("SettingsModelRemoved"), name));
+        }
+        catch (OrientationModelException ex)
+        {
+            Log.Warning(ex, "Orientation model {File} not removed ({Reason})", model.FileName, ex.Reason);
+            ShowModelMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsModelRemoveFailed"), name, OrientationModelText.Reason(_resourceLoader, ex)));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not remove orientation model {File}", model.FileName);
+            ShowModelMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsModelRemoveFailed"), name, OrientationModelText.Reason(_resourceLoader, OrientationModelFailureReason.Unknown)));
+        }
+    }
+
+    private void ShowModelMessage(InfoBarSeverity severity, string message)
+    {
+        ModelInfoBar.Severity = severity;
+        ModelInfoBar.Message = message;
+        ModelInfoBar.IsOpen = true;
+    }
+
+    #endregion
+
     private void PresetA4_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 0; WidthBox.Value = 210; HeightBox.Value = 297; }
     private void PresetLetter_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 1; WidthBox.Value = 8.5; HeightBox.Value = 11; }
     private void PresetA5_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 0; WidthBox.Value = 148; HeightBox.Value = 210; }
@@ -308,6 +472,8 @@ public sealed partial class SettingsDialog : ContentDialog
         AppSettings.Current.Margin = (PdfPageMargin)MarginCombo.SelectedIndex;
         AppSettings.Current.ImageCompression = (PdfImageCompression)CompressionCombo.SelectedIndex;
         AppSettings.Current.ImageCodec = (MethodCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? ImageCodecs.JpegId;
+        AppSettings.Current.OrientationMethod = SelectedOrientationMethod;
+        AppSettings.Current.OrientationTextRecognitionFallback = TextRecognitionFallbackCheck.IsChecked == true;
 
         // Kept by Windows for this app, not in the settings file: it has to be in force before
         // the first window is built, which is before the settings file has been read. An empty

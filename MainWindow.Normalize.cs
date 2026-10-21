@@ -108,14 +108,24 @@ public sealed partial class MainWindow
         StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusNormalizing"), 0, pages.Count);
         Log.Information("Normalize: checking {Count} page(s)", pages.Count);
 
+        var options = new OrientationOptions(AppSettings.Current.OrientationMethod, AppSettings.Current.OrientationTextRecognitionFallback);
+        OrientationModelException? modelFailure = null;
+
         bool stopped;
         try
         {
-            await Task.Run(() => OrientationDetector.DetectAsync(pages, new Tee(results, found), cts.Token), cts.Token);
+            await Task.Run(() => OrientationDetector.DetectAsync(pages, options, new Tee(results, found), cts.Token), cts.Token);
         }
         catch (OperationCanceledException)
         {
             // Stopped; the token says so below.
+        }
+        // The chosen model would not load, so no page was checked. Said once, here, rather
+        // than as a failure on every page.
+        catch (OrientationModelException ex)
+        {
+            Log.Warning(ex, "Normalize: the orientation model {Method} could not be used ({Reason})", options.Method, ex.Reason);
+            modelFailure = ex;
         }
         finally
         {
@@ -149,6 +159,15 @@ public sealed partial class MainWindow
         Log.Information("Normalize: {Handled}/{Count} checked, {Summary}{Stopped}; {Evidence}",
             handled.Count, pages.Count, summary, stopped ? ", stopped" : "",
             string.Join(", ", handled.Values.GroupBy(f => f.Evidence).Select(g => $"{g.Key}={g.Count()}")));
+
+        if (modelFailure != null)
+        {
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusNormalizeModelFailed");
+            await ShowDialogAsync(
+                _resourceLoader.GetString("DialogTitleModelUnavailable"),
+                string.Format(_resourceLoader.GetString("DialogContentModelUnavailable"), Dialogs.OrientationModelText.Reason(_resourceLoader, modelFailure)));
+            return;
+        }
 
         StatusTextBlock.Text = DescribeNormalized(summary, handled.Count, pages.Count, stopped);
         OfferLeftAlone(handled.Where(h => h.Value.Turn == null).Select(h => h.Key.Item));
@@ -252,9 +271,9 @@ public sealed partial class MainWindow
     /// recognizer - and where to get one.
     /// </summary>
     /// <remarks>
-    /// Windows has none for Indonesian, so a PC set up in Indonesian alone has none at all,
-    /// and the pages that most need turning - scans and phone photos - are exactly the ones
-    /// this leaves out. Adding English, or any language that comes with text recognition, fixes it.
+    /// Only when text recognition was chosen instead of a model: Windows has none for Indonesian,
+    /// so a PC set up in Indonesian alone has none at all. Adding English, or any language that
+    /// comes with text recognition, fixes it - or going back to the model, which needs neither.
     /// </remarks>
     private async Task OfferTextRecognitionAsync(int pages)
     {

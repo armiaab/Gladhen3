@@ -70,6 +70,18 @@
 		<Content Include="Assets\app.ico">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
+		<!-- Normalize orientation: PP-LCNet_x1_0_doc_ori (Apache-2.0, ONNX opset 7, ~6.3 MB in
+		     the package), its licence, and the sample pages any model the user adds is checked
+		     against. It runs on Windows ML, which is part of Windows, so no runtime ships with it. -->
+		<Content Include="Assets\Models\pp-lcnet-doc-ori.onnx">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Assets\Models\LICENSE-PP-LCNet.txt">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+		<Content Include="Assets\Models\sample-page-*.jpg">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
 	</ItemGroup>
 
 	<ItemGroup>
