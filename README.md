@@ -10,8 +10,11 @@ or you can choose one in **Tools > Settings > Language**.
 
 ### Quick page edits
 
-Each edit works on the page you clicked, or on every selected page in select mode. Right-click
-a page for all of them.
+Pages are selected the way files are in Explorer: click a page, Ctrl+click to add or remove
+one, Shift+click to take a run, Ctrl+A for all of them, and Esc or a click on empty space to
+let go. Each edit works on the selected pages; right-click a page for all of them, and for that
+page alone if it is not part of the selection. On a touch screen, select mode (Ctrl+E) puts a
+check box on every page instead.
 
 - **Rotate** pages left, right or 180°. A turned page is saved with its rotation flag
   (`/Rotate`), so nothing on it is redrawn or recompressed.
@@ -110,8 +113,12 @@ The Explorer context menu appears on JPG, JPEG, PNG, BMP, GIF, TIFF, TIF and PDF
 | `Ctrl` + `Shift` + `S` | Save the pages as a separate PDF |
 | `Ctrl` + `Enter` | Split before this page |
 | `Ctrl` + `Shift` + `↑` / `↓` | Move the page up / down |
-| `Ctrl` + `E` | Turn select mode on or off |
+| Click / `Ctrl` + click / `Shift` + click | Select a page / add or remove one / select a run |
+| `Shift` + arrow keys | Extend the selection |
 | `Ctrl` + `A` | Select all |
+| `Esc` | Clear the selection (and leave select mode) |
+| `Shift` + `F10` / menu key | The page's menu, as a right-click opens it |
+| `Ctrl` + `E` | Check boxes on every page (select mode), on or off |
 
 In the viewer:
 
@@ -125,9 +132,20 @@ In the viewer:
 
 ## Screenshots
 
-Every page of every file you have added, ready to be turned, reordered and saved:
+Every page of every file you have added, ready to be turned, reordered and saved. Three pages
+are selected with a click and a Shift+click:
 
 ![Thumbnail view](./docs/thumbnail-view.png)
+
+Normalize orientation on a stack of crooked scans, a phone photo held sideways and a PDF with
+turned pages. Before:
+
+![Before normalizing](./docs/normalize-before.png)
+
+After one click: every page that has text reads upright, and the photograph, which has none,
+is left alone:
+
+![After normalizing](./docs/normalize-after.png)
 
 The viewer, with a page turned 90° and the filmstrip below:
 
@@ -137,11 +155,11 @@ List view, with the estimated output size next to the Save button:
 
 ![List view](./docs/list-view.png)
 
-Settings: page setup, compression level and method, and language:
+Settings: the compression method and the orientation model:
 
 ![Settings](./docs/pdf-settings.png)
 
-In Bahasa Indonesia, with a page's right-click menu open:
+In Bahasa Indonesia, with a page's menu open (Shift+F10 opens it from the keyboard):
 
 ![Bahasa Indonesia](./docs/indonesian.png)
 
