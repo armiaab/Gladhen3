@@ -40,21 +40,18 @@ public sealed partial class MainWindow
 
     /// <summary>The pages to normalize.</summary>
     /// <remarks>
-    /// Whatever any other command would act on when the user pointed at something - the page
-    /// right-clicked, the page in the viewer, the selection - and otherwise every page, since
-    /// "make all of these the right way up" is what the command is for.
+    /// The page right-clicked or in the viewer; pages the user chose; otherwise every page,
+    /// since "make all of these the right way up" is what the command is for. A single page
+    /// selected by an ordinary click is just where the user happens to be, so it takes two or
+    /// more to narrow the command - or any in select mode, where every tick is deliberate.
+    /// Reverse draws the same line.
     /// </remarks>
     private List<DocumentItem> NormalizeTargets(DocumentItem? anchor)
     {
         if (anchor != null || _viewerItem != null) return TargetItems(anchor);
 
-        if (_isSelectMode)
-        {
-            var selected = ActiveView.SelectedItems.OfType<DocumentItem>().Where(IsPage).ToList();
-            if (selected.Count > 0) return InListOrder(selected);
-        }
-
-        return Pages.ToList();
+        var selected = SelectedItemsInOrder();
+        return selected.Count >= (_isSelectMode ? 1 : 2) ? selected : Pages.ToList();
     }
 
     /// <summary>Checks each page and turns it upright as soon as its answer is in.</summary>
@@ -200,8 +197,6 @@ public sealed partial class MainWindow
     {
         var pages = _leftAlone.Where(_documentItems.Contains).ToList();
         if (pages.Count == 0) return;
-
-        if (!_isSelectMode) SelectModeToggle.IsChecked = true;
 
         var view = ActiveView;
         view.SelectedItems.Clear();

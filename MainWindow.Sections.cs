@@ -166,7 +166,7 @@ public sealed partial class MainWindow
     {
         var view = _isGridView ? (ListViewBase)DocumentGridView : DocumentListView;
 
-        if (_isSelectMode && view.SelectedItems.Count > 0)
+        if (view.SelectedItems.Count > 0)
         {
             DocumentItem? earliest = null;
             var earliestIndex = int.MaxValue;

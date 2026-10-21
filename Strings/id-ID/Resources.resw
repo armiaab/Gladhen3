@@ -439,7 +439,7 @@
     <value>{0} halaman ditambahkan dari Explorer</value>
   </data>
   <data name="StatusSelectMode" xml:space="preserve">
-    <value>Mode pilih: klik halaman untuk memilihnya</value>
+    <value>Mode pilih: klik halaman untuk mencentangnya, Esc untuk selesai</value>
   </data>
   <data name="StatusSelectedPages" xml:space="preserve">
     <value>{0} halaman dipilih</value>
@@ -451,7 +451,7 @@
     <value>Tambahkan file terlebih dahulu (Ctrl+O)</value>
   </data>
   <data name="StatusPickPageFirst" xml:space="preserve">
-    <value>Klik sebuah halaman dulu, atau pilih beberapa dengan Ctrl+E</value>
+    <value>Klik sebuah halaman dulu; Ctrl+klik atau Shift+klik untuk memilih beberapa</value>
   </data>
   <data name="StatusRemovedPages" xml:space="preserve">
     <value>{0} halaman dihapus</value>
