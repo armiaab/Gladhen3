@@ -153,47 +153,57 @@ public sealed partial class MainWindow : Window
             ListViewToggle.Checked += ListViewToggle_Checked;
         }
 
+        // Each view keeps its own selection; the one coming into sight takes over the other's,
+        // so switching views does not quietly drop what was chosen.
+        var (shown, hidden) = _isGridView ? ((ListViewBase)DocumentGridView, (ListViewBase)DocumentListView) : (DocumentListView, DocumentGridView);
+        if (!shown.SelectedItems.SequenceEqual(hidden.SelectedItems))
+        {
+            shown.SelectedItems.Clear();
+            foreach (var item in hidden.SelectedItems) shown.SelectedItems.Add(item);
+        }
+
         DocumentGridView.Visibility = _isGridView ? Visibility.Visible : Visibility.Collapsed;
         DocumentListView.Visibility = _isGridView ? Visibility.Collapsed : Visibility.Visible;
+        UpdateSelectionInfo();
     }
 
+    /// <summary>
+    /// Select mode puts a check box on every page, so a click ticks it instead of choosing it
+    /// alone - for a touch screen, or a mouse that would rather not hold Ctrl.
+    /// </summary>
+    /// <remarks>
+    /// Outside it the lists select the way Windows lists do (click, Ctrl+click, Shift+click).
+    /// Switching keeps whatever is selected: it is the same selection, ticked or highlighted.
+    /// </remarks>
     private void UpdateSelectMode()
     {
         if (!_isInitialized) return;
 
-        if (!_isSelectMode)
-        {
-            try
-            {
-                if (DocumentGridView.SelectionMode == ListViewSelectionMode.Multiple)
-                    DocumentGridView.SelectedItems.Clear();
-                if (DocumentListView.SelectionMode == ListViewSelectionMode.Multiple)
-                    DocumentListView.SelectedItems.Clear();
-            }
-            // WinUI can throw while the selection is being rebuilt underneath a mode switch.
-            // The selection is about to be replaced anyway, so there is nothing to recover.
-            catch (COMException ex)
-            {
-                Log.Debug(ex, "Selection was already being changed while clearing it");
-            }
-        }
+        // WinUI empties the selection whenever the mode changes, so it is carried across by hand.
+        var kept = ActiveView.SelectedItems.ToList();
 
-        var mode = _isSelectMode ? ListViewSelectionMode.Multiple : ListViewSelectionMode.None;
+        var mode = _isSelectMode ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Extended;
         DocumentGridView.SelectionMode = mode;
         DocumentListView.SelectionMode = mode;
 
+        foreach (var item in kept) ActiveView.SelectedItems.Add(item);
+
         SelectModeMenuItem.Text = _isSelectMode ? _resourceLoader.GetString("TextExitSelectMode") : _resourceLoader.GetString("TextEnterSelectMode");
-        SelectionInfoPanel.Visibility = _isSelectMode ? Visibility.Visible : Visibility.Collapsed;
 
         UpdateSelectionInfo();
     }
 
+    /// <summary>The count of selected pages, and the button that removes them.</summary>
+    /// <remarks>
+    /// Shown once there is a choice worth describing: in select mode, or with two or more pages
+    /// picked. One clicked page is just where the user is, and needs no announcement.
+    /// </remarks>
     private void UpdateSelectionInfo()
     {
-        if (!_isInitialized || !_isSelectMode) return;
+        if (!_isInitialized) return;
 
-        var view = _isGridView ? (ListViewBase)DocumentGridView : DocumentListView;
-        var count = view.SelectedItems.Count;
+        var count = ActiveView.SelectedItems.Count;
+        SelectionInfoPanel.Visibility = !IsViewerOpen && (_isSelectMode || count >= 2) ? Visibility.Visible : Visibility.Collapsed;
         SelectionCountText.Text = count == 1 ? _resourceLoader.GetString("SelectionCountFormatSingle") : string.Format(_resourceLoader.GetString("SelectionCountFormatMultiple"), count);
     }
 
@@ -1059,30 +1069,14 @@ public sealed partial class MainWindow : Window
 
     #region Selection & Sorting
 
+    /// <remarks>No longer by way of select mode: the lists hold any number of selected pages as they are.</remarks>
     private void SelectAllButton_Click(object sender, RoutedEventArgs e)
     {
-        if (!_isSelectMode)
-        {
-            SelectModeToggle.IsChecked = true;
-        }
-
-        if (_isGridView)
-            DocumentGridView.SelectAll();
-        else
-            DocumentListView.SelectAll();
-
-        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusSelectedPages"), _documentItems.Count);
+        ActiveView.SelectAll();
+        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusSelectedPages"), ActiveView.SelectedItems.OfType<DocumentItem>().Count(IsPage));
     }
 
-    private void DeselectAllButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_isSelectMode)
-        {
-            DocumentGridView.SelectedItems.Clear();
-            DocumentListView.SelectedItems.Clear();
-        }
-        StatusTextBlock.Text = _resourceLoader.GetString("StatusDeselectedAll");
-    }
+    private void DeselectAllButton_Click(object sender, RoutedEventArgs e) => ClearSelection();
 
     private void RemoveAll_Click(object sender, RoutedEventArgs e)
     {

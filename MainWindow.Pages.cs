@@ -43,11 +43,12 @@ public sealed partial class MainWindow
 
     /// <summary>The rows a command acts on, in list order.</summary>
     /// <remarks>
-    /// In select mode, the selection - unless the menu was opened on a page outside it, which
-    /// means that page alone, as a right-click does everywhere else in Windows. Otherwise the
-    /// page the menu was opened on, or the one last clicked. Section dividers count only for
-    /// removal: turning or copying a divider means nothing. While the viewer is open it is the
-    /// page on show, whatever else is selected underneath.
+    /// The selection - unless the menu was opened on a page outside it, which means that page
+    /// alone, as a right-click does everywhere else in Windows. A click selects the page it
+    /// lands on, so with nothing selected there is nothing to act on: never a page the user can
+    /// no longer see is meant. Section dividers count only for removal: turning or copying a
+    /// divider means nothing. While the viewer is open it is the page on show, whatever else is
+    /// selected underneath.
     /// </remarks>
     private List<DocumentItem> TargetItems(DocumentItem? anchor, bool includeSectionBreaks = false)
     {
@@ -55,15 +56,10 @@ public sealed partial class MainWindow
 
         if (anchor == null && _viewerItem != null) return [_viewerItem];
 
-        if (_isSelectMode)
-        {
-            var selected = ActiveView.SelectedItems.OfType<DocumentItem>().Where(Wanted).ToList();
-            if (selected.Count > 0 && (anchor == null || selected.Contains(anchor)))
-                return InListOrder(selected);
-        }
+        var selected = SelectedItemsInOrder(includeSectionBreaks);
+        if (selected.Count > 0 && (anchor == null || selected.Contains(anchor))) return selected;
 
-        var single = anchor ?? CurrentTargetItem();
-        return single != null && Wanted(single) && _documentItems.Contains(single) ? [single] : [];
+        return anchor != null && Wanted(anchor) && _documentItems.Contains(anchor) ? [anchor] : [];
     }
 
     private List<DocumentItem> InListOrder(IEnumerable<DocumentItem> items)
@@ -226,7 +222,7 @@ public sealed partial class MainWindow
     /// </remarks>
     private void ReversePages()
     {
-        var selected = _isSelectMode ? InListOrder(ActiveView.SelectedItems.OfType<DocumentItem>().Where(IsPage)) : [];
+        var selected = SelectedItemsInOrder();
 
         var ordered = _documentItems.ToList();
         int reversed;
@@ -288,8 +284,6 @@ public sealed partial class MainWindow
             StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesYet");
             return;
         }
-
-        if (!_isSelectMode) SelectModeToggle.IsChecked = true;
 
         var view = ActiveView;
         view.SelectedItems.Clear();

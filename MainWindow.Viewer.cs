@@ -101,19 +101,26 @@ public sealed partial class MainWindow
         _viewerVersion++;
 
         ViewerPanel.Visibility = Visibility.Collapsed;
-        SelectionInfoPanel.Visibility = _isSelectMode ? Visibility.Visible : Visibility.Collapsed;
         ViewerProgress.IsActive = false;
         ReleaseViewerImage();
         _viewerDocuments.Clear();
 
         // Back to the page that was on show, so closing does not lose the place in a long list.
-        if (last == null || !_documentItems.Contains(last)) return;
+        if (last != null && _documentItems.Contains(last))
+        {
+            _lastFocusedItem = last;
+            var view = ActiveView;
 
-        _lastFocusedItem = last;
-        var view = ActiveView;
-        view.ScrollIntoView(last);
-        view.UpdateLayout();
-        (view.ContainerFromItem(last) as SelectorItem)?.Focus(FocusState.Programmatic);
+            // Selected too, so the next command acts on the page just looked at - unless several
+            // pages were chosen before, which is a selection worth keeping.
+            if (!_isSelectMode && view.SelectedItems.Count <= 1) view.SelectedItem = last;
+
+            view.ScrollIntoView(last);
+            view.UpdateLayout();
+            (view.ContainerFromItem(last) as SelectorItem)?.Focus(FocusState.Programmatic);
+        }
+
+        UpdateSelectionInfo();
     }
 
     private void ViewerBack_Click(object sender, RoutedEventArgs e) => CloseViewer();

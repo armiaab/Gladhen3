@@ -14,7 +14,7 @@
         <MicaBackdrop Kind="BaseAlt" />
     </Window.SystemBackdrop>
 
-    <Grid>
+    <Grid PreviewKeyDown="Root_PreviewKeyDown">
         <Grid.Resources>
             <!--
                 One menu shared by every page. It acts on the page it was opened on, or
@@ -204,7 +204,11 @@
                             <KeyboardAccelerator Key="A" Modifiers="Control" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
-                    <MenuFlyoutItem x:Uid="MenuDeselectAll" Click="DeselectAllButton_Click" />
+                    <!--  Esc itself is handled at the root, where it can tell what else Esc means.  -->
+                    <MenuFlyoutItem
+                        x:Uid="MenuDeselectAll"
+                        Click="DeselectAllButton_Click"
+                        KeyboardAcceleratorTextOverride="Esc" />
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem
                         x:Name="RemoveMenuItem"
@@ -765,13 +769,20 @@
                         SectionBreakTemplate="{StaticResource ListSectionTemplate}" />
                 </Grid.Resources>
 
-                <!--  Grid View  -->
+                <!--
+                    Grid View. Selection works as everywhere else in Windows: a click selects a
+                    page, Ctrl+click adds or takes one away, Shift+click takes a run, and a click
+                    on empty space or Esc lets go. The background is transparent rather than
+                    unset so that empty space can be clicked at all.
+                -->
                 <GridView
                     x:Name="DocumentGridView"
                     Padding="8"
                     AllowDrop="True"
+                    Background="Transparent"
                     CanDragItems="True"
                     CanReorderItems="True"
+                    ContextRequested="DocumentView_ContextRequested"
                     DoubleTapped="DocumentView_DoubleTapped"
                     DragItemsCompleted="DocumentView_DragItemsCompleted"
                     DragItemsStarting="DocumentView_DragItemsStarting"
@@ -782,7 +793,8 @@
                     PreviewKeyDown="DocumentView_PreviewKeyDown"
                     ReorderMode="Enabled"
                     SelectionChanged="DocumentView_SelectionChanged"
-                    SelectionMode="None">
+                    SelectionMode="Extended"
+                    Tapped="DocumentView_Tapped">
                     <!--
                         Pages arriving, leaving and being dragged into a new order are the
                         three things that actually happen in this list, so each one gets a
@@ -808,8 +820,10 @@
                     x:Name="DocumentListView"
                     Padding="4"
                     AllowDrop="True"
+                    Background="Transparent"
                     CanDragItems="True"
                     CanReorderItems="True"
+                    ContextRequested="DocumentView_ContextRequested"
                     DoubleTapped="DocumentView_DoubleTapped"
                     DragItemsCompleted="DocumentView_DragItemsCompleted"
                     DragItemsStarting="DocumentView_DragItemsStarting"
@@ -820,7 +834,8 @@
                     PreviewKeyDown="DocumentView_PreviewKeyDown"
                     ReorderMode="Enabled"
                     SelectionChanged="DocumentView_SelectionChanged"
-                    SelectionMode="None"
+                    SelectionMode="Extended"
+                    Tapped="DocumentView_Tapped"
                     Visibility="Collapsed">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">

@@ -439,7 +439,7 @@
     <value>Added {0} page(s) from Explorer</value>
   </data>
   <data name="StatusSelectMode" xml:space="preserve">
-    <value>Select mode: click pages to select them</value>
+    <value>Select mode: click pages to tick them, Esc to finish</value>
   </data>
   <data name="StatusSelectedPages" xml:space="preserve">
     <value>Selected {0} page(s)</value>
@@ -451,7 +451,7 @@
     <value>Add some files first (Ctrl+O)</value>
   </data>
   <data name="StatusPickPageFirst" xml:space="preserve">
-    <value>Click a page first, or select several with Ctrl+E</value>
+    <value>Click a page first; Ctrl+click or Shift+click selects several</value>
   </data>
   <data name="StatusRemovedPages" xml:space="preserve">
     <value>Removed {0} page(s)</value>
