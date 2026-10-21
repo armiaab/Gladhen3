@@ -11,7 +11,7 @@
 
     <StackPanel Spacing="8">
         <TextBlock x:Uid="AboutDialog_Description" TextWrapping="Wrap" />
-        <TextBlock x:Uid="AboutDialog_Version" />
+        <TextBlock x:Name="VersionText" />
         <StackPanel Orientation="Horizontal">
             <TextBlock x:Uid="AboutDialog_Repository" VerticalAlignment="Center" />
             <HyperlinkButton Content="github.com/armiaab/Gladhen3" NavigateUri="https://github.com/armiaab/Gladhen3" />

@@ -363,3 +363,8 @@ MigrationBackup/
 FodyWeavers.xsd
 /ShellExtension.dll
 *.cer
+
+# What building the codec SDK sample in place produces
+CodecSdk/**/*.dll
+CodecSdk/**/*.lib
+CodecSdk/**/*.exp

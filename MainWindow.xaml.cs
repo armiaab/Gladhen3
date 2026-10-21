@@ -35,6 +35,14 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
+        // Pages label themselves, and the model cannot reach the resources, so it is handed the
+        // wording here - before the first page is loaded and its label cached.
+        DocumentItem.DisplayNameFormat = _resourceLoader.GetString("PageDisplayNameFormat");
+        DocumentItem.PageInfoFormat = _resourceLoader.GetString("PageInfoFormat");
+
+        if (AppLog.InitializationFailure != null)
+            ((FrameworkElement)Content).Loaded += ReportLoggingFailure;
+
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
 
@@ -48,6 +56,7 @@ public sealed partial class MainWindow : Window
         _documentItems.CollectionChanged += DocumentItems_CollectionChanged;
 
         _isInitialized = true;
+        ClearOriginals();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusReady");
         _ = AppSettings.LoadAsync();
         UpdateUIState();
@@ -96,11 +105,17 @@ public sealed partial class MainWindow : Window
         var hasPages = Pages.Any();
         FadeTo(EmptyStatePanel, hasPages ? 0 : 1);
 
+        // An inserted blank page becomes a PDF page like any other, so it is counted as one.
         var imageCount = _documentItems.Count(d => d.Type == DocumentType.Image);
-        var pdfPageCount = _documentItems.Count(d => d.Type == DocumentType.PdfPage);
+        var pdfPageCount = _documentItems.Count(d => d.Type is DocumentType.PdfPage or DocumentType.BlankPage);
         ItemCountTextBlock.Text = DescribeContents(imageCount, pdfPageCount);
 
         SaveButton.IsEnabled = hasPages;
+        RotateLeftButton.IsEnabled = hasPages;
+        RotateRightButton.IsEnabled = hasPages;
+        DuplicateButton.IsEnabled = hasPages;
+        RemovePagesButton.IsEnabled = hasPages;
+        UpdateUndoState();
         UpdateSelectionInfo();
     }
 
@@ -350,11 +365,29 @@ public sealed partial class MainWindow : Window
     /// if the element really did end up transparent, since a later call may have reversed
     /// direction while this one was still running.
     /// </remarks>
+    /// <remarks>
+    /// A fade still running decides what happens next, not the opacity read back: undo empties
+    /// the list and refills it in one go, and the fade-in that follows the fade-out arrives before
+    /// the opacity has moved at all. It used to see "visible, fully opaque", do nothing, and let
+    /// the fade-out finish and collapse the size estimate for good. Now the running fade is kept
+    /// if it is already heading the same way, and stopped if it is not.
+    /// </remarks>
     private static void FadeTo(UIElement element, double opacity, double milliseconds = 150)
     {
         var fadingIn = opacity > 0;
-        if (fadingIn && element.Visibility == Visibility.Visible && element.Opacity == opacity) return;
-        if (!fadingIn && element.Visibility == Visibility.Collapsed) return;
+
+        if (RunningFades.TryGetValue(element, out var running))
+        {
+            if (running.Target == opacity) return;
+
+            running.Storyboard.Stop();
+            RunningFades.Remove(element);
+        }
+        else
+        {
+            if (fadingIn && element.Visibility == Visibility.Visible && element.Opacity == opacity) return;
+            if (!fadingIn && element.Visibility == Visibility.Collapsed) return;
+        }
 
         if (fadingIn) element.Visibility = Visibility.Visible;
 
@@ -370,15 +403,16 @@ public sealed partial class MainWindow : Window
 
         var storyboard = new Storyboard();
         storyboard.Children.Add(animation);
-        if (!fadingIn)
+        storyboard.Completed += (_, _) =>
         {
-            storyboard.Completed += (_, _) =>
-            {
-                if (element.Opacity <= 0.01) element.Visibility = Visibility.Collapsed;
-            };
-        }
+            if (RunningFades.TryGetValue(element, out var current) && current.Storyboard == storyboard) RunningFades.Remove(element);
+            if (!fadingIn && element.Opacity <= 0.01) element.Visibility = Visibility.Collapsed;
+        };
+        RunningFades[element] = (storyboard, opacity);
         storyboard.Begin();
     }
+
+    private static readonly Dictionary<UIElement, (Storyboard Storyboard, double Target)> RunningFades = [];
 
     #endregion
 
@@ -452,6 +486,7 @@ public sealed partial class MainWindow : Window
         {
             var loaded = await DocumentService.CreateDocumentItemsBatchAsync(files, progress);
 
+            if (loaded.Items.Count > 0) RecordUndo();
             await AddItemsInBatchesAsync(loaded.Items);
             addedCount = loaded.Items.Count;
 
@@ -485,6 +520,7 @@ public sealed partial class MainWindow : Window
         {
             var loaded = await DocumentService.LoadDocumentsFromPathsAsync(pathList);
 
+            if (loaded.Items.Count > 0) RecordUndo();
             await AddItemsInBatchesAsync(loaded.Items);
 
             UpdateUIState();
@@ -687,17 +723,35 @@ public sealed partial class MainWindow : Window
     /// decides to surface, so the catch stays general; but there is one of it now, and the
     /// user is told the same thing wherever the picker was opened from.
     /// </remarks>
-    private async Task<(DestinationOutcome Outcome, string Path)> PickPdfDestinationAsync(string? suggestedName)
+    /// <param name="original">
+    /// The PDF every page came from, if there is exactly one. The picker then opens on that file,
+    /// in its folder, so the quickest edit there is - turn a page, save - writes back over the
+    /// original after the usual "replace?" from Windows, instead of starting in Documents with a
+    /// name like "Document".
+    /// </param>
+    /// <remarks>
+    /// The App SDK's picker rather than the WinRT one: <c>FileSavePicker.SuggestedSaveFile</c>
+    /// in a desktop app sets the name but not the folder, so the "save over the original" offer
+    /// opened in Documents. This one takes the folder as a path.
+    /// </remarks>
+    private async Task<(DestinationOutcome Outcome, string Path)> PickPdfDestinationAsync(string? suggestedName, string? original = null)
     {
-        var picker = new FileSavePicker
+        var picker = new Microsoft.Windows.Storage.Pickers.FileSavePicker(AppWindow.Id)
         {
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
-            SuggestedFileName = suggestedName ?? _resourceLoader.GetString("SuggestedFileNameDocument")
+            SuggestedStartLocation = Microsoft.Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+            SuggestedFileName = suggestedName ?? _resourceLoader.GetString("SuggestedFileNameDocument"),
+            DefaultFileExtension = ".pdf"
         };
         picker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
 
-        StorageFile file;
+        // Only if it is still there: a folder that has gone would leave the picker nowhere to open.
+        if (original != null && File.Exists(original))
+        {
+            picker.SuggestedFolder = Path.GetDirectoryName(original);
+            picker.SuggestedFileName = Path.GetFileNameWithoutExtension(original);
+        }
+
+        Microsoft.Windows.Storage.Pickers.PickFileResult? file;
         try
         {
             file = await picker.PickSaveFileAsync();
@@ -739,10 +793,34 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        var (outcome, outputPath) = await PickPdfDestinationAsync(null);
-        if (outcome != DestinationOutcome.Picked) return;
+        await SaveItemsAsync(sections[0].Items, null, SingleSourcePdf(sections[0].Items));
+    }
 
-        var items = sections[0].Items;
+    /// <summary>The one PDF every page here came from, or null if they came from more than one, or from images.</summary>
+    /// <remarks>
+    /// FilePath, not SourcePdfPath: once the original has been saved over, rows read from a copy
+    /// of it, but the file they belong to is still the original.
+    /// </remarks>
+    private static string? SingleSourcePdf(IEnumerable<DocumentItem> items)
+    {
+        string? source = null;
+        foreach (var item in items)
+        {
+            if (item.Type == DocumentType.BlankPage) continue;
+            if (item.Type != DocumentType.PdfPage) return null;
+
+            var path = item.FilePath;
+            if (source == null) source = path;
+            else if (!string.Equals(source, path, StringComparison.OrdinalIgnoreCase)) return null;
+        }
+        return source;
+    }
+
+    /// <summary>Writes these pages to a single PDF the user chooses the place for.</summary>
+    private async Task SaveItemsAsync(List<DocumentItem> items, string? suggestedName, string? original = null)
+    {
+        var (outcome, outputPath) = await PickPdfDestinationAsync(suggestedName, original);
+        if (outcome != DestinationOutcome.Picked) return;
 
         StatusTextBlock.Text = _resourceLoader.GetString("StatusCreatingPdf");
         SaveButton.IsEnabled = false;
@@ -753,6 +831,7 @@ public sealed partial class MainWindow : Window
             {
                 try
                 {
+                    PreserveSourceBeforeOverwrite(outputPath);
                     var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
 
                     StatusTextBlock.Text = _resourceLoader.GetString("StatusPdfCreatedSuccessfully");
@@ -766,6 +845,8 @@ public sealed partial class MainWindow : Window
                             _resourceLoader.GetString("DialogTitleSomeFilesSkipped"),
                             string.Format(_resourceLoader.GetString("DialogContentPagesSkipped"), FormatNameList(result.SkippedItems)));
                     }
+
+                    await ReportCodecFailuresAsync(result.CodecFailures);
                     break;
                 }
                 // Only a locked destination is offered a retry - retrying anything else just
@@ -898,504 +979,40 @@ public sealed partial class MainWindow : Window
 
     private async void DocumentView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
-        try
-        {
-            if (_isSelectMode) return;
+        if (_isSelectMode) return;
+        if (ItemFromVisual(e.OriginalSource) is not { } item || !IsPage(item)) return;
 
-            if (_documentItems.Count == 0) return;
-
-            var element = e.OriginalSource as FrameworkElement;
-            DocumentItem? clickedItem = null;
-
-            while (element != null)
-            {
-                if (element.DataContext is DocumentItem item)
-                {
-                    clickedItem = item;
-                    break;
-                }
-
-                if (element == DocumentGridView || element == DocumentListView)
-                    break;
-
-                element = element.Parent as FrameworkElement;
-            }
-
-            if (clickedItem != null && !string.IsNullOrEmpty(clickedItem.FilePath))
-            {
-                await ShowPreviewDialogAsync(clickedItem);
-            }
-        }
         // Event-handler boundary for an optional view; the list itself is unaffected.
-        catch (Exception ex)
-        {
-            Log.Error(ex, "Error opening preview");
-            StatusTextBlock.Text = _resourceLoader.GetString("StatusErrorOpeningPreview");
-        }
-    }
-
-    private async Task ShowPreviewDialogAsync(DocumentItem item)
-    {
-        var currentIndex = _documentItems.IndexOf(item);
-        if (currentIndex < 0) return;
-
-        await ShowPreviewDialogAtIndexAsync(currentIndex);
-    }
-
-    private async Task ShowPreviewDialogAtIndexAsync(int startIndex)
-    {
-        var currentIndex = startIndex;
-        var pdfCache = new Dictionary<string, Windows.Data.Pdf.PdfDocument>(StringComparer.OrdinalIgnoreCase);
-        var dialog = new ContentDialog
-        {
-            XamlRoot = Content.XamlRoot,
-            MinWidth = 800,
-            MaxWidth = 1000
-        };
-
-        var mainGrid = new Grid();
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Footer
-
-        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        mainGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var imageContainer = new Border
-        {
-            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorSecondaryBrush"],
-            CornerRadius = new CornerRadius(8),
-            Height = 500,
-            Margin = new Thickness(8, 0, 8, 0)
-        };
-
-        var image = new Image
-        {
-            Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        var scrollViewer = new ScrollViewer
-        {
-            Content = image,
-            ZoomMode = ZoomMode.Enabled,
-            MinZoomFactor = 0.1f,
-            MaxZoomFactor = 5f,
-            HorizontalScrollMode = ScrollMode.Enabled,
-            VerticalScrollMode = ScrollMode.Enabled,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch
-        };
-
-        imageContainer.Child = scrollViewer;
-        Grid.SetRow(imageContainer, 1);
-        Grid.SetColumn(imageContainer, 1);
-
-        var prevButton = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE76B", FontSize = 16 },
-            Width = 40,
-            Height = 40,
-            CornerRadius = new CornerRadius(20),
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = 0.8
-        };
-        ToolTipService.SetToolTip(prevButton, "Previous (←)");
-        Grid.SetRow(prevButton, 1);
-        Grid.SetColumn(prevButton, 0);
-
-        var nextButton = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE76C", FontSize = 16 },
-            Width = 40,
-            Height = 40,
-            CornerRadius = new CornerRadius(20),
-            VerticalAlignment = VerticalAlignment.Center,
-            Opacity = 0.8
-        };
-        ToolTipService.SetToolTip(nextButton, "Next (→)");
-        Grid.SetRow(nextButton, 1);
-        Grid.SetColumn(nextButton, 2);
-
-        var headerGrid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetRow(headerGrid, 0);
-        Grid.SetColumn(headerGrid, 0);
-        Grid.SetColumnSpan(headerGrid, 3);
-
-        var titleText = new TextBlock
-        {
-            Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"],
-            VerticalAlignment = VerticalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        };
-        Grid.SetColumn(titleText, 0);
-
-        var headerActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        Grid.SetColumn(headerActions, 1);
-
-        var zoomOutButton = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE71F", FontSize = 14 },
-            Width = 32,
-            Height = 32
-        };
-        ToolTipService.SetToolTip(zoomOutButton, _resourceLoader.GetString("TooltipZoomOut"));
-
-        var zoomText = new TextBlock
-        {
-            Text = "100%",
-            VerticalAlignment = VerticalAlignment.Center,
-            Width = 45,
-            TextAlignment = TextAlignment.Center,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"]
-        };
-
-        var zoomInButton = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE8A3", FontSize = 14 },
-            Width = 32,
-            Height = 32
-        };
-        ToolTipService.SetToolTip(zoomInButton, _resourceLoader.GetString("TooltipZoomIn"));
-
-        var fitButton = new Button
-        {
-            Content = new FontIcon { Glyph = "\uE9A6", FontSize = 14 },
-            Width = 32,
-            Height = 32,
-            Margin = new Thickness(8, 0, 0, 0)
-        };
-        ToolTipService.SetToolTip(fitButton, _resourceLoader.GetString("TooltipFitToWindow"));
-
-        var openButton = new Button
-        {
-            Content = new StackPanel
-            {
-                Orientation = Orientation.Horizontal,
-                Spacing = 6,
-                Children =
-                {
-                    new FontIcon { Glyph = "\uE8A7", FontSize = 12 },
-                    new TextBlock { Text = _resourceLoader.GetString("ButtonOpenText"), VerticalAlignment = VerticalAlignment.Center, FontSize = 12 }
-                }
-            },
-            Margin = new Thickness(8, 0, 0, 0)
-        };
-
-        headerActions.Children.Add(zoomOutButton);
-        headerActions.Children.Add(zoomText);
-        headerActions.Children.Add(zoomInButton);
-        headerActions.Children.Add(fitButton);
-        headerActions.Children.Add(openButton);
-        headerGrid.Children.Add(titleText);
-        headerGrid.Children.Add(headerActions);
-
-        var footerGrid = new Grid { Margin = new Thickness(0, 12, 0, 0) };
-        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        footerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        Grid.SetRow(footerGrid, 2);
-        Grid.SetColumn(footerGrid, 0);
-        Grid.SetColumnSpan(footerGrid, 3);
-
-        var fileInfoPanel = new StackPanel { Spacing = 2 };
-        Grid.SetColumn(fileInfoPanel, 0);
-
-        var filePathText = new TextBlock
-        {
-            FontSize = 11,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-            TextTrimming = TextTrimming.CharacterEllipsis,
-            IsTextSelectionEnabled = true
-        };
-
-        var fileDetailsText = new TextBlock
-        {
-            FontSize = 11,
-            Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
-        };
-
-        fileInfoPanel.Children.Add(filePathText);
-        fileInfoPanel.Children.Add(fileDetailsText);
-
-        var pageIndicator = new Border
-        {
-            Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
-            CornerRadius = new CornerRadius(4),
-            Padding = new Thickness(12, 6, 12, 6)
-        };
-        Grid.SetColumn(pageIndicator, 1);
-
-        var pageText = new TextBlock
-        {
-            VerticalAlignment = VerticalAlignment.Center,
-            FontWeight = Microsoft.UI.Text.FontWeights.SemiBold
-        };
-        pageIndicator.Child = pageText;
-
-        footerGrid.Children.Add(fileInfoPanel);
-        footerGrid.Children.Add(pageIndicator);
-
-        mainGrid.Children.Add(headerGrid);
-        mainGrid.Children.Add(prevButton);
-        mainGrid.Children.Add(imageContainer);
-        mainGrid.Children.Add(nextButton);
-        mainGrid.Children.Add(footerGrid);
-
-        dialog.Content = mainGrid;
-        dialog.CloseButtonText = _resourceLoader.GetString("DialogButtonClose");
-
-        var loadingRing = new ProgressRing
-        {
-            IsActive = false,
-            Width = 48,
-            Height = 48,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-
-        scrollViewer.ViewChanged += (s, args) =>
-        {
-            var zoomPercent = (int)(scrollViewer.ZoomFactor * 100);
-            zoomText.Text = $"{zoomPercent}%";
-        };
-
-        async Task LoadItemAsync(int index)
-        {
-            if (index < 0 || index >= _documentItems.Count) return;
-
-            var item = _documentItems[index];
-            currentIndex = index;
-
-            titleText.Text = item.DisplayName;
-            filePathText.Text = item.FilePath;
-            pageText.Text = $"{index + 1} / {_documentItems.Count}";
-
-            prevButton.IsEnabled = index > 0;
-            nextButton.IsEnabled = index < _documentItems.Count - 1;
-            prevButton.Opacity = index > 0 ? 0.8 : 0.3;
-            nextButton.Opacity = index < _documentItems.Count - 1 ? 0.8 : 0.3;
-
-            if (File.Exists(item.FilePath))
-            {
-                var fileInfo = new FileInfo(item.FilePath);
-                var details = item.Type == DocumentType.PdfPage
-                    ? $"{item.FileSize} • Page {item.PageNumber} of {item.TotalPages} • {fileInfo.LastWriteTime:g}"
-                    : $"{item.FileSize} • {fileInfo.LastWriteTime:g}";
-                fileDetailsText.Text = details;
-            }
-
-            image.Source = null;
-            scrollViewer.Content = loadingRing;
-            loadingRing.IsActive = true;
-
-            try
-            {
-                BitmapImage? bitmap = null;
-
-                if (item.Type == DocumentType.Image && File.Exists(item.FilePath))
-                {
-                    bitmap = new BitmapImage();
-                    var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
-                    using var stream = await file.OpenAsync(FileAccessMode.Read);
-                    await bitmap.SetSourceAsync(stream);
-                }
-                else if (item.Type == DocumentType.PdfPage)
-                {
-                    bitmap = await RenderPdfPageHighResAsync(item, pdfCache);
-                    bitmap ??= item.Thumbnail;
-                }
-
-                loadingRing.IsActive = false;
-                image.Source = bitmap;
-                scrollViewer.Content = image;
-
-                if (bitmap == null)
-                {
-                    scrollViewer.Content = new TextBlock
-                    {
-                        Text = _resourceLoader.GetString("TextUnableToLoadPreview"),
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
-                    };
-                }
-                else
-                {
-                    ApplyFitZoom();
-                }
-            }
-            // Boundary for the preview pane, which replaces its own content with an error
-            // message rather than propagating.
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Error loading preview");
-                loadingRing.IsActive = false;
-                scrollViewer.Content = new TextBlock
-                {
-                    Text = _resourceLoader.GetString("TextErrorLoadingPreview"),
-                    HorizontalAlignment = HorizontalAlignment.Center,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorTertiaryBrush"]
-                };
-            }
-        }
-
-        void ApplyFitZoom()
-        {
-            if (image.Source is not BitmapImage bmp || bmp.PixelWidth == 0 || bmp.PixelHeight == 0) return;
-            var cw = imageContainer.ActualWidth > 0 ? imageContainer.ActualWidth : 700;
-            var ch = imageContainer.ActualHeight > 0 ? imageContainer.ActualHeight : 500;
-            var fitZoom = (float)Math.Clamp(Math.Min(cw / bmp.PixelWidth, ch / bmp.PixelHeight), 0.05f, 5f);
-            scrollViewer.ChangeView(0, 0, fitZoom);
-            zoomText.Text = $"{(int)(fitZoom * 100)}%";
-        }
-
-        // Event handlers
-        prevButton.Click += async (s, args) =>
-        {
-            if (currentIndex > 0)
-                await LoadItemAsync(currentIndex - 1);
-        };
-
-        nextButton.Click += async (s, args) =>
-        {
-            if (currentIndex < _documentItems.Count - 1)
-                await LoadItemAsync(currentIndex + 1);
-        };
-
-        openButton.Click += async (s, args) =>
-        {
-            try
-            {
-                var item = _documentItems[currentIndex];
-                var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
-                await Launcher.LaunchFileAsync(file);
-            }
-            // Nothing visible happened if this failed, so the user is told rather than left
-            // wondering whether the button works.
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Could not open the file in another application");
-                StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
-            }
-        };
-
-        zoomInButton.Click += (s, args) =>
-        {
-            var newZoom = Math.Min(scrollViewer.ZoomFactor * 1.25f, 5f);
-            scrollViewer.ChangeView(null, null, newZoom);
-        };
-
-        zoomOutButton.Click += (s, args) =>
-        {
-            var newZoom = Math.Max(scrollViewer.ZoomFactor / 1.25f, 0.1f);
-            scrollViewer.ChangeView(null, null, newZoom);
-        };
-
-        fitButton.Click += (s, args) => ApplyFitZoom();
-
-        dialog.KeyDown += async (s, args) =>
-        {
-            switch (args.Key)
-            {
-                case VirtualKey.Left:
-                    if (currentIndex > 0)
-                    {
-                        await LoadItemAsync(currentIndex - 1);
-                        args.Handled = true;
-                    }
-                    break;
-                case VirtualKey.Right:
-                    if (currentIndex < _documentItems.Count - 1)
-                    {
-                        await LoadItemAsync(currentIndex + 1);
-                        args.Handled = true;
-                    }
-                    break;
-                case VirtualKey.Add:
-                    var zoomIn = Math.Min(scrollViewer.ZoomFactor * 1.25f, 5f);
-                    scrollViewer.ChangeView(null, null, zoomIn);
-                    args.Handled = true;
-                    break;
-                case VirtualKey.Subtract:
-                    var zoomOut = Math.Max(scrollViewer.ZoomFactor / 1.25f, 0.1f);
-                    scrollViewer.ChangeView(null, null, zoomOut);
-                    args.Handled = true;
-                    break;
-                case VirtualKey.Number0:
-                    scrollViewer.ChangeView(0, 0, 1f);
-                    args.Handled = true;
-                    break;
-            }
-        };
-
-        dialog.Opened += (s, e) => ApplyFitZoom();
-
-        await LoadItemAsync(startIndex);
-
-        await Dialogs.DialogHost.ShowAsync(dialog);
-    }
-
-    private static async Task<BitmapImage?> RenderPdfPageHighResAsync(
-        DocumentItem item, Dictionary<string, Windows.Data.Pdf.PdfDocument> pdfCache)
-    {
         try
         {
-            var sourcePath = item.SourcePdfPath ?? item.FilePath;
-            if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath))
-                return null;
-
-            if (!pdfCache.TryGetValue(sourcePath, out var pdfDocument))
-            {
-                var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-                pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-                pdfCache[sourcePath] = pdfDocument;
-            }
-
-            if (item.PageNumber < 1 || item.PageNumber > pdfDocument.PageCount)
-                return null;
-
-            using var page = pdfDocument.GetPage((uint)(item.PageNumber - 1));
-            using var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-
-            var options = new Windows.Data.Pdf.PdfPageRenderOptions
-            {
-                DestinationWidth = 800,
-                DestinationHeight = (uint)(800 * page.Size.Height / page.Size.Width)
-            };
-
-            await page.RenderToStreamAsync(stream, options);
-
-            var bitmap = new BitmapImage();
-            await bitmap.SetSourceAsync(stream);
-            return bitmap;
+            await OpenViewerAsync(item);
         }
-        // The caller falls back to the existing thumbnail, so a failure here costs sharpness
-        // rather than function.
         catch (Exception ex)
         {
-            Log.Warning(ex, "Falling back to the thumbnail: the full-size page would not render");
-            return null;
+            Log.Error(ex, "Error opening the viewer");
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
         }
     }
+
     #endregion
 
     #region Drag & Drop
 
     private void DocumentView_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
+        // Taken now, because by the time the drop is reported the list has already moved.
+        _dragStart = CaptureState();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusReordering");
     }
 
     private void DocumentView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
     {
+        var before = _dragStart;
+        _dragStart = null;
+
         if (args.DropResult != Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move) return;
+
+        if (before != null) PushUndo(before);
 
         // A drag can move a page across a divider, or move the divider itself, so the bands
         // have to be re-derived. This fires after the collection has settled, which is why the
@@ -1466,33 +1083,10 @@ public sealed partial class MainWindow : Window
         StatusTextBlock.Text = _resourceLoader.GetString("StatusDeselectedAll");
     }
 
-    private void RemoveSelected_Click(object sender, RoutedEventArgs e)
-    {
-        if (!_isSelectMode)
-        {
-            StatusTextBlock.Text = _resourceLoader.GetString("StatusEnterSelectModeFirst");
-            return;
-        }
-
-        var view = _isGridView ? (ListViewBase)DocumentGridView : DocumentListView;
-        var selectedItems = view.SelectedItems.Cast<DocumentItem>().ToList();
-
-        if (selectedItems.Count == 0)
-        {
-            StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesSelected");
-            return;
-        }
-
-        foreach (var item in selectedItems)
-            _documentItems.Remove(item);
-
-        UpdateUIState();
-        StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusRemovedPages"), selectedItems.Count);
-    }
-
     private void RemoveAll_Click(object sender, RoutedEventArgs e)
     {
         var count = _documentItems.Count;
+        if (count > 0) RecordUndo();
         _documentItems.Clear();
         UpdateUIState();
         StatusTextBlock.Text = count > 0 ? string.Format(_resourceLoader.GetString("StatusRemovedPages"), count) : _resourceLoader.GetString("StatusNoPagesToRemove");
@@ -1532,12 +1126,8 @@ public sealed partial class MainWindow : Window
         }
         FlushRun();
 
-        for (var target = 0; target < ordered.Count; target++)
-        {
-            var current = _documentItems.IndexOf(ordered[target]);
-            if (current != target)
-                _documentItems.Move(current, target);
-        }
+        RecordUndo();
+        ApplyOrder(ordered);
 
         UpdateSectionSummaries();
     }
@@ -1572,7 +1162,7 @@ public sealed partial class MainWindow : Window
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new Dialogs.SettingsDialog
+        var dialog = new Dialogs.SettingsDialog(WindowNative.GetWindowHandle(this))
         {
             XamlRoot = Content.XamlRoot
         };
@@ -1625,10 +1215,30 @@ public sealed partial class MainWindow : Window
                 _resourceLoader.GetString("DialogTitleNoPages"),
                 _resourceLoader.GetString("DialogContentNoPages")),
 
+            PdfFailureReason.CodecUnavailable => (
+                _resourceLoader.GetString("DialogTitleCodecUnavailable"),
+                string.Format(
+                    _resourceLoader.GetString("DialogContentCodecUnavailable"),
+                    Dialogs.CodecText.Reason(_resourceLoader, failure.CodecReason ?? CodecFailureReason.Unknown))),
+
             _ => (
                 _resourceLoader.GetString("DialogTitleError"),
                 _resourceLoader.GetString("DialogContentUnexpectedError"))
         };
+    }
+
+    /// <summary>Says so when the chosen codec failed on some images, which were kept as they were.</summary>
+    /// <remarks>
+    /// The file is fine and the save succeeded, but a plugin that quietly fails on every image
+    /// looks exactly like one that found nothing to shrink, and only one of those needs fixing.
+    /// </remarks>
+    private async Task ReportCodecFailuresAsync(int failures)
+    {
+        if (failures == 0) return;
+
+        await ShowDialogAsync(
+            _resourceLoader.GetString("DialogTitleCodecFailed"),
+            string.Format(_resourceLoader.GetString("DialogContentCodecFailed"), failures));
     }
 
     private async Task ShowDialogAsync(string title, object content)
@@ -1652,6 +1262,7 @@ public sealed partial class MainWindow : Window
         Log.Information("Application closed");
         _estimateTimer?.Stop();
         _estimateCts?.Cancel();
+        ClearOriginals();
         App.Cleanup();
         Services.AppLog.Shutdown();
     }
@@ -1694,6 +1305,7 @@ public sealed partial class MainWindow : Window
 
             var loaded = await DocumentService.LoadDocumentsFromPathsAsync(pathList);
 
+            if (loaded.Items.Count > 0) RecordUndo();
             await AddItemsInBatchesAsync(loaded.Items);
 
             UpdateUIState();
@@ -1732,13 +1344,23 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Caps a name list so a hundred failures do not produce an unreadable dialog.</summary>
-    private static string FormatNameList(IReadOnlyList<string> names)
+    private string FormatNameList(IReadOnlyList<string> names)
     {
         const int maxShown = 10;
         var shown = string.Join(Environment.NewLine, names.Take(maxShown));
         return names.Count > maxShown
-            ? shown + Environment.NewLine + $"... and {names.Count - maxShown} more"
+            ? shown + Environment.NewLine + string.Format(_resourceLoader.GetString("NameListMoreFormat"), names.Count - maxShown)
             : shown;
+    }
+
+    /// <summary>Says once, when the window is up, that this session is running without a log.</summary>
+    private async void ReportLoggingFailure(object sender, RoutedEventArgs e)
+    {
+        ((FrameworkElement)Content).Loaded -= ReportLoggingFailure;
+
+        await ShowDialogAsync(
+            _resourceLoader.GetString("DialogTitleLoggingFailed"),
+            string.Format(_resourceLoader.GetString("DialogContentLoggingFailed"), AppLog.Directory));
     }
 
     #endregion

@@ -5,7 +5,6 @@ using Serilog;
 using Serilog.Events;
 using Windows.ApplicationModel;
 using Windows.Storage;
-using Windows.UI.Popups;
 
 namespace Gladhen3.Services;
 
@@ -27,6 +26,9 @@ public static class AppLog
     private const string OutputTemplate =
         "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {Message:lj}{NewLine}{Exception}";
 
+    /// <summary>Why the log could not be opened, if it could not; the app then runs without one.</summary>
+    public static Exception? InitializationFailure { get; private set; }
+
     public static string Directory { get; } =
         Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
 
@@ -34,7 +36,7 @@ public static class AppLog
     /// Configures the logger and records what is running, so a log a user sends back
     /// identifies its own build.
     /// </summary>
-    public static async void Initialize()
+    public static void Initialize()
     {
 #if DEBUG
         const LogEventLevel minimumLevel = LogEventLevel.Debug;
@@ -57,9 +59,10 @@ public static class AppLog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            //TODO: This is a bit of a chicken-and-egg problem: the log folder is in LocalFolder, which is
-            // not available until the app is initialized.
-            await new MessageDialog("Message: Failed to initialize logging.").ShowAsync();
+            // Recorded, not shown: this runs before any window exists, and a MessageDialog with
+            // no owner window throws in a desktop app - the one time it was needed, it would
+            // have taken the app down. The main window reports it once it can.
+            InitializationFailure = ex;
             return;
         }
 

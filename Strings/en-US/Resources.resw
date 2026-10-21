@@ -120,17 +120,35 @@
   <data name="AppTitle.Text" xml:space="preserve">
     <value>Gladhen3</value>
   </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>A small, fast PDF tool: merge, split, rotate and compress PDFs and images</value>
+  </data>
+  <data name="HeaderPages.Text" xml:space="preserve">
+    <value>Pages</value>
+  </data>
+  <data name="PageDisplayNameFormat" xml:space="preserve">
+    <value>{0} (Page {1}/{2})</value>
+  </data>
+  <data name="PageInfoFormat" xml:space="preserve">
+    <value>Page {0} of {1}</value>
+  </data>
+  <data name="BlankPageName" xml:space="preserve">
+    <value>Blank page</value>
+  </data>
+  <data name="NameListMoreFormat" xml:space="preserve">
+    <value>…and {0} more</value>
+  </data>
   <data name="MenuFile.Title" xml:space="preserve">
     <value>File</value>
   </data>
   <data name="MenuAddFiles.Text" xml:space="preserve">
-    <value>Add Files...</value>
+    <value>Add files…</value>
   </data>
   <data name="MenuAddImages.Text" xml:space="preserve">
-    <value>Add Images...</value>
+    <value>Add images…</value>
   </data>
   <data name="MenuAddPdfs.Text" xml:space="preserve">
-    <value>Add PDFs...</value>
+    <value>Add PDFs…</value>
   </data>
   <data name="MenuExit.Text" xml:space="preserve">
     <value>Exit</value>
@@ -138,20 +156,68 @@
   <data name="MenuEdit.Title" xml:space="preserve">
     <value>Edit</value>
   </data>
+  <data name="MenuUndo.Text" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="MenuRedo.Text" xml:space="preserve">
+    <value>Redo</value>
+  </data>
   <data name="MenuEnterSelectMode.Text" xml:space="preserve">
-    <value>Enter Select Mode</value>
+    <value>Enter select mode</value>
+  </data>
+  <data name="TextEnterSelectMode" xml:space="preserve">
+    <value>Enter select mode</value>
+  </data>
+  <data name="TextExitSelectMode" xml:space="preserve">
+    <value>Exit select mode</value>
   </data>
   <data name="MenuSelectAll.Text" xml:space="preserve">
-    <value>Select All</value>
+    <value>Select all</value>
   </data>
   <data name="MenuDeselectAll.Text" xml:space="preserve">
-    <value>Deselect All</value>
+    <value>Deselect all</value>
   </data>
   <data name="MenuRemoveSelected.Text" xml:space="preserve">
-    <value>Remove Selected</value>
+    <value>Remove</value>
   </data>
   <data name="MenuRemoveAll.Text" xml:space="preserve">
-    <value>Remove All</value>
+    <value>Remove all</value>
+  </data>
+  <data name="MenuPage.Title" xml:space="preserve">
+    <value>Page</value>
+  </data>
+  <data name="MenuPreview.Text" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="MenuRotateRight.Text" xml:space="preserve">
+    <value>Rotate right</value>
+  </data>
+  <data name="MenuRotateLeft.Text" xml:space="preserve">
+    <value>Rotate left</value>
+  </data>
+  <data name="MenuRotate180.Text" xml:space="preserve">
+    <value>Rotate 180°</value>
+  </data>
+  <data name="MenuDuplicate.Text" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="MenuInsertBlank.Text" xml:space="preserve">
+    <value>Insert blank page after</value>
+  </data>
+  <data name="MenuReverse.Text" xml:space="preserve">
+    <value>Reverse order</value>
+  </data>
+  <data name="MenuSelectOdd.Text" xml:space="preserve">
+    <value>Select odd pages</value>
+  </data>
+  <data name="MenuSelectEven.Text" xml:space="preserve">
+    <value>Select even pages</value>
+  </data>
+  <data name="MenuExtract.Text" xml:space="preserve">
+    <value>Save as a separate PDF…</value>
+  </data>
+  <data name="MenuRemovePages.Text" xml:space="preserve">
+    <value>Remove</value>
   </data>
   <data name="MenuView.Title" xml:space="preserve">
     <value>View</value>
@@ -166,449 +232,16 @@
     <value>Sort</value>
   </data>
   <data name="MenuSortNameAsc.Text" xml:space="preserve">
-    <value>Name (A-Z)</value>
+    <value>By name (A–Z)</value>
   </data>
   <data name="MenuSortNameDesc.Text" xml:space="preserve">
-    <value>Name (Z-A)</value>
+    <value>By name (Z–A)</value>
   </data>
   <data name="MenuSortTypeAsc.Text" xml:space="preserve">
-    <value>Type (Images first)</value>
+    <value>By type (images first)</value>
   </data>
   <data name="MenuSortTypeDesc.Text" xml:space="preserve">
-    <value>Type (PDFs first)</value>
-  </data>
-  <data name="MenuTools.Title" xml:space="preserve">
-    <value>Tools</value>
-  </data>
-  <data name="MenuSettings.Text" xml:space="preserve">
-    <value>Settings</value>
-  </data>
-  <data name="MenuLogs.Text" xml:space="preserve">
-    <value>View Logs</value>
-  </data>
-  <data name="MenuHelp.Title" xml:space="preserve">
-    <value>Help</value>
-  </data>
-  <data name="MenuAbout.Text" xml:space="preserve">
-    <value>About</value>
-  </data>
-  <data name="HeaderPages.Text" xml:space="preserve">
-    <value>Pages</value>
-  </data>
-  <data name="EmptyStateTitle.Text" xml:space="preserve">
-    <value>Drop images or PDFs here</value>
-  </data>
-  <data name="EmptyStateSubtitle.Text" xml:space="preserve">
-    <value>JPG, PNG, TIFF, HEIC, RAW and PDF are supported</value>
-  </data>
-  <data name="ButtonSavePdf.Content" xml:space="preserve">
-    <value>Save as PDF</value>
-  </data>
-  <data name="TooltipSelectMode.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Select Mode (Ctrl+E)</value>
-  </data>
-  <data name="TooltipThumbnails.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Thumbnails</value>
-  </data>
-  <data name="TooltipList.ToolTipService.ToolTip" xml:space="preserve">
-    <value>List</value>
-  </data>
-  <data name="TooltipRemoveSelected.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Remove Selected</value>
-  </data>
-  <data name="StatusReady" xml:space="preserve">
-    <value>Ready</value>
-  </data>
-  <data name="StatusLoadingFiles" xml:space="preserve">
-    <value>Loading {0} file(s)...</value>
-  </data>
-  <data name="StatusLoadingFileProgress" xml:space="preserve">
-    <value>Loading {0}/{1}: {2}</value>
-  </data>
-  <data name="StatusAddedPages" xml:space="preserve">
-    <value>Added {0} page(s)</value>
-  </data>
-  <data name="StatusLoadedPages" xml:space="preserve">
-    <value>Loaded {0} page(s)</value>
-  </data>
-  <data name="StatusNoSupportedFiles" xml:space="preserve">
-    <value>No supported files found</value>
-  </data>
-  <data name="StatusError" xml:space="preserve">
-    <value>Error: {0}</value>
-  </data>
-  <data name="StatusSelectMode" xml:space="preserve">
-    <value>Select mode: click items to select</value>
-  </data>
-  <data name="ItemCountFormat" xml:space="preserve">
-    <value>{0} pages ({1} images, {2} PDF pages)</value>
-  </data>
-  <data name="SelectionCountFormatSingle" xml:space="preserve">
-    <value>1 selected</value>
-  </data>
-  <data name="SelectionCountFormatMultiple" xml:space="preserve">
-    <value>{0} selected</value>
-  </data>
-  <data name="TextExitSelectMode" xml:space="preserve">
-    <value>Exit Select Mode</value>
-  </data>
-  <data name="TextEnterSelectMode" xml:space="preserve">
-    <value>Enter Select Mode</value>
-  </data>
-  <data name="AboutDialog.Title" xml:space="preserve">
-    <value>About Gladhen3</value>
-  </data>
-  <data name="AboutDialog.CloseButtonText" xml:space="preserve">
-    <value>OK</value>
-  </data>
-  <data name="AboutDialog_Description.Text" xml:space="preserve">
-    <value>Gladhen3 - Convert images to PDF and merge PDF files.
-Drag to reorder, double-click to preview.</value>
-  </data>
-  <data name="AboutDialog_Version.Text" xml:space="preserve">
-    <value>Version: 1.0.14</value>
-  </data>
-  <data name="AboutDialog_Repository.Text" xml:space="preserve">
-    <value>Repository: </value>
-  </data>
-  <data name="SettingsDialog.Title" xml:space="preserve">
-    <value>PDF Settings</value>
-  </data>
-  <data name="SettingsDialog.PrimaryButtonText" xml:space="preserve">
-    <value>Save</value>
-  </data>
-  <data name="SettingsDialog.CloseButtonText" xml:space="preserve">
-    <value>Cancel</value>
-  </data>
-  <data name="SettingsDialog_PaperSizeLabel.Text" xml:space="preserve">
-    <value>Paper Size (for images):</value>
-  </data>
-  <data name="SettingsDialog_PaperSize_Auto.Content" xml:space="preserve">
-    <value>Automatic (Use Image Size)</value>
-  </data>
-  <data name="SettingsDialog_PaperSize_A4.Content" xml:space="preserve">
-    <value>A4 (210 ×297 mm)</value>
-  </data>
-  <data name="SettingsDialog_PaperSize_Letter.Content" xml:space="preserve">
-    <value>Letter (8.5 ×11 in)</value>
-  </data>
-  <data name="SettingsDialog_PaperSize_Legal.Content" xml:space="preserve">
-    <value>Legal (8.5 ×14 in)</value>
-  </data>
-  <data name="SettingsDialog_PaperSize_A3.Content" xml:space="preserve">
-    <value>A3 (297 ×420 mm)</value>
-  </data>
-  <data name="SettingsDialog_PaperSize_Custom.Content" xml:space="preserve">
-    <value>Custom...</value>
-  </data>
-  <data name="SettingsDialog_UnitLabel.Text" xml:space="preserve">
-    <value>Unit:</value>
-  </data>
-  <data name="SettingsDialog_Unit_MM.Content" xml:space="preserve">
-    <value>Millimeters (mm)</value>
-  </data>
-  <data name="SettingsDialog_Unit_IN.Content" xml:space="preserve">
-    <value>Inches (in)</value>
-  </data>
-  <data name="SettingsDialog_Unit_PT.Content" xml:space="preserve">
-    <value>Points (pt)</value>
-  </data>
-  <data name="SettingsDialog_WidthLabel.Text" xml:space="preserve">
-    <value>Width:</value>
-  </data>
-  <data name="SettingsDialog_HeightLabel.Text" xml:space="preserve">
-    <value>Height:</value>
-  </data>
-  <data name="SettingsDialog_PresetsLabel.Text" xml:space="preserve">
-    <value>Presets:</value>
-  </data>
-  <data name="SettingsDialog_OrientationLabel.Text" xml:space="preserve">
-    <value>Orientation:</value>
-  </data>
-  <data name="SettingsDialog_Orientation_Auto.Content" xml:space="preserve">
-    <value>Automatic</value>
-  </data>
-  <data name="SettingsDialog_Orientation_Portrait.Content" xml:space="preserve">
-    <value>Portrait</value>
-  </data>
-  <data name="SettingsDialog_Orientation_Landscape.Content" xml:space="preserve">
-    <value>Landscape</value>
-  </data>
-  <data name="SettingsDialog_MarginsLabel.Text" xml:space="preserve">
-    <value>Page Margins:</value>
-  </data>
-  <data name="SettingsDialog_Margins_None.Content" xml:space="preserve">
-    <value>None (0")</value>
-  </data>
-  <data name="SettingsDialog_Margins_Narrow.Content" xml:space="preserve">
-    <value>Narrow (0.25")</value>
-  </data>
-  <data name="SettingsDialog_Margins_Normal.Content" xml:space="preserve">
-    <value>Normal (0.5")</value>
-  </data>
-  <data name="SettingsDialog_Margins_Wide.Content" xml:space="preserve">
-    <value>Wide (1")</value>
-  </data>
-  <data name="SettingsDialog_Margins_ExtraWide.Content" xml:space="preserve">
-    <value>Extra Wide (1.5")</value>
-  </data>
-  <data name="SettingsDialog_Margins_Custom.Content" xml:space="preserve">
-    <value>Custom...</value>
-  </data>
-  <data name="SettingsDialog_MarginLeft.Header" xml:space="preserve">
-    <value>Left</value>
-  </data>
-  <data name="SettingsDialog_MarginTop.Header" xml:space="preserve">
-    <value>Top</value>
-  </data>
-  <data name="SettingsDialog_MarginRight.Header" xml:space="preserve">
-    <value>Right</value>
-  </data>
-  <data name="SettingsDialog_MarginBottom.Header" xml:space="preserve">
-    <value>Bottom</value>
-  </data>
-  <data name="SettingsDialog_MarginNote.Text" xml:space="preserve">
-    <value>Note: Margins only apply when using a specific page size (not Automatic).</value>
-  </data>
-  <data name="SettingsDialog_CompressionLabel.Text" xml:space="preserve">
-    <value>Image Compression:</value>
-  </data>
-  <data name="SettingsDialog_Compression_None.Content" xml:space="preserve">
-    <value>None (Original Quality)</value>
-  </data>
-  <data name="SettingsDialog_Compression_Low.Content" xml:space="preserve">
-    <value>Low (JPEG 85%)</value>
-  </data>
-  <data name="SettingsDialog_Compression_Medium.Content" xml:space="preserve">
-    <value>Medium (JPEG 65%)</value>
-  </data>
-  <data name="SettingsDialog_Compression_High.Content" xml:space="preserve">
-    <value>High (JPEG 40%)</value>
-  </data>
-  <data name="SettingsDialog_CompressionNote.Text" xml:space="preserve">
-    <value>Note: Compression re-encodes all images to JPEG. Higher compression means smaller file size but lower quality.</value>
-  </data>
-  <data name="StatusLoadingNamedFiles" xml:space="preserve">
-    <value>Loading {0}...</value>
-  </data>
-  <data name="DialogTitleNoPages" xml:space="preserve">
-    <value>No Pages</value>
-  </data>
-  <data name="DialogContentNoPages" xml:space="preserve">
-    <value>Add images or PDFs to create a PDF.</value>
-  </data>
-  <data name="SuggestedFileNameDocument" xml:space="preserve">
-    <value>Document</value>
-  </data>
-  <data name="FileTypePdfDocument" xml:space="preserve">
-    <value>PDF Document</value>
-  </data>
-  <data name="DialogTitleSaveFailed" xml:space="preserve">
-    <value>Save Failed</value>
-  </data>
-  <data name="DialogContentSaveFailedPicker" xml:space="preserve">
-    <value>Unable to open the save dialog. This can happen if the system file picker failed. Try again or restart the app.</value>
-  </data>
-  <data name="StatusSaveCancelled" xml:space="preserve">
-    <value>Save cancelled</value>
-  </data>
-  <data name="StatusCancelled" xml:space="preserve">
-    <value>Cancelled</value>
-  </data>
-  <data name="StatusCreatingPdf" xml:space="preserve">
-    <value>Creating PDF...</value>
-  </data>
-  <data name="StatusPdfCreatedSuccessfully" xml:space="preserve">
-    <value>PDF created successfully</value>
-  </data>
-  <data name="DialogTitleSuccess" xml:space="preserve">
-    <value>Success</value>
-  </data>
-  <data name="DialogContentPdfSaved" xml:space="preserve">
-    <value>PDF saved to:
-{0}</value>
-  </data>
-  <data name="DialogTitleFileInUse" xml:space="preserve">
-    <value>File in Use</value>
-  </data>
-  <data name="DialogContentFileInUse" xml:space="preserve">
-    <value>Cannot save to '{0}' because it is open in another application. Close it and retry, or choose a different location.</value>
-  </data>
-  <data name="DialogButtonRetry" xml:space="preserve">
-    <value>Retry</value>
-  </data>
-  <data name="DialogButtonChooseLocation" xml:space="preserve">
-    <value>Choose Location</value>
-  </data>
-  <data name="DialogButtonCancel" xml:space="preserve">
-    <value>Cancel</value>
-  </data>
-  <data name="DialogTitleAccessDenied" xml:space="preserve">
-    <value>Access Denied</value>
-  </data>
-  <data name="DialogContentAccessDenied" xml:space="preserve">
-    <value>Access denied saving to '{0}'. Check permissions or choose a different location.</value>
-  </data>
-  <data name="DialogTitleError" xml:space="preserve">
-    <value>Error</value>
-  </data>
-  <data name="DialogContentCreatePdfError" xml:space="preserve">
-    <value>Failed to create PDF:
-{0}</value>
-  </data>
-  <data name="StatusErrorOpeningPreview" xml:space="preserve">
-    <value>Error opening preview</value>
-  </data>
-  <data name="TooltipPrevious" xml:space="preserve">
-    <value>Previous (?)</value>
-  </data>
-  <data name="TooltipNext" xml:space="preserve">
-    <value>Next (?)</value>
-  </data>
-  <data name="TooltipZoomOut" xml:space="preserve">
-    <value>Zoom Out (-)</value>
-  </data>
-  <data name="TooltipZoomIn" xml:space="preserve">
-    <value>Zoom In (+)</value>
-  </data>
-  <data name="TooltipFitToWindow" xml:space="preserve">
-    <value>Fit to Window</value>
-  </data>
-  <data name="ButtonOpenText" xml:space="preserve">
-    <value>Open</value>
-  </data>
-  <data name="DialogButtonClose" xml:space="preserve">
-    <value>Close</value>
-  </data>
-  <data name="TextUnableToLoadPreview" xml:space="preserve">
-    <value>Unable to load preview</value>
-  </data>
-  <data name="TextErrorLoadingPreview" xml:space="preserve">
-    <value>Error loading preview</value>
-  </data>
-  <data name="StatusReordering" xml:space="preserve">
-    <value>Reordering...</value>
-  </data>
-  <data name="StatusReorderComplete" xml:space="preserve">
-    <value>Reorder complete</value>
-  </data>
-  <data name="DragDropAdd" xml:space="preserve">
-    <value>Add</value>
-  </data>
-  <data name="StatusDropToAdd" xml:space="preserve">
-    <value>Drop to add</value>
-  </data>
-  <data name="StatusSelectedPages" xml:space="preserve">
-    <value>Selected {0} pages</value>
-  </data>
-  <data name="StatusDeselectedAll" xml:space="preserve">
-    <value>Deselected all</value>
-  </data>
-  <data name="StatusEnterSelectModeFirst" xml:space="preserve">
-    <value>Enter select mode first</value>
-  </data>
-  <data name="StatusNoPagesSelected" xml:space="preserve">
-    <value>No pages selected</value>
-  </data>
-  <data name="StatusRemovedPages" xml:space="preserve">
-    <value>Removed {0} page(s)</value>
-  </data>
-  <data name="StatusNoPagesToRemove" xml:space="preserve">
-    <value>No pages to remove</value>
-  </data>
-  <data name="StatusSortedByFilenameAsc" xml:space="preserve">
-    <value>Sorted by filename (A-Z)</value>
-  </data>
-  <data name="StatusSortedByFilenameDesc" xml:space="preserve">
-    <value>Sorted by filename (Z-A)</value>
-  </data>
-  <data name="StatusSortedByTypeImagesFirst" xml:space="preserve">
-    <value>Sorted by type (Images first)</value>
-  </data>
-  <data name="StatusSortedByTypePdfsFirst" xml:space="preserve">
-    <value>Sorted by type (PDFs first)</value>
-  </data>
-  <data name="StatusSettingsSaved" xml:space="preserve">
-    <value>Settings saved</value>
-  </data>
-  <data name="DialogButtonOK" xml:space="preserve">
-    <value>OK</value>
-  </data>
-  <data name="StatusNoSupportedFilesReceived" xml:space="preserve">
-    <value>No supported files received</value>
-  </data>
-  <data name="StatusReceivingFiles" xml:space="preserve">
-    <value>Receiving {0} file(s)...</value>
-  </data>
-  <data name="StatusAddedPagesFromAnotherInstance" xml:space="preserve">
-    <value>Added {0} page(s) from another instance</value>
-  </data>
-  <data name="UnitMillimetre" xml:space="preserve">
-    <value>Millimetre</value>
-  </data>
-  <data name="UnitInch" xml:space="preserve">
-    <value>Inch</value>
-  </data>
-  <data name="UnitPoint" xml:space="preserve">
-    <value>Point</value>
-  </data>
-  <data name="DialogContentDirectoryNotFound" xml:space="preserve">
-    <value>The folder '{0}' no longer exists. Choose a different location.</value>
-  </data>
-  <data name="DialogContentUnexpectedError" xml:space="preserve">
-    <value>Something went wrong and the PDF was not created. Details have been written to the log.</value>
-  </data>
-  <data name="DialogContentSettingsNotSaved" xml:space="preserve">
-    <value>Your settings could not be saved, so they will revert the next time the app starts.</value>
-  </data>
-  <data name="DialogTitleSomeFilesSkipped" xml:space="preserve">
-    <value>Some Files Skipped</value>
-  </data>
-  <data name="DialogContentSomeFilesSkipped" xml:space="preserve">
-    <value>These files could not be added:
-
-{0}</value>
-  </data>
-  <data name="DialogContentPagesSkipped" xml:space="preserve">
-    <value>The PDF was saved, but these items could not be included:
-
-{0}</value>
-  </data>
-  <data name="DialogTitleOpenLogsFailed" xml:space="preserve">
-    <value>Cannot Open Logs</value>
-  </data>
-  <data name="DialogContentOpenLogsFailed" xml:space="preserve">
-    <value>The log folder could not be opened.</value>
-  </data>
-  <data name="StatusFilesFailed" xml:space="preserve">
-    <value>{0} file(s) could not be loaded</value>
-  </data>
-  <data name="StatusUnexpectedError" xml:space="preserve">
-    <value>Something went wrong - see the log for details</value>
-  </data>
-  <data name="ButtonAddFilesLabel.Text" xml:space="preserve">
-    <value>Add files</value>
-  </data>
-  <data name="TooltipAddFiles.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Add images or PDFs (Ctrl+O)</value>
-  </data>
-  <data name="EmptyStateAddFiles.Content" xml:space="preserve">
-    <value>Add files</value>
-  </data>
-  <data name="TooltipEstimatedSize.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Estimated size of the saved PDF, using your current compression settings.</value>
-  </data>
-  <data name="EstimatedSizeFormat" xml:space="preserve">
-    <value>≈ {0}</value>
-  </data>
-  <data name="EstimatedSizeWorking" xml:space="preserve">
-    <value>Estimating…</value>
-  </data>
-  <data name="ItemCountImagesOnly" xml:space="preserve">
-    <value>{0} image(s)</value>
-  </data>
-  <data name="ItemCountPagesOnly" xml:space="preserve">
-    <value>{0} PDF page(s)</value>
+    <value>By type (PDFs first)</value>
   </data>
   <data name="MenuSplit.Title" xml:space="preserve">
     <value>Split</value>
@@ -620,16 +253,100 @@ Drag to reorder, double-click to preview.</value>
     <value>Split by source file</value>
   </data>
   <data name="MenuSplitEveryN.Text" xml:space="preserve">
-    <value>Split every N pages...</value>
+    <value>Split every N pages…</value>
   </data>
   <data name="MenuSplitIntoN.Text" xml:space="preserve">
-    <value>Split into N files...</value>
+    <value>Split into N files…</value>
   </data>
   <data name="MenuRemoveAllSplits.Text" xml:space="preserve">
     <value>Remove all splits</value>
   </data>
-  <data name="TooltipRemoveSplit.ToolTipService.ToolTip" xml:space="preserve">
-    <value>Remove this split</value>
+  <data name="MenuTools.Title" xml:space="preserve">
+    <value>Tools</value>
+  </data>
+  <data name="MenuSettings.Text" xml:space="preserve">
+    <value>Settings…</value>
+  </data>
+  <data name="MenuLogs.Text" xml:space="preserve">
+    <value>Open log folder</value>
+  </data>
+  <data name="MenuHelp.Title" xml:space="preserve">
+    <value>Help</value>
+  </data>
+  <data name="MenuAbout.Text" xml:space="preserve">
+    <value>About Gladhen3</value>
+  </data>
+  <data name="ButtonAddFilesLabel.Text" xml:space="preserve">
+    <value>Add files</value>
+  </data>
+  <data name="TooltipAddFiles.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Add images or PDFs (Ctrl+O)</value>
+  </data>
+  <data name="TooltipRotateLeft.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate left (Ctrl+L)</value>
+  </data>
+  <data name="TooltipRotateLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Rotate left</value>
+  </data>
+  <data name="TooltipRotateRight.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate right (Ctrl+R)</value>
+  </data>
+  <data name="TooltipRotateRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Rotate right</value>
+  </data>
+  <data name="TooltipDuplicate.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Duplicate (Ctrl+D)</value>
+  </data>
+  <data name="TooltipDuplicate.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="TooltipRemovePages.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove (Delete)</value>
+  </data>
+  <data name="TooltipRemovePages.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="TooltipUndo.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Undo (Ctrl+Z)</value>
+  </data>
+  <data name="TooltipUndo.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="TooltipSelectMode.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Select mode (Ctrl+E)</value>
+  </data>
+  <data name="TooltipSelectMode.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Select mode</value>
+  </data>
+  <data name="TooltipThumbnails.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Thumbnails</value>
+  </data>
+  <data name="TooltipThumbnails.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Thumbnails</value>
+  </data>
+  <data name="TooltipList.ToolTipService.ToolTip" xml:space="preserve">
+    <value>List</value>
+  </data>
+  <data name="TooltipList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>List</value>
+  </data>
+  <data name="EmptyStateTitle.Text" xml:space="preserve">
+    <value>Drop images or PDFs here</value>
+  </data>
+  <data name="EmptyStateSubtitle.Text" xml:space="preserve">
+    <value>PDF, JPG, PNG, TIFF, GIF, WebP and more</value>
+  </data>
+  <data name="EmptyStateAddFiles.Content" xml:space="preserve">
+    <value>Add files</value>
+  </data>
+  <data name="ItemCountFormat" xml:space="preserve">
+    <value>{0} pages ({1} images, {2} PDF pages)</value>
+  </data>
+  <data name="ItemCountImagesOnly" xml:space="preserve">
+    <value>{0} image(s)</value>
+  </data>
+  <data name="ItemCountPagesOnly" xml:space="preserve">
+    <value>{0} PDF page(s)</value>
   </data>
   <data name="SectionNameBox.PlaceholderText" xml:space="preserve">
     <value>File name</value>
@@ -641,37 +358,279 @@ Drag to reorder, double-click to preview.</value>
     <value>{0} page(s)</value>
   </data>
   <data name="SectionEmpty" xml:space="preserve">
-    <value>empty - nothing to save</value>
+    <value>empty — nothing to save</value>
+  </data>
+  <data name="TooltipRemoveSplit.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove this split</value>
+  </data>
+  <data name="TooltipRemoveSplit.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Remove this split</value>
+  </data>
+  <data name="DragDropAdd" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="ExtractFileNameFormat" xml:space="preserve">
+    <value>{0} (pages)</value>
+  </data>
+  <data name="ButtonSavePdf.Content" xml:space="preserve">
+    <value>Save as PDF</value>
+  </data>
+  <data name="TooltipRemoveSelected.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove selected pages (Delete)</value>
+  </data>
+  <data name="TooltipRemoveSelected.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Remove selected pages</value>
+  </data>
+  <data name="SelectionCountFormatSingle" xml:space="preserve">
+    <value>1 selected</value>
+  </data>
+  <data name="SelectionCountFormatMultiple" xml:space="preserve">
+    <value>{0} selected</value>
+  </data>
+  <data name="TooltipEstimatedSize.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Estimated size of the saved PDF with the current compression settings</value>
+  </data>
+  <data name="EstimatedSizeFormat" xml:space="preserve">
+    <value>≈ {0}</value>
+  </data>
+  <data name="EstimatedSizeWorking" xml:space="preserve">
+    <value>Estimating…</value>
   </data>
   <data name="OutputFileCount" xml:space="preserve">
     <value>{0} files</value>
   </data>
+  <data name="StatusReady" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="StatusError" xml:space="preserve">
+    <value>Error: {0}</value>
+  </data>
+  <data name="StatusUnexpectedError" xml:space="preserve">
+    <value>Something went wrong — see the log for details</value>
+  </data>
+  <data name="StatusLoadingFiles" xml:space="preserve">
+    <value>Loading {0} file(s)…</value>
+  </data>
+  <data name="StatusLoadingNamedFiles" xml:space="preserve">
+    <value>Loading {0}…</value>
+  </data>
+  <data name="StatusLoadingFileProgress" xml:space="preserve">
+    <value>Loading {0} of {1}: {2}</value>
+  </data>
+  <data name="StatusAddedPages" xml:space="preserve">
+    <value>Added {0} page(s)</value>
+  </data>
+  <data name="StatusLoadedPages" xml:space="preserve">
+    <value>Loaded {0} page(s)</value>
+  </data>
+  <data name="StatusFilesFailed" xml:space="preserve">
+    <value>{0} file(s) couldn&apos;t be loaded</value>
+  </data>
+  <data name="StatusNoSupportedFiles" xml:space="preserve">
+    <value>None of those files can be opened</value>
+  </data>
+  <data name="StatusReceivingFiles" xml:space="preserve">
+    <value>Receiving {0} file(s)…</value>
+  </data>
+  <data name="StatusNoSupportedFilesReceived" xml:space="preserve">
+    <value>None of the files received can be opened</value>
+  </data>
+  <data name="StatusAddedPagesFromAnotherInstance" xml:space="preserve">
+    <value>Added {0} page(s) from Explorer</value>
+  </data>
+  <data name="StatusSelectMode" xml:space="preserve">
+    <value>Select mode: click pages to select them</value>
+  </data>
+  <data name="StatusSelectedPages" xml:space="preserve">
+    <value>Selected {0} page(s)</value>
+  </data>
+  <data name="StatusDeselectedAll" xml:space="preserve">
+    <value>Selection cleared</value>
+  </data>
+  <data name="StatusNoPagesYet" xml:space="preserve">
+    <value>Add some files first (Ctrl+O)</value>
+  </data>
+  <data name="StatusPickPageFirst" xml:space="preserve">
+    <value>Click a page first, or select several with Ctrl+E</value>
+  </data>
+  <data name="StatusRemovedPages" xml:space="preserve">
+    <value>Removed {0} page(s)</value>
+  </data>
+  <data name="StatusNoPagesToRemove" xml:space="preserve">
+    <value>There are no pages to remove</value>
+  </data>
+  <data name="StatusRotatedPages" xml:space="preserve">
+    <value>Rotated {0} page(s)</value>
+  </data>
+  <data name="StatusDuplicatedPages" xml:space="preserve">
+    <value>Duplicated {0} page(s)</value>
+  </data>
+  <data name="StatusInsertedBlankPages" xml:space="preserve">
+    <value>Inserted {0} blank page(s)</value>
+  </data>
+  <data name="StatusReversedPages" xml:space="preserve">
+    <value>Reversed the order of {0} pages</value>
+  </data>
+  <data name="StatusUndone" xml:space="preserve">
+    <value>Undone</value>
+  </data>
+  <data name="StatusRedone" xml:space="preserve">
+    <value>Redone</value>
+  </data>
+  <data name="StatusNothingToUndo" xml:space="preserve">
+    <value>Nothing to undo</value>
+  </data>
+  <data name="StatusNothingToRedo" xml:space="preserve">
+    <value>Nothing to redo</value>
+  </data>
+  <data name="StatusReordering" xml:space="preserve">
+    <value>Reordering…</value>
+  </data>
+  <data name="StatusReorderComplete" xml:space="preserve">
+    <value>Order changed</value>
+  </data>
+  <data name="StatusDropToAdd" xml:space="preserve">
+    <value>Drop to add</value>
+  </data>
+  <data name="StatusSortedByFilenameAsc" xml:space="preserve">
+    <value>Sorted by name (A–Z)</value>
+  </data>
+  <data name="StatusSortedByFilenameDesc" xml:space="preserve">
+    <value>Sorted by name (Z–A)</value>
+  </data>
+  <data name="StatusSortedByTypeImagesFirst" xml:space="preserve">
+    <value>Sorted by type (images first)</value>
+  </data>
+  <data name="StatusSortedByTypePdfsFirst" xml:space="preserve">
+    <value>Sorted by type (PDFs first)</value>
+  </data>
   <data name="StatusNoPagesToSplit" xml:space="preserve">
-    <value>There are no pages to split.</value>
+    <value>There are no pages to split</value>
   </data>
   <data name="StatusPickPageToSplit" xml:space="preserve">
-    <value>Select the page that should start the next file.</value>
+    <value>Click the page that should start the next file</value>
   </data>
   <data name="StatusSplitInto" xml:space="preserve">
-    <value>Split into {0} document(s).</value>
+    <value>Split into {0} files</value>
   </data>
   <data name="StatusSplitRemoved" xml:space="preserve">
-    <value>Split removed.</value>
+    <value>Split removed</value>
   </data>
   <data name="StatusSplitsRemoved" xml:space="preserve">
-    <value>All splits removed.</value>
+    <value>All splits removed</value>
   </data>
   <data name="StatusNoSplitsToRemove" xml:space="preserve">
-    <value>The list is not split.</value>
+    <value>There are no splits to remove</value>
+  </data>
+  <data name="StatusCreatingPdf" xml:space="preserve">
+    <value>Creating PDF…</value>
+  </data>
+  <data name="StatusPdfCreatedSuccessfully" xml:space="preserve">
+    <value>PDF saved</value>
   </data>
   <data name="StatusSavingSection" xml:space="preserve">
     <value>Saving {0} of {1}: {2}</value>
   </data>
   <data name="StatusSectionsSaved" xml:space="preserve">
-    <value>{0} PDF(s) created successfully</value>
+    <value>{0} PDF(s) saved</value>
   </data>
   <data name="StatusSectionsPartlySaved" xml:space="preserve">
-    <value>{0} saved, {1} could not be written</value>
+    <value>{0} saved, {1} couldn&apos;t be written</value>
+  </data>
+  <data name="StatusSaveCancelled" xml:space="preserve">
+    <value>Save cancelled</value>
+  </data>
+  <data name="StatusCancelled" xml:space="preserve">
+    <value>Cancelled</value>
+  </data>
+  <data name="StatusSettingsSaved" xml:space="preserve">
+    <value>Settings saved</value>
+  </data>
+  <data name="SuggestedFileNameDocument" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="FileTypePdfDocument" xml:space="preserve">
+    <value>PDF document</value>
+  </data>
+  <data name="DialogButtonOK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="DialogButtonCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="DialogButtonRetry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="DialogButtonChooseLocation" xml:space="preserve">
+    <value>Choose another location</value>
+  </data>
+  <data name="DialogButtonReplace" xml:space="preserve">
+    <value>Replace</value>
+  </data>
+  <data name="DialogTitleSuccess" xml:space="preserve">
+    <value>Saved</value>
+  </data>
+  <data name="DialogContentPdfSaved" xml:space="preserve">
+    <value>The PDF was saved to:
+{0}</value>
+  </data>
+  <data name="DialogTitleNoPages" xml:space="preserve">
+    <value>Nothing to save</value>
+  </data>
+  <data name="DialogContentNoPages" xml:space="preserve">
+    <value>Add images or PDFs first, then save.</value>
+  </data>
+  <data name="DialogTitleSaveFailed" xml:space="preserve">
+    <value>Couldn&apos;t save</value>
+  </data>
+  <data name="DialogContentSaveFailedPicker" xml:space="preserve">
+    <value>The save dialog couldn&apos;t be opened. Try again, or restart Gladhen3 if it keeps happening.</value>
+  </data>
+  <data name="DialogContentDirectoryNotFound" xml:space="preserve">
+    <value>The folder &apos;{0}&apos; no longer exists. Choose another location.</value>
+  </data>
+  <data name="DialogTitleFileInUse" xml:space="preserve">
+    <value>File in use</value>
+  </data>
+  <data name="DialogContentFileInUse" xml:space="preserve">
+    <value>&apos;{0}&apos; is open in another app, so it can&apos;t be replaced. Close it there and retry, or save somewhere else.</value>
+  </data>
+  <data name="DialogTitleAccessDenied" xml:space="preserve">
+    <value>Access denied</value>
+  </data>
+  <data name="DialogContentAccessDenied" xml:space="preserve">
+    <value>Gladhen3 isn&apos;t allowed to write &apos;{0}&apos;. Check the folder&apos;s permissions, or save somewhere else.</value>
+  </data>
+  <data name="DialogTitleError" xml:space="preserve">
+    <value>Something went wrong</value>
+  </data>
+  <data name="DialogContentUnexpectedError" xml:space="preserve">
+    <value>The PDF wasn&apos;t created. The details are in the log (Tools &gt; Open log folder).</value>
+  </data>
+  <data name="DialogTitleSomeFilesSkipped" xml:space="preserve">
+    <value>Some files were skipped</value>
+  </data>
+  <data name="DialogContentSomeFilesSkipped" xml:space="preserve">
+    <value>These files couldn&apos;t be added:
+
+{0}</value>
+  </data>
+  <data name="DialogContentPagesSkipped" xml:space="preserve">
+    <value>The PDF was saved, but these couldn&apos;t be included:
+
+{0}</value>
+  </data>
+  <data name="DialogTitleCodecFailed" xml:space="preserve">
+    <value>Some images weren&apos;t compressed</value>
+  </data>
+  <data name="DialogContentCodecFailed" xml:space="preserve">
+    <value>The compression method failed on {0} image(s), so they were saved as they were. The log has the details.</value>
+  </data>
+  <data name="DialogTitleCodecUnavailable" xml:space="preserve">
+    <value>Compression method unavailable</value>
+  </data>
+  <data name="DialogContentCodecUnavailable" xml:space="preserve">
+    <value>The compression method chosen in Settings can&apos;t be used: {0}. Choose another one in Tools &gt; Settings, then save again.</value>
   </data>
   <data name="DialogTitleSplitEveryN" xml:space="preserve">
     <value>Split every N pages</value>
@@ -693,16 +652,13 @@ Drag to reorder, double-click to preview.</value>
 
 {1}</value>
   </data>
-  <data name="DialogButtonReplace" xml:space="preserve">
-    <value>Replace</value>
-  </data>
   <data name="DialogContentSectionsSaved" xml:space="preserve">
     <value>{0} PDF(s) were saved to:
 
 {1}</value>
   </data>
   <data name="DialogContentSectionsAllFailed" xml:space="preserve">
-    <value>None of the documents could be written:
+    <value>None of the files could be written:
 
 {0}</value>
   </data>
@@ -711,8 +667,349 @@ Drag to reorder, double-click to preview.</value>
 
 {1}
 
-These could not be written:
+These couldn&apos;t be written:
 
 {2}</value>
+  </data>
+  <data name="DialogContentSettingsNotSaved" xml:space="preserve">
+    <value>Your settings couldn&apos;t be saved, so they&apos;ll be lost when Gladhen3 closes.</value>
+  </data>
+  <data name="DialogTitleOpenLogsFailed" xml:space="preserve">
+    <value>Couldn&apos;t open the logs</value>
+  </data>
+  <data name="DialogContentOpenLogsFailed" xml:space="preserve">
+    <value>The log folder couldn&apos;t be opened.</value>
+  </data>
+  <data name="DialogTitleLoggingFailed" xml:space="preserve">
+    <value>Logging is off</value>
+  </data>
+  <data name="DialogContentLoggingFailed" xml:space="preserve">
+    <value>Gladhen3 couldn&apos;t open its log in {0}, so nothing will be recorded this session. Everything else works as normal.</value>
+  </data>
+  <data name="AboutDialog.Title" xml:space="preserve">
+    <value>About Gladhen3</value>
+  </data>
+  <data name="AboutDialog.CloseButtonText" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="AboutDialog_Description.Text" xml:space="preserve">
+    <value>A small, fast PDF tool: merge, split, rotate, reorder and compress pages, and turn images into PDFs.
+
+Double-click a page to open it in the viewer, drag pages to reorder them, and right-click a page for everything else.</value>
+  </data>
+  <data name="AboutVersionFormat" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="AboutDialog_Repository.Text" xml:space="preserve">
+    <value>Source code:</value>
+  </data>
+  <data name="ViewerBack.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Back to all pages (Esc)</value>
+  </data>
+  <data name="ViewerBack.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Back to all pages</value>
+  </data>
+  <data name="ViewerRotateLeft.Label" xml:space="preserve">
+    <value>Rotate left</value>
+  </data>
+  <data name="ViewerRotateLeft.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate left (Ctrl+L)</value>
+  </data>
+  <data name="ViewerRotateRight.Label" xml:space="preserve">
+    <value>Rotate right</value>
+  </data>
+  <data name="ViewerRotateRight.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Rotate right (Ctrl+R)</value>
+  </data>
+  <data name="ViewerDuplicate.Label" xml:space="preserve">
+    <value>Duplicate</value>
+  </data>
+  <data name="ViewerDuplicate.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Duplicate (Ctrl+D)</value>
+  </data>
+  <data name="ViewerInsertBlank.Label" xml:space="preserve">
+    <value>Insert blank page after</value>
+  </data>
+  <data name="ViewerInsertBlank.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Insert blank page after (Ctrl+B)</value>
+  </data>
+  <data name="ViewerSplitHere.Label" xml:space="preserve">
+    <value>Split before this page</value>
+  </data>
+  <data name="ViewerSplitHere.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Split before this page (Ctrl+Enter)</value>
+  </data>
+  <data name="ViewerExtract.Label" xml:space="preserve">
+    <value>Save as a separate PDF</value>
+  </data>
+  <data name="ViewerExtract.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Save this page as a separate PDF (Ctrl+Shift+S)</value>
+  </data>
+  <data name="ViewerRemove.Label" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="ViewerRemove.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Remove this page (Delete)</value>
+  </data>
+  <data name="ViewerZoomOut.Label" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="ViewerZoomOut.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom out (-)</value>
+  </data>
+  <data name="ViewerZoomIn.Label" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="ViewerZoomIn.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom in (+)</value>
+  </data>
+  <data name="ViewerFitPage.Label" xml:space="preserve">
+    <value>Fit page</value>
+  </data>
+  <data name="ViewerFitPage.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Show the whole page (Ctrl+0)</value>
+  </data>
+  <data name="ViewerFitWidth.Label" xml:space="preserve">
+    <value>Fit width</value>
+  </data>
+  <data name="ViewerFitWidth.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Fit the page to the window&apos;s width</value>
+  </data>
+  <data name="ViewerOpen.Label" xml:space="preserve">
+    <value>Open in default app</value>
+  </data>
+  <data name="ViewerOpen.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Open the original file in its default app</value>
+  </data>
+  <data name="ViewerPrevious.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Previous page (Left, Page Up)</value>
+  </data>
+  <data name="ViewerPrevious.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="ViewerNext.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Next page (Right, Page Down)</value>
+  </data>
+  <data name="ViewerNext.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Next page</value>
+  </data>
+  <data name="ViewerDetailsPdfPage" xml:space="preserve">
+    <value>Page {0} of {1} · {2}</value>
+  </data>
+  <data name="ViewerDetailsBlank" xml:space="preserve">
+    <value>Saved at the size of the page before it</value>
+  </data>
+  <data name="ViewerDetailsTurned" xml:space="preserve">
+    <value>turned {0}°</value>
+  </data>
+  <data name="ViewerCounterFormat" xml:space="preserve">
+    <value>{0} of {1}</value>
+  </data>
+  <data name="ViewerPageNotShown" xml:space="preserve">
+    <value>This page can&apos;t be shown.</value>
+  </data>
+  <data name="SettingsDialog.Title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="SettingsDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SettingsDialog.CloseButtonText" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SettingsDialog_PaperSizeLabel.Text" xml:space="preserve">
+    <value>Paper size</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Auto.Content" xml:space="preserve">
+    <value>Automatic (keep each page&apos;s size)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_A4.Content" xml:space="preserve">
+    <value>A4 (210 × 297 mm)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Letter.Content" xml:space="preserve">
+    <value>Letter (8.5 × 11 in)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Legal.Content" xml:space="preserve">
+    <value>Legal (8.5 × 14 in)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_A3.Content" xml:space="preserve">
+    <value>A3 (297 × 420 mm)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Custom.Content" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="SettingsDialog_UnitLabel.Text" xml:space="preserve">
+    <value>Unit</value>
+  </data>
+  <data name="SettingsDialog_Unit_MM.Content" xml:space="preserve">
+    <value>Millimetres (mm)</value>
+  </data>
+  <data name="SettingsDialog_Unit_IN.Content" xml:space="preserve">
+    <value>Inches (in)</value>
+  </data>
+  <data name="SettingsDialog_Unit_PT.Content" xml:space="preserve">
+    <value>Points (pt)</value>
+  </data>
+  <data name="UnitMillimetre" xml:space="preserve">
+    <value>mm</value>
+  </data>
+  <data name="UnitInch" xml:space="preserve">
+    <value>in</value>
+  </data>
+  <data name="UnitPoint" xml:space="preserve">
+    <value>pt</value>
+  </data>
+  <data name="SettingsDialog_WidthLabel.Text" xml:space="preserve">
+    <value>Width</value>
+  </data>
+  <data name="SettingsDialog_HeightLabel.Text" xml:space="preserve">
+    <value>Height</value>
+  </data>
+  <data name="SettingsDialog_PresetsLabel.Text" xml:space="preserve">
+    <value>Presets:</value>
+  </data>
+  <data name="SettingsDialog_OrientationLabel.Text" xml:space="preserve">
+    <value>Orientation</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Auto.Content" xml:space="preserve">
+    <value>Automatic (keep each page&apos;s)</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Portrait.Content" xml:space="preserve">
+    <value>Portrait</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Landscape.Content" xml:space="preserve">
+    <value>Landscape</value>
+  </data>
+  <data name="SettingsDialog_MarginsLabel.Text" xml:space="preserve">
+    <value>Margins</value>
+  </data>
+  <data name="SettingsDialog_Margins_None.Content" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="SettingsDialog_Margins_Narrow.Content" xml:space="preserve">
+    <value>Narrow (0.25 in)</value>
+  </data>
+  <data name="SettingsDialog_Margins_Normal.Content" xml:space="preserve">
+    <value>Normal (0.5 in)</value>
+  </data>
+  <data name="SettingsDialog_Margins_Wide.Content" xml:space="preserve">
+    <value>Wide (1 in)</value>
+  </data>
+  <data name="SettingsDialog_Margins_ExtraWide.Content" xml:space="preserve">
+    <value>Extra wide (1.5 in)</value>
+  </data>
+  <data name="SettingsDialog_Margins_Custom.Content" xml:space="preserve">
+    <value>Custom</value>
+  </data>
+  <data name="SettingsDialog_MarginLeft.Header" xml:space="preserve">
+    <value>Left</value>
+  </data>
+  <data name="SettingsDialog_MarginTop.Header" xml:space="preserve">
+    <value>Top</value>
+  </data>
+  <data name="SettingsDialog_MarginRight.Header" xml:space="preserve">
+    <value>Right</value>
+  </data>
+  <data name="SettingsDialog_MarginBottom.Header" xml:space="preserve">
+    <value>Bottom</value>
+  </data>
+  <data name="SettingsDialog_MarginNote.Text" xml:space="preserve">
+    <value>Margins apply only when a paper size is chosen. With Automatic, every page keeps its own size and edges.</value>
+  </data>
+  <data name="SettingsDialog_CompressionLabel.Text" xml:space="preserve">
+    <value>Image compression</value>
+  </data>
+  <data name="SettingsDialog_Compression_None.Content" xml:space="preserve">
+    <value>None (keep original images)</value>
+  </data>
+  <data name="SettingsDialog_Compression_Low.Content" xml:space="preserve">
+    <value>Low (300 DPI)</value>
+  </data>
+  <data name="SettingsDialog_Compression_Medium.Content" xml:space="preserve">
+    <value>Medium (150 DPI)</value>
+  </data>
+  <data name="SettingsDialog_Compression_High.Content" xml:space="preserve">
+    <value>High (96 DPI)</value>
+  </data>
+  <data name="SettingsDialog_CompressionNote.Text" xml:space="preserve">
+    <value>Images are scaled down to this resolution, then re-encoded with the method below, but only where that makes them smaller. Text and drawings are not touched.</value>
+  </data>
+  <data name="SettingsDialog_MethodLabel.Text" xml:space="preserve">
+    <value>Compression method</value>
+  </data>
+  <data name="SettingsMethodJpeg" xml:space="preserve">
+    <value>JPEG — smallest files, best for photos and scans</value>
+  </data>
+  <data name="SettingsMethodLossless" xml:space="preserve">
+    <value>Lossless — exact pixels, for screenshots and diagrams</value>
+  </data>
+  <data name="SettingsMethodPluginFormat" xml:space="preserve">
+    <value>{0} (codec)</value>
+  </data>
+  <data name="SettingsMethodUnavailableFormat" xml:space="preserve">
+    <value>{0} (unavailable)</value>
+  </data>
+  <data name="SettingsDialog_AddCodec.Content" xml:space="preserve">
+    <value>Add codec…</value>
+  </data>
+  <data name="SettingsDialog_RemoveCodec.Content" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="SettingsDialog_CodecDocs.Content" xml:space="preserve">
+    <value>Writing a codec</value>
+  </data>
+  <data name="SettingsDialog_CodecNote.Text" xml:space="preserve">
+    <value>A codec is a DLL that adds another compression method. It runs inside Gladhen3 with access to your files, so only add codecs you trust.</value>
+  </data>
+  <data name="SettingsCodecAdded" xml:space="preserve">
+    <value>Added &quot;{0}&quot;.</value>
+  </data>
+  <data name="SettingsCodecAddFailed" xml:space="preserve">
+    <value>{0} couldn&apos;t be added: {1}.</value>
+  </data>
+  <data name="SettingsCodecRemoved" xml:space="preserve">
+    <value>Removed &quot;{0}&quot;.</value>
+  </data>
+  <data name="SettingsCodecRemoveFailed" xml:space="preserve">
+    <value>{0} couldn&apos;t be removed: {1}.</value>
+  </data>
+  <data name="SettingsCodecUnusable" xml:space="preserve">
+    <value>{0} can&apos;t be used: {1}.</value>
+  </data>
+  <data name="CodecReason_NotFound" xml:space="preserve">
+    <value>it&apos;s no longer installed</value>
+  </data>
+  <data name="CodecReason_WrongArchitecture" xml:space="preserve">
+    <value>it was built for a different kind of processor than this copy of Gladhen3 ({0})</value>
+  </data>
+  <data name="CodecReason_LoadFailed" xml:space="preserve">
+    <value>Windows couldn&apos;t load it — a DLL it needs may be missing</value>
+  </data>
+  <data name="CodecReason_NotACodec" xml:space="preserve">
+    <value>it isn&apos;t a Gladhen3 codec</value>
+  </data>
+  <data name="CodecReason_UnsupportedVersion" xml:space="preserve">
+    <value>it was made for a different version of Gladhen3</value>
+  </data>
+  <data name="CodecReason_UnsupportedFilter" xml:space="preserve">
+    <value>it produces image data a PDF can&apos;t hold</value>
+  </data>
+  <data name="CodecReason_AlreadyInstalled" xml:space="preserve">
+    <value>a codec with the same file name is already installed</value>
+  </data>
+  <data name="CodecReason_InUse" xml:space="preserve">
+    <value>it&apos;s still in use — try again when the current save has finished</value>
+  </data>
+  <data name="CodecReason_Unknown" xml:space="preserve">
+    <value>it didn&apos;t work as expected</value>
+  </data>
+  <data name="SettingsDialog_LanguageLabel.Text" xml:space="preserve">
+    <value>Language</value>
+  </data>
+  <data name="SettingsDialog_Language_System.Content" xml:space="preserve">
+    <value>Same as Windows</value>
+  </data>
+  <data name="SettingsDialog_LanguageNote.Text" xml:space="preserve">
+    <value>A new language takes effect the next time Gladhen3 starts.</value>
   </data>
 </root>

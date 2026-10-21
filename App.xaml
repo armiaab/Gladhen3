@@ -84,6 +84,16 @@
                 <Setter Property="CornerRadius" Value="{StaticResource SmallCornerRadius}" />
             </Style>
 
+            <!--
+                A glyph flipped left to right: "rotate left" is the rotate glyph, mirrored.
+                Done through FlowDirection rather than a ScaleTransform, which a style would
+                have to share between every icon it is applied to.
+            -->
+            <Style x:Key="MirroredIconStyle" TargetType="FontIcon">
+                <Setter Property="FlowDirection" Value="RightToLeft" />
+                <Setter Property="MirroredWhenRightToLeft" Value="True" />
+            </Style>
+
             <!--  Vertical hairline between button groups.  -->
             <Style x:Key="ToolSeparatorStyle" TargetType="Border">
                 <Setter Property="Width" Value="1" />

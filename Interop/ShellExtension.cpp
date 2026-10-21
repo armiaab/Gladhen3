@@ -413,9 +413,12 @@ public:
 		return E_NOINTERFACE;
 	}
 
+	// Explorer's menu, so Windows' display language decides, not the app's own setting.
+	// GetUserDefaultUILanguage lives in kernel32, which is mapped already - no new import.
 	HRESULT __stdcall GetTitle(IShellItemArray*, LPWSTR* p) noexcept override
 	{
-		return CoTaskMemDupW(L"Open with Gladhen3", p);
+		const bool indonesian = PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_INDONESIAN;
+		return CoTaskMemDupW(indonesian ? L"Buka dengan Gladhen3" : L"Open with Gladhen3", p);
 	}
 
 	HRESULT __stdcall GetIcon(IShellItemArray*, LPWSTR* p) noexcept override

@@ -111,11 +111,12 @@ public sealed class PdfSection(string requestedName, DocumentItem? breakItem, Li
         string? single = null;
         foreach (var item in items)
         {
-            if (item.Type == DocumentType.SectionBreak) continue;
+            // An inserted blank page belongs to no file, so it says nothing about the name.
+            if (item.Type is DocumentType.SectionBreak or DocumentType.BlankPage) continue;
 
-            var source = item.Type == DocumentType.PdfPage
-                ? item.SourcePdfPath ?? item.FilePath
-                : item.FilePath;
+            // FilePath rather than SourcePdfPath: after the original has been saved over, a page
+            // is read from a copy with a meaningless name, but it still belongs to the original.
+            var source = item.FilePath;
 
             if (string.IsNullOrEmpty(source)) return string.Empty;
 

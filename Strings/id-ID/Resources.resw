@@ -1,0 +1,1015 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!-- 
+    Microsoft ResX Schema 
+    
+    Version 2.0
+    
+    The primary goals of this format is to allow a simple XML format 
+    that is mostly human readable. The generation and parsing of the 
+    various data types are done through the TypeConverter classes 
+    associated with the data types.
+    
+    Example:
+    
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+                
+    There are any number of "resheader" rows that contain simple 
+    name/value pairs.
+    
+    Each data row contains a name, and value. The row also contains a 
+    type or mimetype. Type corresponds to a .NET class that support 
+    text/value conversion through the TypeConverter architecture. 
+    Classes that don't support this are serialized and stored with the 
+    mimetype set.
+    
+    The mimetype is used for serialized objects, and tells the 
+    ResXResourceReader how to depersist the object. This is currently not 
+    extensible. For a given mimetype the value must be set accordingly:
+    
+    Note - application/x-microsoft.net.object.binary.base64 is the format 
+    that the ResXResourceWriter will generate, however the reader can 
+    read any of the formats listed below.
+    
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+    
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with 
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array 
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="AppTitle.Text" xml:space="preserve">
+    <value>Gladhen3</value>
+  </data>
+  <data name="AppDescription" xml:space="preserve">
+    <value>Alat PDF yang kecil dan cepat: gabungkan, pisahkan, putar, dan kompres PDF serta gambar</value>
+  </data>
+  <data name="HeaderPages.Text" xml:space="preserve">
+    <value>Halaman</value>
+  </data>
+  <data name="PageDisplayNameFormat" xml:space="preserve">
+    <value>{0} (Halaman {1}/{2})</value>
+  </data>
+  <data name="PageInfoFormat" xml:space="preserve">
+    <value>Halaman {0} dari {1}</value>
+  </data>
+  <data name="BlankPageName" xml:space="preserve">
+    <value>Halaman kosong</value>
+  </data>
+  <data name="NameListMoreFormat" xml:space="preserve">
+    <value>…dan {0} lainnya</value>
+  </data>
+  <data name="MenuFile.Title" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="MenuAddFiles.Text" xml:space="preserve">
+    <value>Tambah file…</value>
+  </data>
+  <data name="MenuAddImages.Text" xml:space="preserve">
+    <value>Tambah gambar…</value>
+  </data>
+  <data name="MenuAddPdfs.Text" xml:space="preserve">
+    <value>Tambah PDF…</value>
+  </data>
+  <data name="MenuExit.Text" xml:space="preserve">
+    <value>Keluar</value>
+  </data>
+  <data name="MenuEdit.Title" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="MenuUndo.Text" xml:space="preserve">
+    <value>Urungkan</value>
+  </data>
+  <data name="MenuRedo.Text" xml:space="preserve">
+    <value>Ulangi</value>
+  </data>
+  <data name="MenuEnterSelectMode.Text" xml:space="preserve">
+    <value>Masuk mode pilih</value>
+  </data>
+  <data name="TextEnterSelectMode" xml:space="preserve">
+    <value>Masuk mode pilih</value>
+  </data>
+  <data name="TextExitSelectMode" xml:space="preserve">
+    <value>Keluar dari mode pilih</value>
+  </data>
+  <data name="MenuSelectAll.Text" xml:space="preserve">
+    <value>Pilih semua</value>
+  </data>
+  <data name="MenuDeselectAll.Text" xml:space="preserve">
+    <value>Batalkan semua pilihan</value>
+  </data>
+  <data name="MenuRemoveSelected.Text" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="MenuRemoveAll.Text" xml:space="preserve">
+    <value>Hapus semua</value>
+  </data>
+  <data name="MenuPage.Title" xml:space="preserve">
+    <value>Halaman</value>
+  </data>
+  <data name="MenuPreview.Text" xml:space="preserve">
+    <value>Pratinjau</value>
+  </data>
+  <data name="MenuRotateRight.Text" xml:space="preserve">
+    <value>Putar ke kanan</value>
+  </data>
+  <data name="MenuRotateLeft.Text" xml:space="preserve">
+    <value>Putar ke kiri</value>
+  </data>
+  <data name="MenuRotate180.Text" xml:space="preserve">
+    <value>Putar 180°</value>
+  </data>
+  <data name="MenuDuplicate.Text" xml:space="preserve">
+    <value>Duplikat</value>
+  </data>
+  <data name="MenuInsertBlank.Text" xml:space="preserve">
+    <value>Sisipkan halaman kosong sesudahnya</value>
+  </data>
+  <data name="MenuReverse.Text" xml:space="preserve">
+    <value>Balik urutan</value>
+  </data>
+  <data name="MenuSelectOdd.Text" xml:space="preserve">
+    <value>Pilih halaman ganjil</value>
+  </data>
+  <data name="MenuSelectEven.Text" xml:space="preserve">
+    <value>Pilih halaman genap</value>
+  </data>
+  <data name="MenuExtract.Text" xml:space="preserve">
+    <value>Simpan sebagai PDF terpisah…</value>
+  </data>
+  <data name="MenuRemovePages.Text" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="MenuView.Title" xml:space="preserve">
+    <value>Tampilan</value>
+  </data>
+  <data name="MenuThumbnails.Text" xml:space="preserve">
+    <value>Gambar mini</value>
+  </data>
+  <data name="MenuList.Text" xml:space="preserve">
+    <value>Daftar</value>
+  </data>
+  <data name="MenuSort.Title" xml:space="preserve">
+    <value>Urutkan</value>
+  </data>
+  <data name="MenuSortNameAsc.Text" xml:space="preserve">
+    <value>Menurut nama (A–Z)</value>
+  </data>
+  <data name="MenuSortNameDesc.Text" xml:space="preserve">
+    <value>Menurut nama (Z–A)</value>
+  </data>
+  <data name="MenuSortTypeAsc.Text" xml:space="preserve">
+    <value>Menurut jenis (gambar dulu)</value>
+  </data>
+  <data name="MenuSortTypeDesc.Text" xml:space="preserve">
+    <value>Menurut jenis (PDF dulu)</value>
+  </data>
+  <data name="MenuSplit.Title" xml:space="preserve">
+    <value>Pisahkan</value>
+  </data>
+  <data name="MenuSplitHere.Text" xml:space="preserve">
+    <value>Pisahkan sebelum halaman ini</value>
+  </data>
+  <data name="MenuSplitBySource.Text" xml:space="preserve">
+    <value>Pisahkan per file sumber</value>
+  </data>
+  <data name="MenuSplitEveryN.Text" xml:space="preserve">
+    <value>Pisahkan setiap N halaman…</value>
+  </data>
+  <data name="MenuSplitIntoN.Text" xml:space="preserve">
+    <value>Pisahkan menjadi N file…</value>
+  </data>
+  <data name="MenuRemoveAllSplits.Text" xml:space="preserve">
+    <value>Hapus semua pemisah</value>
+  </data>
+  <data name="MenuTools.Title" xml:space="preserve">
+    <value>Alat</value>
+  </data>
+  <data name="MenuSettings.Text" xml:space="preserve">
+    <value>Pengaturan…</value>
+  </data>
+  <data name="MenuLogs.Text" xml:space="preserve">
+    <value>Buka folder log</value>
+  </data>
+  <data name="MenuHelp.Title" xml:space="preserve">
+    <value>Bantuan</value>
+  </data>
+  <data name="MenuAbout.Text" xml:space="preserve">
+    <value>Tentang Gladhen3</value>
+  </data>
+  <data name="ButtonAddFilesLabel.Text" xml:space="preserve">
+    <value>Tambah file</value>
+  </data>
+  <data name="TooltipAddFiles.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Tambah gambar atau PDF (Ctrl+O)</value>
+  </data>
+  <data name="TooltipRotateLeft.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Putar ke kiri (Ctrl+L)</value>
+  </data>
+  <data name="TooltipRotateLeft.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Putar ke kiri</value>
+  </data>
+  <data name="TooltipRotateRight.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Putar ke kanan (Ctrl+R)</value>
+  </data>
+  <data name="TooltipRotateRight.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Putar ke kanan</value>
+  </data>
+  <data name="TooltipDuplicate.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Duplikat (Ctrl+D)</value>
+  </data>
+  <data name="TooltipDuplicate.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Duplikat</value>
+  </data>
+  <data name="TooltipRemovePages.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Hapus (Delete)</value>
+  </data>
+  <data name="TooltipRemovePages.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="TooltipUndo.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Urungkan (Ctrl+Z)</value>
+  </data>
+  <data name="TooltipUndo.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Urungkan</value>
+  </data>
+  <data name="TooltipSelectMode.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Mode pilih (Ctrl+E)</value>
+  </data>
+  <data name="TooltipSelectMode.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Mode pilih</value>
+  </data>
+  <data name="TooltipThumbnails.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Gambar mini</value>
+  </data>
+  <data name="TooltipThumbnails.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Gambar mini</value>
+  </data>
+  <data name="TooltipList.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Daftar</value>
+  </data>
+  <data name="TooltipList.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Daftar</value>
+  </data>
+  <data name="EmptyStateTitle.Text" xml:space="preserve">
+    <value>Letakkan gambar atau PDF di sini</value>
+  </data>
+  <data name="EmptyStateSubtitle.Text" xml:space="preserve">
+    <value>PDF, JPG, PNG, TIFF, GIF, WebP, dan lainnya</value>
+  </data>
+  <data name="EmptyStateAddFiles.Content" xml:space="preserve">
+    <value>Tambah file</value>
+  </data>
+  <data name="ItemCountFormat" xml:space="preserve">
+    <value>{0} halaman ({1} gambar, {2} halaman PDF)</value>
+  </data>
+  <data name="ItemCountImagesOnly" xml:space="preserve">
+    <value>{0} gambar</value>
+  </data>
+  <data name="ItemCountPagesOnly" xml:space="preserve">
+    <value>{0} halaman PDF</value>
+  </data>
+  <data name="SectionNameBox.PlaceholderText" xml:space="preserve">
+    <value>Nama file</value>
+  </data>
+  <data name="SectionDefaultNamePrefix" xml:space="preserve">
+    <value>Dokumen</value>
+  </data>
+  <data name="SectionPageCount" xml:space="preserve">
+    <value>{0} halaman</value>
+  </data>
+  <data name="SectionEmpty" xml:space="preserve">
+    <value>kosong — tidak ada yang disimpan</value>
+  </data>
+  <data name="TooltipRemoveSplit.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Hapus pemisah ini</value>
+  </data>
+  <data name="TooltipRemoveSplit.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Hapus pemisah ini</value>
+  </data>
+  <data name="DragDropAdd" xml:space="preserve">
+    <value>Tambahkan</value>
+  </data>
+  <data name="ExtractFileNameFormat" xml:space="preserve">
+    <value>{0} (halaman)</value>
+  </data>
+  <data name="ButtonSavePdf.Content" xml:space="preserve">
+    <value>Simpan sebagai PDF</value>
+  </data>
+  <data name="TooltipRemoveSelected.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Hapus halaman yang dipilih (Delete)</value>
+  </data>
+  <data name="TooltipRemoveSelected.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Hapus halaman yang dipilih</value>
+  </data>
+  <data name="SelectionCountFormatSingle" xml:space="preserve">
+    <value>1 dipilih</value>
+  </data>
+  <data name="SelectionCountFormatMultiple" xml:space="preserve">
+    <value>{0} dipilih</value>
+  </data>
+  <data name="TooltipEstimatedSize.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Perkiraan ukuran PDF yang disimpan dengan pengaturan kompresi saat ini</value>
+  </data>
+  <data name="EstimatedSizeFormat" xml:space="preserve">
+    <value>≈ {0}</value>
+  </data>
+  <data name="EstimatedSizeWorking" xml:space="preserve">
+    <value>Memperkirakan…</value>
+  </data>
+  <data name="OutputFileCount" xml:space="preserve">
+    <value>{0} file</value>
+  </data>
+  <data name="StatusReady" xml:space="preserve">
+    <value>Siap</value>
+  </data>
+  <data name="StatusError" xml:space="preserve">
+    <value>Kesalahan: {0}</value>
+  </data>
+  <data name="StatusUnexpectedError" xml:space="preserve">
+    <value>Terjadi kesalahan — lihat log untuk detailnya</value>
+  </data>
+  <data name="StatusLoadingFiles" xml:space="preserve">
+    <value>Memuat {0} file…</value>
+  </data>
+  <data name="StatusLoadingNamedFiles" xml:space="preserve">
+    <value>Memuat {0}…</value>
+  </data>
+  <data name="StatusLoadingFileProgress" xml:space="preserve">
+    <value>Memuat {0} dari {1}: {2}</value>
+  </data>
+  <data name="StatusAddedPages" xml:space="preserve">
+    <value>{0} halaman ditambahkan</value>
+  </data>
+  <data name="StatusLoadedPages" xml:space="preserve">
+    <value>{0} halaman dimuat</value>
+  </data>
+  <data name="StatusFilesFailed" xml:space="preserve">
+    <value>{0} file tidak dapat dimuat</value>
+  </data>
+  <data name="StatusNoSupportedFiles" xml:space="preserve">
+    <value>Tidak ada file yang dapat dibuka</value>
+  </data>
+  <data name="StatusReceivingFiles" xml:space="preserve">
+    <value>Menerima {0} file…</value>
+  </data>
+  <data name="StatusNoSupportedFilesReceived" xml:space="preserve">
+    <value>Tidak ada file diterima yang dapat dibuka</value>
+  </data>
+  <data name="StatusAddedPagesFromAnotherInstance" xml:space="preserve">
+    <value>{0} halaman ditambahkan dari Explorer</value>
+  </data>
+  <data name="StatusSelectMode" xml:space="preserve">
+    <value>Mode pilih: klik halaman untuk memilihnya</value>
+  </data>
+  <data name="StatusSelectedPages" xml:space="preserve">
+    <value>{0} halaman dipilih</value>
+  </data>
+  <data name="StatusDeselectedAll" xml:space="preserve">
+    <value>Pilihan dikosongkan</value>
+  </data>
+  <data name="StatusNoPagesYet" xml:space="preserve">
+    <value>Tambahkan file terlebih dahulu (Ctrl+O)</value>
+  </data>
+  <data name="StatusPickPageFirst" xml:space="preserve">
+    <value>Klik sebuah halaman dulu, atau pilih beberapa dengan Ctrl+E</value>
+  </data>
+  <data name="StatusRemovedPages" xml:space="preserve">
+    <value>{0} halaman dihapus</value>
+  </data>
+  <data name="StatusNoPagesToRemove" xml:space="preserve">
+    <value>Tidak ada halaman untuk dihapus</value>
+  </data>
+  <data name="StatusRotatedPages" xml:space="preserve">
+    <value>{0} halaman diputar</value>
+  </data>
+  <data name="StatusDuplicatedPages" xml:space="preserve">
+    <value>{0} halaman diduplikat</value>
+  </data>
+  <data name="StatusInsertedBlankPages" xml:space="preserve">
+    <value>{0} halaman kosong disisipkan</value>
+  </data>
+  <data name="StatusReversedPages" xml:space="preserve">
+    <value>Urutan {0} halaman dibalik</value>
+  </data>
+  <data name="StatusUndone" xml:space="preserve">
+    <value>Diurungkan</value>
+  </data>
+  <data name="StatusRedone" xml:space="preserve">
+    <value>Diulangi</value>
+  </data>
+  <data name="StatusNothingToUndo" xml:space="preserve">
+    <value>Tidak ada yang bisa diurungkan</value>
+  </data>
+  <data name="StatusNothingToRedo" xml:space="preserve">
+    <value>Tidak ada yang bisa diulangi</value>
+  </data>
+  <data name="StatusReordering" xml:space="preserve">
+    <value>Mengatur urutan…</value>
+  </data>
+  <data name="StatusReorderComplete" xml:space="preserve">
+    <value>Urutan diubah</value>
+  </data>
+  <data name="StatusDropToAdd" xml:space="preserve">
+    <value>Lepaskan untuk menambahkan</value>
+  </data>
+  <data name="StatusSortedByFilenameAsc" xml:space="preserve">
+    <value>Diurutkan menurut nama (A–Z)</value>
+  </data>
+  <data name="StatusSortedByFilenameDesc" xml:space="preserve">
+    <value>Diurutkan menurut nama (Z–A)</value>
+  </data>
+  <data name="StatusSortedByTypeImagesFirst" xml:space="preserve">
+    <value>Diurutkan menurut jenis (gambar dulu)</value>
+  </data>
+  <data name="StatusSortedByTypePdfsFirst" xml:space="preserve">
+    <value>Diurutkan menurut jenis (PDF dulu)</value>
+  </data>
+  <data name="StatusNoPagesToSplit" xml:space="preserve">
+    <value>Tidak ada halaman untuk dipisahkan</value>
+  </data>
+  <data name="StatusPickPageToSplit" xml:space="preserve">
+    <value>Klik halaman yang menjadi awal file berikutnya</value>
+  </data>
+  <data name="StatusSplitInto" xml:space="preserve">
+    <value>Dipisahkan menjadi {0} file</value>
+  </data>
+  <data name="StatusSplitRemoved" xml:space="preserve">
+    <value>Pemisah dihapus</value>
+  </data>
+  <data name="StatusSplitsRemoved" xml:space="preserve">
+    <value>Semua pemisah dihapus</value>
+  </data>
+  <data name="StatusNoSplitsToRemove" xml:space="preserve">
+    <value>Tidak ada pemisah untuk dihapus</value>
+  </data>
+  <data name="StatusCreatingPdf" xml:space="preserve">
+    <value>Membuat PDF…</value>
+  </data>
+  <data name="StatusPdfCreatedSuccessfully" xml:space="preserve">
+    <value>PDF disimpan</value>
+  </data>
+  <data name="StatusSavingSection" xml:space="preserve">
+    <value>Menyimpan {0} dari {1}: {2}</value>
+  </data>
+  <data name="StatusSectionsSaved" xml:space="preserve">
+    <value>{0} PDF disimpan</value>
+  </data>
+  <data name="StatusSectionsPartlySaved" xml:space="preserve">
+    <value>{0} disimpan, {1} gagal ditulis</value>
+  </data>
+  <data name="StatusSaveCancelled" xml:space="preserve">
+    <value>Penyimpanan dibatalkan</value>
+  </data>
+  <data name="StatusCancelled" xml:space="preserve">
+    <value>Dibatalkan</value>
+  </data>
+  <data name="StatusSettingsSaved" xml:space="preserve">
+    <value>Pengaturan disimpan</value>
+  </data>
+  <data name="SuggestedFileNameDocument" xml:space="preserve">
+    <value>Dokumen</value>
+  </data>
+  <data name="FileTypePdfDocument" xml:space="preserve">
+    <value>Dokumen PDF</value>
+  </data>
+  <data name="DialogButtonOK" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="DialogButtonCancel" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="DialogButtonRetry" xml:space="preserve">
+    <value>Coba lagi</value>
+  </data>
+  <data name="DialogButtonChooseLocation" xml:space="preserve">
+    <value>Pilih lokasi lain</value>
+  </data>
+  <data name="DialogButtonReplace" xml:space="preserve">
+    <value>Ganti</value>
+  </data>
+  <data name="DialogTitleSuccess" xml:space="preserve">
+    <value>Tersimpan</value>
+  </data>
+  <data name="DialogContentPdfSaved" xml:space="preserve">
+    <value>PDF disimpan ke:
+{0}</value>
+  </data>
+  <data name="DialogTitleNoPages" xml:space="preserve">
+    <value>Tidak ada yang disimpan</value>
+  </data>
+  <data name="DialogContentNoPages" xml:space="preserve">
+    <value>Tambahkan gambar atau PDF terlebih dahulu, lalu simpan.</value>
+  </data>
+  <data name="DialogTitleSaveFailed" xml:space="preserve">
+    <value>Gagal menyimpan</value>
+  </data>
+  <data name="DialogContentSaveFailedPicker" xml:space="preserve">
+    <value>Dialog simpan tidak dapat dibuka. Coba lagi, atau mulai ulang Gladhen3 jika masalah berlanjut.</value>
+  </data>
+  <data name="DialogContentDirectoryNotFound" xml:space="preserve">
+    <value>Folder &apos;{0}&apos; sudah tidak ada. Pilih lokasi lain.</value>
+  </data>
+  <data name="DialogTitleFileInUse" xml:space="preserve">
+    <value>File sedang digunakan</value>
+  </data>
+  <data name="DialogContentFileInUse" xml:space="preserve">
+    <value>&apos;{0}&apos; sedang dibuka di aplikasi lain sehingga tidak dapat diganti. Tutup file itu lalu coba lagi, atau simpan di lokasi lain.</value>
+  </data>
+  <data name="DialogTitleAccessDenied" xml:space="preserve">
+    <value>Akses ditolak</value>
+  </data>
+  <data name="DialogContentAccessDenied" xml:space="preserve">
+    <value>Gladhen3 tidak diizinkan menulis &apos;{0}&apos;. Periksa izin folder tersebut, atau simpan di lokasi lain.</value>
+  </data>
+  <data name="DialogTitleError" xml:space="preserve">
+    <value>Terjadi kesalahan</value>
+  </data>
+  <data name="DialogContentUnexpectedError" xml:space="preserve">
+    <value>PDF tidak dibuat. Detailnya ada di log (Alat &gt; Buka folder log).</value>
+  </data>
+  <data name="DialogTitleSomeFilesSkipped" xml:space="preserve">
+    <value>Beberapa file dilewati</value>
+  </data>
+  <data name="DialogContentSomeFilesSkipped" xml:space="preserve">
+    <value>File berikut tidak dapat ditambahkan:
+
+{0}</value>
+  </data>
+  <data name="DialogContentPagesSkipped" xml:space="preserve">
+    <value>PDF sudah disimpan, tetapi item berikut tidak dapat disertakan:
+
+{0}</value>
+  </data>
+  <data name="DialogTitleCodecFailed" xml:space="preserve">
+    <value>Beberapa gambar tidak dikompresi</value>
+  </data>
+  <data name="DialogContentCodecFailed" xml:space="preserve">
+    <value>Metode kompresi gagal pada {0} gambar, jadi gambar tersebut disimpan apa adanya. Detailnya ada di log.</value>
+  </data>
+  <data name="DialogTitleCodecUnavailable" xml:space="preserve">
+    <value>Metode kompresi tidak tersedia</value>
+  </data>
+  <data name="DialogContentCodecUnavailable" xml:space="preserve">
+    <value>Metode kompresi yang dipilih di Pengaturan tidak dapat digunakan: {0}. Pilih metode lain di Alat &gt; Pengaturan, lalu simpan lagi.</value>
+  </data>
+  <data name="DialogTitleSplitEveryN" xml:space="preserve">
+    <value>Pisahkan setiap N halaman</value>
+  </data>
+  <data name="DialogLabelPagesPerFile" xml:space="preserve">
+    <value>Halaman per file</value>
+  </data>
+  <data name="DialogTitleSplitIntoN" xml:space="preserve">
+    <value>Pisahkan menjadi N file</value>
+  </data>
+  <data name="DialogLabelNumberOfFiles" xml:space="preserve">
+    <value>Jumlah file</value>
+  </data>
+  <data name="DialogTitleOverwriteFiles" xml:space="preserve">
+    <value>Ganti file yang ada?</value>
+  </data>
+  <data name="DialogContentOverwriteFiles" xml:space="preserve">
+    <value>{0} file di folder ini akan diganti:
+
+{1}</value>
+  </data>
+  <data name="DialogContentSectionsSaved" xml:space="preserve">
+    <value>{0} PDF disimpan ke:
+
+{1}</value>
+  </data>
+  <data name="DialogContentSectionsAllFailed" xml:space="preserve">
+    <value>Tidak ada file yang dapat ditulis:
+
+{0}</value>
+  </data>
+  <data name="DialogContentSectionsPartlySaved" xml:space="preserve">
+    <value>{0} PDF disimpan ke:
+
+{1}
+
+File berikut gagal ditulis:
+
+{2}</value>
+  </data>
+  <data name="DialogContentSettingsNotSaved" xml:space="preserve">
+    <value>Pengaturan Anda tidak dapat disimpan, jadi akan hilang saat Gladhen3 ditutup.</value>
+  </data>
+  <data name="DialogTitleOpenLogsFailed" xml:space="preserve">
+    <value>Log tidak dapat dibuka</value>
+  </data>
+  <data name="DialogContentOpenLogsFailed" xml:space="preserve">
+    <value>Folder log tidak dapat dibuka.</value>
+  </data>
+  <data name="DialogTitleLoggingFailed" xml:space="preserve">
+    <value>Log tidak aktif</value>
+  </data>
+  <data name="DialogContentLoggingFailed" xml:space="preserve">
+    <value>Gladhen3 tidak dapat membuka log di {0}, jadi sesi ini tidak akan tercatat. Fitur lain tetap berfungsi normal.</value>
+  </data>
+  <data name="AboutDialog.Title" xml:space="preserve">
+    <value>Tentang Gladhen3</value>
+  </data>
+  <data name="AboutDialog.CloseButtonText" xml:space="preserve">
+    <value>OK</value>
+  </data>
+  <data name="AboutDialog_Description.Text" xml:space="preserve">
+    <value>Alat PDF yang kecil dan cepat: gabungkan, pisahkan, putar, atur ulang, dan kompres halaman, serta ubah gambar menjadi PDF.
+
+Klik dua kali sebuah halaman untuk membukanya di penampil, seret halaman untuk mengubah urutannya, dan klik kanan sebuah halaman untuk perintah lainnya.</value>
+  </data>
+  <data name="AboutVersionFormat" xml:space="preserve">
+    <value>Versi {0}</value>
+  </data>
+  <data name="AboutDialog_Repository.Text" xml:space="preserve">
+    <value>Kode sumber:</value>
+  </data>
+  <data name="ViewerBack.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Kembali ke semua halaman (Esc)</value>
+  </data>
+  <data name="ViewerBack.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Kembali ke semua halaman</value>
+  </data>
+  <data name="ViewerRotateLeft.Label" xml:space="preserve">
+    <value>Putar ke kiri</value>
+  </data>
+  <data name="ViewerRotateLeft.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Putar ke kiri (Ctrl+L)</value>
+  </data>
+  <data name="ViewerRotateRight.Label" xml:space="preserve">
+    <value>Putar ke kanan</value>
+  </data>
+  <data name="ViewerRotateRight.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Putar ke kanan (Ctrl+R)</value>
+  </data>
+  <data name="ViewerDuplicate.Label" xml:space="preserve">
+    <value>Duplikat</value>
+  </data>
+  <data name="ViewerDuplicate.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Duplikat (Ctrl+D)</value>
+  </data>
+  <data name="ViewerInsertBlank.Label" xml:space="preserve">
+    <value>Sisipkan halaman kosong sesudahnya</value>
+  </data>
+  <data name="ViewerInsertBlank.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Sisipkan halaman kosong sesudahnya (Ctrl+B)</value>
+  </data>
+  <data name="ViewerSplitHere.Label" xml:space="preserve">
+    <value>Pisahkan sebelum halaman ini</value>
+  </data>
+  <data name="ViewerSplitHere.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Pisahkan sebelum halaman ini (Ctrl+Enter)</value>
+  </data>
+  <data name="ViewerExtract.Label" xml:space="preserve">
+    <value>Simpan sebagai PDF terpisah</value>
+  </data>
+  <data name="ViewerExtract.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Simpan halaman ini sebagai PDF terpisah (Ctrl+Shift+S)</value>
+  </data>
+  <data name="ViewerRemove.Label" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="ViewerRemove.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Hapus halaman ini (Delete)</value>
+  </data>
+  <data name="ViewerZoomOut.Label" xml:space="preserve">
+    <value>Perkecil</value>
+  </data>
+  <data name="ViewerZoomOut.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Perkecil (-)</value>
+  </data>
+  <data name="ViewerZoomIn.Label" xml:space="preserve">
+    <value>Perbesar</value>
+  </data>
+  <data name="ViewerZoomIn.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Perbesar (+)</value>
+  </data>
+  <data name="ViewerFitPage.Label" xml:space="preserve">
+    <value>Pas halaman</value>
+  </data>
+  <data name="ViewerFitPage.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Tampilkan seluruh halaman (Ctrl+0)</value>
+  </data>
+  <data name="ViewerFitWidth.Label" xml:space="preserve">
+    <value>Pas lebar</value>
+  </data>
+  <data name="ViewerFitWidth.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Sesuaikan halaman dengan lebar jendela</value>
+  </data>
+  <data name="ViewerOpen.Label" xml:space="preserve">
+    <value>Buka di aplikasi bawaan</value>
+  </data>
+  <data name="ViewerOpen.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Buka file asli di aplikasi bawaannya</value>
+  </data>
+  <data name="ViewerPrevious.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Halaman sebelumnya (Kiri, Page Up)</value>
+  </data>
+  <data name="ViewerPrevious.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Halaman sebelumnya</value>
+  </data>
+  <data name="ViewerNext.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Halaman berikutnya (Kanan, Page Down)</value>
+  </data>
+  <data name="ViewerNext.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Halaman berikutnya</value>
+  </data>
+  <data name="ViewerDetailsPdfPage" xml:space="preserve">
+    <value>Halaman {0} dari {1} · {2}</value>
+  </data>
+  <data name="ViewerDetailsBlank" xml:space="preserve">
+    <value>Disimpan dengan ukuran halaman sebelumnya</value>
+  </data>
+  <data name="ViewerDetailsTurned" xml:space="preserve">
+    <value>diputar {0}°</value>
+  </data>
+  <data name="ViewerCounterFormat" xml:space="preserve">
+    <value>{0} dari {1}</value>
+  </data>
+  <data name="ViewerPageNotShown" xml:space="preserve">
+    <value>Halaman ini tidak dapat ditampilkan.</value>
+  </data>
+  <data name="SettingsDialog.Title" xml:space="preserve">
+    <value>Pengaturan</value>
+  </data>
+  <data name="SettingsDialog.PrimaryButtonText" xml:space="preserve">
+    <value>Simpan</value>
+  </data>
+  <data name="SettingsDialog.CloseButtonText" xml:space="preserve">
+    <value>Batal</value>
+  </data>
+  <data name="SettingsDialog_PaperSizeLabel.Text" xml:space="preserve">
+    <value>Ukuran kertas</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Auto.Content" xml:space="preserve">
+    <value>Otomatis (ukuran tiap halaman tetap)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_A4.Content" xml:space="preserve">
+    <value>A4 (210 × 297 mm)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Letter.Content" xml:space="preserve">
+    <value>Letter (8,5 × 11 inci)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Legal.Content" xml:space="preserve">
+    <value>Legal (8,5 × 14 inci)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_A3.Content" xml:space="preserve">
+    <value>A3 (297 × 420 mm)</value>
+  </data>
+  <data name="SettingsDialog_PaperSize_Custom.Content" xml:space="preserve">
+    <value>Kustom</value>
+  </data>
+  <data name="SettingsDialog_UnitLabel.Text" xml:space="preserve">
+    <value>Satuan</value>
+  </data>
+  <data name="SettingsDialog_Unit_MM.Content" xml:space="preserve">
+    <value>Milimeter (mm)</value>
+  </data>
+  <data name="SettingsDialog_Unit_IN.Content" xml:space="preserve">
+    <value>Inci (in)</value>
+  </data>
+  <data name="SettingsDialog_Unit_PT.Content" xml:space="preserve">
+    <value>Poin (pt)</value>
+  </data>
+  <data name="UnitMillimetre" xml:space="preserve">
+    <value>mm</value>
+  </data>
+  <data name="UnitInch" xml:space="preserve">
+    <value>inci</value>
+  </data>
+  <data name="UnitPoint" xml:space="preserve">
+    <value>pt</value>
+  </data>
+  <data name="SettingsDialog_WidthLabel.Text" xml:space="preserve">
+    <value>Lebar</value>
+  </data>
+  <data name="SettingsDialog_HeightLabel.Text" xml:space="preserve">
+    <value>Tinggi</value>
+  </data>
+  <data name="SettingsDialog_PresetsLabel.Text" xml:space="preserve">
+    <value>Preset:</value>
+  </data>
+  <data name="SettingsDialog_OrientationLabel.Text" xml:space="preserve">
+    <value>Orientasi</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Auto.Content" xml:space="preserve">
+    <value>Otomatis (orientasi tiap halaman tetap)</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Portrait.Content" xml:space="preserve">
+    <value>Potret</value>
+  </data>
+  <data name="SettingsDialog_Orientation_Landscape.Content" xml:space="preserve">
+    <value>Lanskap</value>
+  </data>
+  <data name="SettingsDialog_MarginsLabel.Text" xml:space="preserve">
+    <value>Margin</value>
+  </data>
+  <data name="SettingsDialog_Margins_None.Content" xml:space="preserve">
+    <value>Tanpa margin</value>
+  </data>
+  <data name="SettingsDialog_Margins_Narrow.Content" xml:space="preserve">
+    <value>Sempit (0,25 inci)</value>
+  </data>
+  <data name="SettingsDialog_Margins_Normal.Content" xml:space="preserve">
+    <value>Normal (0,5 inci)</value>
+  </data>
+  <data name="SettingsDialog_Margins_Wide.Content" xml:space="preserve">
+    <value>Lebar (1 inci)</value>
+  </data>
+  <data name="SettingsDialog_Margins_ExtraWide.Content" xml:space="preserve">
+    <value>Sangat lebar (1,5 inci)</value>
+  </data>
+  <data name="SettingsDialog_Margins_Custom.Content" xml:space="preserve">
+    <value>Kustom</value>
+  </data>
+  <data name="SettingsDialog_MarginLeft.Header" xml:space="preserve">
+    <value>Kiri</value>
+  </data>
+  <data name="SettingsDialog_MarginTop.Header" xml:space="preserve">
+    <value>Atas</value>
+  </data>
+  <data name="SettingsDialog_MarginRight.Header" xml:space="preserve">
+    <value>Kanan</value>
+  </data>
+  <data name="SettingsDialog_MarginBottom.Header" xml:space="preserve">
+    <value>Bawah</value>
+  </data>
+  <data name="SettingsDialog_MarginNote.Text" xml:space="preserve">
+    <value>Margin hanya berlaku jika ukuran kertas dipilih. Dengan Otomatis, setiap halaman mempertahankan ukuran dan tepinya sendiri.</value>
+  </data>
+  <data name="SettingsDialog_CompressionLabel.Text" xml:space="preserve">
+    <value>Kompresi gambar</value>
+  </data>
+  <data name="SettingsDialog_Compression_None.Content" xml:space="preserve">
+    <value>Tidak ada (gambar asli dipertahankan)</value>
+  </data>
+  <data name="SettingsDialog_Compression_Low.Content" xml:space="preserve">
+    <value>Rendah (300 DPI)</value>
+  </data>
+  <data name="SettingsDialog_Compression_Medium.Content" xml:space="preserve">
+    <value>Sedang (150 DPI)</value>
+  </data>
+  <data name="SettingsDialog_Compression_High.Content" xml:space="preserve">
+    <value>Tinggi (96 DPI)</value>
+  </data>
+  <data name="SettingsDialog_CompressionNote.Text" xml:space="preserve">
+    <value>Gambar diperkecil ke resolusi ini, lalu dienkode ulang dengan metode di bawah, hanya jika hasilnya lebih kecil. Teks dan gambar vektor tidak diubah.</value>
+  </data>
+  <data name="SettingsDialog_MethodLabel.Text" xml:space="preserve">
+    <value>Metode kompresi</value>
+  </data>
+  <data name="SettingsMethodJpeg" xml:space="preserve">
+    <value>JPEG — file terkecil, untuk foto &amp; hasil pindai</value>
+  </data>
+  <data name="SettingsMethodLossless" xml:space="preserve">
+    <value>Lossless — piksel utuh, untuk tangkapan layar &amp; diagram</value>
+  </data>
+  <data name="SettingsMethodPluginFormat" xml:space="preserve">
+    <value>{0} (codec)</value>
+  </data>
+  <data name="SettingsMethodUnavailableFormat" xml:space="preserve">
+    <value>{0} (tidak tersedia)</value>
+  </data>
+  <data name="SettingsDialog_AddCodec.Content" xml:space="preserve">
+    <value>Tambah codec…</value>
+  </data>
+  <data name="SettingsDialog_RemoveCodec.Content" xml:space="preserve">
+    <value>Hapus</value>
+  </data>
+  <data name="SettingsDialog_CodecDocs.Content" xml:space="preserve">
+    <value>Cara membuat codec</value>
+  </data>
+  <data name="SettingsDialog_CodecNote.Text" xml:space="preserve">
+    <value>Codec adalah DLL yang menambahkan metode kompresi lain. Codec berjalan di dalam Gladhen3 dengan akses ke file Anda, jadi tambahkan hanya codec yang Anda percayai.</value>
+  </data>
+  <data name="SettingsCodecAdded" xml:space="preserve">
+    <value>&quot;{0}&quot; ditambahkan.</value>
+  </data>
+  <data name="SettingsCodecAddFailed" xml:space="preserve">
+    <value>{0} tidak dapat ditambahkan: {1}.</value>
+  </data>
+  <data name="SettingsCodecRemoved" xml:space="preserve">
+    <value>&quot;{0}&quot; dihapus.</value>
+  </data>
+  <data name="SettingsCodecRemoveFailed" xml:space="preserve">
+    <value>{0} tidak dapat dihapus: {1}.</value>
+  </data>
+  <data name="SettingsCodecUnusable" xml:space="preserve">
+    <value>{0} tidak dapat digunakan: {1}.</value>
+  </data>
+  <data name="CodecReason_NotFound" xml:space="preserve">
+    <value>codec itu sudah tidak terpasang</value>
+  </data>
+  <data name="CodecReason_WrongArchitecture" xml:space="preserve">
+    <value>codec itu dibuat untuk jenis prosesor yang berbeda dari Gladhen3 ini ({0})</value>
+  </data>
+  <data name="CodecReason_LoadFailed" xml:space="preserve">
+    <value>Windows tidak dapat memuatnya — mungkin ada DLL yang dibutuhkannya yang hilang</value>
+  </data>
+  <data name="CodecReason_NotACodec" xml:space="preserve">
+    <value>file itu bukan codec Gladhen3</value>
+  </data>
+  <data name="CodecReason_UnsupportedVersion" xml:space="preserve">
+    <value>codec itu dibuat untuk versi Gladhen3 yang lain</value>
+  </data>
+  <data name="CodecReason_UnsupportedFilter" xml:space="preserve">
+    <value>codec itu menghasilkan data gambar yang tidak dapat dimuat dalam PDF</value>
+  </data>
+  <data name="CodecReason_AlreadyInstalled" xml:space="preserve">
+    <value>codec dengan nama file yang sama sudah terpasang</value>
+  </data>
+  <data name="CodecReason_InUse" xml:space="preserve">
+    <value>codec itu masih digunakan — coba lagi setelah penyimpanan selesai</value>
+  </data>
+  <data name="CodecReason_Unknown" xml:space="preserve">
+    <value>codec itu tidak berfungsi sebagaimana mestinya</value>
+  </data>
+  <data name="SettingsDialog_LanguageLabel.Text" xml:space="preserve">
+    <value>Bahasa</value>
+  </data>
+  <data name="SettingsDialog_Language_System.Content" xml:space="preserve">
+    <value>Sama dengan Windows</value>
+  </data>
+  <data name="SettingsDialog_LanguageNote.Text" xml:space="preserve">
+    <value>Bahasa baru berlaku saat Gladhen3 dibuka lagi.</value>
+  </data>
+</root>

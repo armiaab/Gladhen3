@@ -21,14 +21,21 @@ public sealed record DocumentLoadResult(List<DocumentItem> Items, IReadOnlyList<
 
 public class DocumentService
 {
-    private static readonly string[] ImageExtensions = [
+    /// <summary>The image formats offered, each one tested end to end, less any this PC cannot decode.</summary>
+    /// <remarks>
+    /// HEIC/HEIF and camera RAW (.raw .cr2 .nef .arw .dng) used to be listed too. They decode
+    /// only through optional Store codecs - HEIC needs Microsoft's paid HEVC extension on top of
+    /// the HEIF one - so on a stock PC the file was added, showed no thumbnail, and was dropped
+    /// at save time as a skipped page. The rest ship with Windows, but a codec such as WebP's can
+    /// be uninstalled, so the list is also held to the decoders actually present.
+    /// </remarks>
+    private static readonly string[] ImageExtensions = Decodable([
         ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif",
-        ".webp", ".heic", ".heif",
-        ".ico", ".wdp", ".hdp",
-        ".jxr",
-        ".dds",
-        ".raw", ".cr2", ".nef", ".arw", ".dng"
-    ];
+        ".webp",
+        ".ico",
+        ".jxr", ".wdp", ".hdp",
+        ".dds"
+    ]);
     private static readonly string[] PdfExtensions = [".pdf"];
     private static readonly string[] AllExtensions = [.. ImageExtensions, .. PdfExtensions];
     private static readonly string[] Sizes = ["B", "KB", "MB", "GB"];
@@ -37,6 +44,21 @@ public class DocumentService
         ImageExtensions.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
     private const int MaxDegreeOfParallelism = 4;
     private const uint ThumbnailWidth = 200;
+
+    private static string[] Decodable(string[] wanted)
+    {
+        var installed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var decoder in Windows.Graphics.Imaging.BitmapDecoder.GetDecoderInformationEnumerator())
+        {
+            foreach (var extension in decoder.FileExtensions) installed.Add(extension);
+        }
+
+        // .hdp is HD Photo's original name for what became JPEG XR. The decoder reads it - it
+        // goes by content, not by name - but no longer claims the extension.
+        if (installed.Contains(".wdp")) installed.Add(".hdp");
+
+        return wanted.Where(installed.Contains).ToArray();
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool IsImageFile(string path)

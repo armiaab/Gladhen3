@@ -12,6 +12,12 @@ public class AppSettings
     public PdfPaperOrientation Orientation { get; set; } = PdfPaperOrientation.Automatic;
     public PdfPageMargin Margin { get; set; } = PdfPageMargin.None;
     public PdfImageCompression ImageCompression { get; set; } = PdfImageCompression.None;
+
+    /// <summary>
+    /// Which encoder recompressed images go through: a built-in id, or "plugin:" and the file
+    /// name of a codec DLL. See <see cref="Services.ImageCodecs"/>.
+    /// </summary>
+    public string ImageCodec { get; set; } = Services.ImageCodecs.JpegId;
     public double CustomWidth { get; set; } = 210;
     public double CustomHeight { get; set; } = 297;
     public UnitSize CustomSizeUnit { get; set; } = UnitSize.Millimetre;
@@ -30,6 +36,30 @@ public class AppSettings
     public static AppSettings Current => _current;
 
     internal static void ReplaceForTesting(AppSettings settings) => _current = settings;
+
+    /// <summary>The margins in points, for the page as it is seen.</summary>
+    /// <remarks>
+    /// A preset puts the same margin on all four sides; Custom uses the four values as entered,
+    /// in their unit. Custom used to fall through to a fixed half inch all round, so the four
+    /// boxes in Settings changed nothing at all.
+    /// </remarks>
+    public (double Left, double Top, double Right, double Bottom) GetMarginsInPoints()
+    {
+        if (Margin != PdfPageMargin.Custom)
+        {
+            var all = GetMarginInPoints();
+            return (all, all, all, all);
+        }
+
+        double ToPoints(double value) => Math.Max(0, CustomMarginUnit switch
+        {
+            UnitSize.Inch => value * InchToPoints,
+            UnitSize.Point => value,
+            _ => value * MmToPoints
+        });
+
+        return (ToPoints(CustomMarginLeft), ToPoints(CustomMarginTop), ToPoints(CustomMarginRight), ToPoints(CustomMarginBottom));
+    }
 
     public double GetMarginInPoints()
     {

@@ -1,20 +1,29 @@
 using Gladhen3.Models;
+using Gladhen3.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Serilog;
 using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace Gladhen3.Dialogs;
 
 public sealed partial class SettingsDialog : ContentDialog
 {
     private readonly Microsoft.Windows.ApplicationModel.Resources.ResourceLoader _resourceLoader = new();
+    private readonly nint _ownerWindow;
     private UnitSize _previousUnit;
     private UnitSize _previousMarginUnit;
 
-    public SettingsDialog()
+    /// <param name="ownerWindow">The window the codec file picker belongs to.</param>
+    public SettingsDialog(nint ownerWindow)
     {
+        _ownerWindow = ownerWindow;
         InitializeComponent();
         LoadSettings();
     }
@@ -25,6 +34,12 @@ public sealed partial class SettingsDialog : ContentDialog
         OrientationCombo.SelectedIndex = (int)AppSettings.Current.Orientation;
         MarginCombo.SelectedIndex = (int)AppSettings.Current.Margin;
         CompressionCombo.SelectedIndex = (int)AppSettings.Current.ImageCompression;
+        PopulateMethods(AppSettings.Current.ImageCodec);
+
+        // Matched on the language alone: Windows stores "id-ID" back as "id".
+        var language = PrimarySubtag(Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride);
+        LanguageCombo.SelectedItem = LanguageCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => PrimarySubtag((string)i.Tag) == language)
+            ?? LanguageCombo.Items[0];
 
         UnitCombo.SelectedIndex = (int)AppSettings.Current.CustomSizeUnit;
         _previousUnit = (UnitSize)UnitCombo.SelectedIndex;
@@ -126,6 +141,161 @@ public sealed partial class SettingsDialog : ContentDialog
         };
     }
 
+    #region Compression method
+
+    private void CompressionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // With no compression nothing is re-encoded, so there is no method to choose.
+        if (MethodCombo != null)
+            MethodCombo.IsEnabled = CompressionCombo.SelectedIndex != (int)PdfImageCompression.None;
+    }
+
+    /// <summary>Fills the method list: the built-ins, then every installed plugin.</summary>
+    private void PopulateMethods(string selectedId)
+    {
+        MethodCombo.Items.Clear();
+        MethodCombo.Items.Add(new ComboBoxItem { Content = _resourceLoader.GetString("SettingsMethodJpeg"), Tag = ImageCodecs.JpegId });
+        MethodCombo.Items.Add(new ComboBoxItem { Content = _resourceLoader.GetString("SettingsMethodLossless"), Tag = ImageCodecs.LosslessId });
+
+        var plugins = new List<ImageCodecInfo>();
+        try
+        {
+            plugins.AddRange(ImageCodecs.ListPlugins());
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Log.Warning(ex, "Could not read the codec folder {Path}", ImageCodecs.PluginDirectory);
+        }
+
+        // A plugin chosen earlier but since deleted from outside the app is still shown, marked,
+        // so that the setting does not quietly turn into JPEG behind the user's back.
+        if (ImageCodecs.IsPlugin(selectedId) && !plugins.Exists(p => p.Id == selectedId))
+            plugins.Add(new ImageCodecInfo(selectedId, selectedId[ImageCodecs.PluginPrefix.Length..], null, null, CodecFailureReason.NotFound));
+
+        foreach (var plugin in plugins)
+        {
+            var item = new ComboBoxItem
+            {
+                Content = plugin.LoadFailure == null
+                    ? string.Format(_resourceLoader.GetString("SettingsMethodPluginFormat"), plugin.Name)
+                    : string.Format(_resourceLoader.GetString("SettingsMethodUnavailableFormat"), plugin.FileName),
+                Tag = plugin.Id,
+                DataContext = plugin
+            };
+            ToolTipService.SetToolTip(item, plugin.Filter == null ? plugin.FileName : $"{plugin.FileName} ({plugin.Filter})");
+            MethodCombo.Items.Add(item);
+        }
+
+        MethodCombo.SelectedItem = MethodCombo.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == selectedId)
+            ?? MethodCombo.Items[0];
+    }
+
+    private ImageCodecInfo? SelectedPlugin => (MethodCombo.SelectedItem as ComboBoxItem)?.DataContext as ImageCodecInfo;
+
+    private void MethodCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var plugin = SelectedPlugin;
+        RemoveCodecButton.IsEnabled = plugin != null;
+
+        if (plugin?.LoadFailure is { } failure)
+        {
+            ShowCodecMessage(InfoBarSeverity.Warning, string.Format(
+                _resourceLoader.GetString("SettingsCodecUnusable"), plugin.FileName, CodecText.Reason(_resourceLoader, failure)));
+        }
+        else if (CodecInfoBar.Severity == InfoBarSeverity.Warning)
+        {
+            CodecInfoBar.IsOpen = false;
+        }
+    }
+
+    private async void AddCodec_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new FileOpenPicker { ViewMode = PickerViewMode.List, SuggestedStartLocation = PickerLocationId.Downloads };
+        picker.FileTypeFilter.Add(".dll");
+        InitializeWithWindow.Initialize(picker, _ownerWindow);
+
+        var fileName = string.Empty;
+
+        // Event-handler boundary: async void, and every outcome is reported in the dialog itself
+        // - a second ContentDialog cannot open while this one is up.
+        try
+        {
+            var file = await picker.PickSingleFileAsync();
+            if (file == null) return;
+            fileName = file.Name;
+
+            AddCodecButton.IsEnabled = false;
+            var installed = await Task.Run(() => ImageCodecs.Install(file.Path));
+
+            PopulateMethods(installed.Id);
+            ShowCodecMessage(InfoBarSeverity.Success, string.Format(_resourceLoader.GetString("SettingsCodecAdded"), installed.Name));
+        }
+        catch (CodecException ex)
+        {
+            Log.Warning(ex, "Codec plugin {File} refused ({Reason})", fileName, ex.Reason);
+            ShowCodecMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsCodecAddFailed"), fileName, CodecText.Reason(_resourceLoader, ex.Reason)));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not add codec plugin {File}", fileName);
+            ShowCodecMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsCodecAddFailed"), fileName, CodecText.Reason(_resourceLoader, CodecFailureReason.Unknown)));
+        }
+        finally
+        {
+            AddCodecButton.IsEnabled = true;
+        }
+    }
+
+    private async void RemoveCodec_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedPlugin is not { } plugin) return;
+
+        var name = plugin.Name ?? plugin.FileName;
+
+        // Event-handler boundary, as above.
+        try
+        {
+            ImageCodecs.Uninstall(plugin.Id);
+
+            // The saved method goes with its DLL, whether or not OK is pressed: left pointing at
+            // a file that no longer exists, it would fail the next save.
+            if (AppSettings.Current.ImageCodec == plugin.Id)
+            {
+                AppSettings.Current.ImageCodec = ImageCodecs.JpegId;
+                await AppSettings.SaveAsync();
+            }
+
+            PopulateMethods(ImageCodecs.JpegId);
+            ShowCodecMessage(InfoBarSeverity.Success, string.Format(_resourceLoader.GetString("SettingsCodecRemoved"), name));
+        }
+        catch (CodecException ex)
+        {
+            Log.Warning(ex, "Codec plugin {File} not removed ({Reason})", plugin.FileName, ex.Reason);
+            ShowCodecMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsCodecRemoveFailed"), name, CodecText.Reason(_resourceLoader, ex.Reason)));
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Could not remove codec plugin {File}", plugin.FileName);
+            ShowCodecMessage(InfoBarSeverity.Error, string.Format(
+                _resourceLoader.GetString("SettingsCodecRemoveFailed"), name, CodecText.Reason(_resourceLoader, CodecFailureReason.Unknown)));
+        }
+    }
+
+    private static string PrimarySubtag(string? tag)
+        => string.IsNullOrEmpty(tag) ? string.Empty : tag.Split('-')[0].ToLowerInvariant();
+
+    private void ShowCodecMessage(InfoBarSeverity severity, string message)
+    {
+        CodecInfoBar.Severity = severity;
+        CodecInfoBar.Message = message;
+        CodecInfoBar.IsOpen = true;
+    }
+
+    #endregion
+
     private void PresetA4_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 0; WidthBox.Value = 210; HeightBox.Value = 297; }
     private void PresetLetter_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 1; WidthBox.Value = 8.5; HeightBox.Value = 11; }
     private void PresetA5_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 0; WidthBox.Value = 148; HeightBox.Value = 210; }
@@ -137,6 +307,18 @@ public sealed partial class SettingsDialog : ContentDialog
         AppSettings.Current.Orientation = (PdfPaperOrientation)OrientationCombo.SelectedIndex;
         AppSettings.Current.Margin = (PdfPageMargin)MarginCombo.SelectedIndex;
         AppSettings.Current.ImageCompression = (PdfImageCompression)CompressionCombo.SelectedIndex;
+        AppSettings.Current.ImageCodec = (MethodCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? ImageCodecs.JpegId;
+
+        // Kept by Windows for this app, not in the settings file: it has to be in force before
+        // the first window is built, which is before the settings file has been read. An empty
+        // value goes back to following Windows. It takes effect from the next start.
+        //
+        // Windows.Globalization, not the App SDK's Microsoft.Windows.Globalization: that one
+        // forwards the value here when it is set, but only remembers it for the current process,
+        // so after a restart it read back empty and Settings showed "Same as Windows" while the
+        // app was in Indonesian - and saving the dialog unchanged would have switched it back.
+        Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride =
+            (LanguageCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? string.Empty;
 
         if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
         {

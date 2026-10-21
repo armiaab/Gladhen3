@@ -15,6 +15,91 @@
     </Window.SystemBackdrop>
 
     <Grid>
+        <Grid.Resources>
+            <!--
+                One menu shared by every page. It acts on the page it was opened on, or
+                on the whole selection when that page is part of it - which page that is
+                gets worked out when it opens, from the element it was opened over.
+            -->
+            <MenuFlyout x:Key="PageMenu" Opening="PageMenu_Opening">
+                <MenuFlyoutItem
+                    x:Uid="MenuPreview"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Enter"
+                    Tag="Preview">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8A1;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem
+                    x:Uid="MenuRotateRight"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+R"
+                    Tag="RotateRight">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE7AD;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    x:Uid="MenuRotateLeft"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+L"
+                    Tag="RotateLeft">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE7AD;" Style="{StaticResource MirroredIconStyle}" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    x:Uid="MenuRotate180"
+                    Click="PageMenuItem_Click"
+                    Tag="Rotate180" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem
+                    x:Uid="MenuDuplicate"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+D"
+                    Tag="Duplicate">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8C8;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    x:Uid="MenuInsertBlank"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+B"
+                    Tag="InsertBlank">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE7C3;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    x:Uid="MenuSplitHere"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+Enter"
+                    Tag="SplitHere" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem
+                    x:Uid="MenuExtract"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+Shift+S"
+                    Tag="Extract">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE74E;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+                <MenuFlyoutItem
+                    x:Uid="MenuRemovePages"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Delete"
+                    Tag="Remove">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE74D;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
+            </MenuFlyout>
+        </Grid.Resources>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -71,6 +156,29 @@
                 </MenuBarItem>
                 <MenuBarItem x:Uid="MenuEdit">
                     <MenuFlyoutItem
+                        x:Name="UndoMenuItem"
+                        x:Uid="MenuUndo"
+                        Click="Undo_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE7A7;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="Z" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        x:Name="RedoMenuItem"
+                        x:Uid="MenuRedo"
+                        Click="Redo_Click">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE7A6;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="Y" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem
                         x:Name="SelectModeMenuItem"
                         x:Uid="MenuEnterSelectMode"
                         Click="ToggleSelectModeMenu_Click">
@@ -79,21 +187,116 @@
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem x:Uid="MenuSelectAll" Click="SelectAllButton_Click">
+                    <MenuFlyoutItem
+                        x:Name="SelectAllMenuItem"
+                        x:Uid="MenuSelectAll"
+                        Click="SelectAllButton_Click">
                         <MenuFlyoutItem.KeyboardAccelerators>
                             <KeyboardAccelerator Key="A" Modifiers="Control" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem x:Uid="MenuDeselectAll" Click="DeselectAllButton_Click" />
                     <MenuFlyoutSeparator />
-                    <MenuFlyoutItem x:Uid="MenuRemoveSelected" Click="RemoveSelected_Click">
+                    <MenuFlyoutItem
+                        x:Name="RemoveMenuItem"
+                        x:Uid="MenuRemoveSelected"
+                        Click="PageCommand_Click"
+                        Tag="Remove">
                         <MenuFlyoutItem.KeyboardAccelerators>
                             <KeyboardAccelerator Key="Delete" />
                         </MenuFlyoutItem.KeyboardAccelerators>
                     </MenuFlyoutItem>
                     <MenuFlyoutItem x:Uid="MenuRemoveAll" Click="RemoveAll_Click" />
                 </MenuBarItem>
+                <!--
+                    The quick edits. Each acts on the selection in select mode, otherwise on the
+                    page last clicked - the same pages the right-click menu below acts on.
+                -->
+                <MenuBarItem x:Uid="MenuPage">
+                    <MenuFlyoutItem
+                        x:Uid="MenuRotateRight"
+                        Click="PageCommand_Click"
+                        Tag="RotateRight">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE7AD;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="R" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        x:Uid="MenuRotateLeft"
+                        Click="PageCommand_Click"
+                        Tag="RotateLeft">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE7AD;" Style="{StaticResource MirroredIconStyle}" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="L" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        x:Uid="MenuRotate180"
+                        Click="PageCommand_Click"
+                        Tag="Rotate180" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem
+                        x:Uid="MenuDuplicate"
+                        Click="PageCommand_Click"
+                        Tag="Duplicate">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8C8;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="D" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        x:Uid="MenuInsertBlank"
+                        Click="PageCommand_Click"
+                        Tag="InsertBlank">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE7C3;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="B" Modifiers="Control" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutItem
+                        x:Uid="MenuReverse"
+                        Click="PageCommand_Click"
+                        Tag="Reverse">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8AB;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem x:Uid="MenuSelectOdd" Click="SelectOddPages_Click" />
+                    <MenuFlyoutItem x:Uid="MenuSelectEven" Click="SelectEvenPages_Click" />
+                    <MenuFlyoutSeparator />
+                    <MenuFlyoutItem
+                        x:Uid="MenuExtract"
+                        Click="PageCommand_Click"
+                        Tag="Extract">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE74E;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="S" Modifiers="Control,Shift" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
+                </MenuBarItem>
                 <MenuBarItem x:Uid="MenuView">
+                    <MenuFlyoutItem
+                        x:Uid="MenuPreview"
+                        Click="PageCommand_Click"
+                        KeyboardAcceleratorTextOverride="Enter"
+                        Tag="Preview">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8A1;" />
+                        </MenuFlyoutItem.Icon>
+                    </MenuFlyoutItem>
+                    <MenuFlyoutSeparator />
                     <MenuFlyoutItem x:Uid="MenuThumbnails" Click="SwitchToGridView_Click" />
                     <MenuFlyoutItem x:Uid="MenuList" Click="SwitchToListView_Click" />
                 </MenuBarItem>
@@ -164,6 +367,60 @@
                     </StackPanel>
                 </Button>
 
+                <!--  The edits made most often, one click away; the Page menu has the rest.  -->
+                <Border Style="{StaticResource ToolGroupStyle}">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                        <Button
+                            x:Name="RotateLeftButton"
+                            x:Uid="TooltipRotateLeft"
+                            Click="PageCommand_Click"
+                            Style="{StaticResource ToolButtonStyle}"
+                            Tag="RotateLeft">
+                            <FontIcon
+                                FontSize="14"
+                                Glyph="&#xE7AD;"
+                                Style="{StaticResource MirroredIconStyle}" />
+                        </Button>
+                        <Button
+                            x:Name="RotateRightButton"
+                            x:Uid="TooltipRotateRight"
+                            Click="PageCommand_Click"
+                            Style="{StaticResource ToolButtonStyle}"
+                            Tag="RotateRight">
+                            <FontIcon FontSize="14" Glyph="&#xE7AD;" />
+                        </Button>
+
+                        <Border Margin="2,0" Style="{StaticResource ToolSeparatorStyle}" />
+
+                        <Button
+                            x:Name="DuplicateButton"
+                            x:Uid="TooltipDuplicate"
+                            Click="PageCommand_Click"
+                            Style="{StaticResource ToolButtonStyle}"
+                            Tag="Duplicate">
+                            <FontIcon FontSize="14" Glyph="&#xE8C8;" />
+                        </Button>
+                        <Button
+                            x:Name="RemovePagesButton"
+                            x:Uid="TooltipRemovePages"
+                            Click="PageCommand_Click"
+                            Style="{StaticResource ToolButtonStyle}"
+                            Tag="Remove">
+                            <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                        </Button>
+
+                        <Border Margin="2,0" Style="{StaticResource ToolSeparatorStyle}" />
+
+                        <Button
+                            x:Name="UndoButton"
+                            x:Uid="TooltipUndo"
+                            Click="Undo_Click"
+                            Style="{StaticResource ToolButtonStyle}">
+                            <FontIcon FontSize="14" Glyph="&#xE7A7;" />
+                        </Button>
+                    </StackPanel>
+                </Border>
+
                 <!--  Related buttons share one bordered group instead of floating separately.  -->
                 <Border Style="{StaticResource ToolGroupStyle}">
                     <StackPanel Orientation="Horizontal" Spacing="2">
@@ -217,6 +474,7 @@
                             Height="175"
                             Margin="4"
                             AutomationProperties.Name="{Binding DisplayName}"
+                            ContextFlyout="{StaticResource PageMenu}"
                             Style="{StaticResource ItemCardStyle}">
                             <Grid Margin="8">
                                 <Grid.RowDefinitions>
@@ -226,7 +484,18 @@
                                 </Grid.RowDefinitions>
 
                                 <Border Grid.Row="0" Style="{StaticResource ThumbnailWellStyle}">
-                                    <Grid>
+                                    <!--
+                                        Square, so that a page turned a quarter still fits the
+                                        well: a render transform turns the drawing, not the
+                                        layout slot.
+                                    -->
+                                    <Grid
+                                        Width="108"
+                                        Height="108"
+                                        RenderTransformOrigin="0.5,0.5">
+                                        <Grid.RenderTransform>
+                                            <RotateTransform Angle="{Binding ThumbnailAngle}" />
+                                        </Grid.RenderTransform>
                                         <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
                                         <FontIcon
                                             FontSize="36"
@@ -304,6 +573,7 @@
                                     Background="Transparent"
                                     BorderThickness="0"
                                     FontSize="12"
+                                    GotFocus="SectionName_GotFocus"
                                     LostFocus="SectionName_LostFocus"
                                     Text="{Binding SectionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                                     TextWrapping="Wrap" />
@@ -321,7 +591,11 @@
                     </DataTemplate>
 
                     <DataTemplate x:Key="ListPageTemplate">
-                        <Grid Padding="8,6" AutomationProperties.Name="{Binding DisplayName}">
+                        <Grid
+                            Padding="8,6"
+                            AutomationProperties.Name="{Binding DisplayName}"
+                            Background="Transparent"
+                            ContextFlyout="{StaticResource PageMenu}">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="44" />
                                 <ColumnDefinition Width="*" />
@@ -334,7 +608,13 @@
                                 Width="36"
                                 Height="44"
                                 Style="{StaticResource ThumbnailWellStyle}">
-                                <Grid>
+                                <Grid
+                                    Width="36"
+                                    Height="36"
+                                    RenderTransformOrigin="0.5,0.5">
+                                    <Grid.RenderTransform>
+                                        <RotateTransform Angle="{Binding ThumbnailAngle}" />
+                                    </Grid.RenderTransform>
                                     <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
                                     <FontIcon
                                         FontSize="18"
@@ -415,6 +695,7 @@
                                     BorderThickness="0"
                                     FontSize="13"
                                     FontWeight="SemiBold"
+                                    GotFocus="SectionName_GotFocus"
                                     LostFocus="SectionName_LostFocus"
                                     Text="{Binding SectionName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
 
@@ -579,6 +860,335 @@
             </Grid>
         </Border>
 
+        <!--
+            The page viewer. It covers the header and the page list but not the bottom bar, so
+            the status line, the size estimate and Save stay where they always are. Every page
+            command - toolbar, menus, shortcuts - acts on the page shown here while it is open.
+        -->
+        <Grid
+            x:Name="ViewerPanel"
+            Grid.Row="1"
+            Grid.RowSpan="2"
+            Background="{ThemeResource SolidBackgroundFillColorBaseBrush}"
+            PreviewKeyDown="ViewerPanel_PreviewKeyDown"
+            Visibility="Collapsed">
+            <Grid.Resources>
+                <DataTemplate x:Key="FilmstripPageTemplate">
+                    <Border
+                        Width="60"
+                        Height="76"
+                        AutomationProperties.Name="{Binding DisplayName}"
+                        ContextFlyout="{StaticResource PageMenu}"
+                        Style="{StaticResource ThumbnailWellStyle}"
+                        ToolTipService.ToolTip="{Binding DisplayName}">
+                        <Grid
+                            Width="56"
+                            Height="56"
+                            RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <RotateTransform Angle="{Binding ThumbnailAngle}" />
+                            </Grid.RenderTransform>
+                            <Image Source="{Binding Thumbnail}" Stretch="Uniform" />
+                            <FontIcon
+                                FontSize="20"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Glyph="{Binding TypeIcon}"
+                                Visibility="{Binding Thumbnail, Converter={StaticResource NullToVisibilityConverter}}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+
+                <!--  Where one output file ends and the next begins.  -->
+                <DataTemplate x:Key="FilmstripSectionTemplate">
+                    <Border
+                        Width="4"
+                        Height="76"
+                        Margin="4,0"
+                        AutomationProperties.Name="{Binding SectionName}"
+                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                        CornerRadius="2"
+                        ToolTipService.ToolTip="{Binding SectionName}" />
+                </DataTemplate>
+
+                <selectors:DocumentTemplateSelector
+                    x:Key="FilmstripTemplateSelector"
+                    PageTemplate="{StaticResource FilmstripPageTemplate}"
+                    SectionBreakTemplate="{StaticResource FilmstripSectionTemplate}" />
+            </Grid.Resources>
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!--  Toolbar: back and what is shown on the left, the page commands on the right.  -->
+            <Grid Grid.Row="0" Margin="8,0,8,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" MaxWidth="360" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Button
+                    x:Uid="ViewerBack"
+                    Grid.Column="0"
+                    Margin="0,0,8,0"
+                    VerticalAlignment="Center"
+                    Click="ViewerBack_Click"
+                    Style="{StaticResource ToolButtonStyle}">
+                    <FontIcon FontSize="14" Glyph="&#xE72B;" />
+                </Button>
+
+                <StackPanel
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Spacing="0">
+                    <TextBlock
+                        x:Name="ViewerTitle"
+                        Style="{StaticResource BodyStrongTextBlockStyle}"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="NoWrap" />
+                    <TextBlock
+                        x:Name="ViewerDetails"
+                        Style="{StaticResource SecondaryTextStyle}"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+
+                <!--
+                    A CommandBar rather than a row of buttons so that a narrow window folds the
+                    rest into its "..." menu instead of cutting them off.
+                -->
+                <CommandBar
+                    Grid.Column="2"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Background="Transparent"
+                    DefaultLabelPosition="Collapsed"
+                    IsDynamicOverflowEnabled="True"
+                    OverflowButtonVisibility="Auto">
+                    <AppBarButton
+                        x:Uid="ViewerRotateLeft"
+                        Click="PageCommand_Click"
+                        Tag="RotateLeft">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE7AD;" Style="{StaticResource MirroredIconStyle}" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton
+                        x:Uid="ViewerRotateRight"
+                        Click="PageCommand_Click"
+                        Tag="RotateRight">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE7AD;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarSeparator />
+                    <AppBarButton
+                        x:Uid="ViewerDuplicate"
+                        Click="PageCommand_Click"
+                        Tag="Duplicate">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE8C8;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton
+                        x:Uid="ViewerInsertBlank"
+                        Click="PageCommand_Click"
+                        Tag="InsertBlank">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE7C3;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton
+                        x:Uid="ViewerSplitHere"
+                        Click="PageCommand_Click"
+                        Tag="SplitHere">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE8B7;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton
+                        x:Uid="ViewerExtract"
+                        Click="PageCommand_Click"
+                        Tag="Extract">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE74E;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarButton
+                        x:Uid="ViewerRemove"
+                        Click="PageCommand_Click"
+                        Tag="Remove">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE74D;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarSeparator />
+                    <AppBarButton x:Uid="ViewerZoomOut" Click="ViewerZoomOut_Click">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE71F;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarElementContainer VerticalContentAlignment="Center">
+                        <TextBlock
+                            x:Name="ViewerZoomText"
+                            Width="48"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SecondaryTextStyle}"
+                            TextAlignment="Center" />
+                    </AppBarElementContainer>
+                    <AppBarButton x:Uid="ViewerZoomIn" Click="ViewerZoomIn_Click">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE8A3;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                    <AppBarToggleButton
+                        x:Name="ViewerFitPageToggle"
+                        x:Uid="ViewerFitPage"
+                        Click="ViewerFitPage_Click">
+                        <AppBarToggleButton.Icon>
+                            <FontIcon Glyph="&#xE9A6;" />
+                        </AppBarToggleButton.Icon>
+                    </AppBarToggleButton>
+                    <AppBarToggleButton
+                        x:Name="ViewerFitWidthToggle"
+                        x:Uid="ViewerFitWidth"
+                        Click="ViewerFitWidth_Click">
+                        <AppBarToggleButton.Icon>
+                            <FontIcon Glyph="&#xE799;" />
+                        </AppBarToggleButton.Icon>
+                    </AppBarToggleButton>
+                    <AppBarSeparator />
+                    <AppBarButton
+                        x:Name="ViewerOpenButton"
+                        x:Uid="ViewerOpen"
+                        Click="ViewerOpen_Click">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE8A7;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
+                </CommandBar>
+            </Grid>
+
+            <!--  The page.  -->
+            <Grid Grid.Row="1">
+                <ScrollViewer
+                    x:Name="ViewerScroll"
+                    HorizontalScrollBarVisibility="Auto"
+                    HorizontalScrollMode="Auto"
+                    IsTabStop="True"
+                    MaxZoomFactor="8"
+                    MinZoomFactor="0.1"
+                    SizeChanged="ViewerScroll_SizeChanged"
+                    VerticalScrollBarVisibility="Auto"
+                    VerticalScrollMode="Auto"
+                    ViewChanged="ViewerScroll_ViewChanged"
+                    ZoomMode="Enabled">
+                    <!--
+                        Sized to the page at 100%; the scroll viewer's zoom does the rest, and the
+                        bitmap is re-rendered whenever the zoom needs more pixels than it has.
+                    -->
+                    <Grid
+                        x:Name="ViewerSheet"
+                        Margin="24"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="White"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        DoubleTapped="ViewerSheet_DoubleTapped">
+                        <Image x:Name="ViewerImage" Stretch="Fill" />
+                        <TextBlock
+                            x:Name="ViewerMessage"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Foreground="Gray"
+                            Style="{StaticResource BodyTextBlockStyle}"
+                            Visibility="Collapsed" />
+                    </Grid>
+                </ScrollViewer>
+
+                <ProgressRing
+                    x:Name="ViewerProgress"
+                    Width="32"
+                    Height="32"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsActive="False" />
+
+                <!--  For the mouse; the keyboard has Left/Right and PageUp/PageDown.  -->
+                <Button
+                    x:Name="ViewerPreviousButton"
+                    x:Uid="ViewerPrevious"
+                    Width="40"
+                    Height="40"
+                    Margin="12,0,0,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    Click="ViewerPrevious_Click"
+                    CornerRadius="20"
+                    Opacity="0.85">
+                    <FontIcon FontSize="14" Glyph="&#xE76B;" />
+                </Button>
+                <Button
+                    x:Name="ViewerNextButton"
+                    x:Uid="ViewerNext"
+                    Width="40"
+                    Height="40"
+                    Margin="0,0,24,0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Click="ViewerNext_Click"
+                    CornerRadius="20"
+                    Opacity="0.85">
+                    <FontIcon FontSize="14" Glyph="&#xE76C;" />
+                </Button>
+
+                <Border
+                    Margin="0,0,0,12"
+                    Padding="10,4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource SmallCornerRadius}">
+                    <TextBlock x:Name="ViewerCounter" Style="{StaticResource CaptionTextBlockStyle}" />
+                </Border>
+            </Grid>
+
+            <!--  Every page, to jump straight to one.  -->
+            <ListView
+                x:Name="Filmstrip"
+                Grid.Row="2"
+                Height="96"
+                Padding="8,4"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                ItemTemplateSelector="{StaticResource FilmstripTemplateSelector}"
+                ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                ScrollViewer.HorizontalScrollMode="Enabled"
+                ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                ScrollViewer.VerticalScrollMode="Disabled"
+                SelectionChanged="Filmstrip_SelectionChanged"
+                SelectionMode="Single">
+                <ListView.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <ItemsStackPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ListView.ItemsPanel>
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="MinWidth" Value="0" />
+                        <Setter Property="MinHeight" Value="0" />
+                        <Setter Property="Padding" Value="3" />
+                        <Setter Property="Margin" Value="1,0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+        </Grid>
+
         <!--  Bottom Bar  -->
         <Border
             Grid.Row="3"
@@ -615,8 +1225,9 @@
                         Visibility="Collapsed">
                         <Button
                             x:Uid="TooltipRemoveSelected"
-                            Click="RemoveSelected_Click"
-                            Style="{StaticResource ToolButtonStyle}">
+                            Click="PageCommand_Click"
+                            Style="{StaticResource ToolButtonStyle}"
+                            Tag="Remove">
                             <FontIcon FontSize="14" Glyph="&#xE74D;" />
                         </Button>
                         <TextBlock

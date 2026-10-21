@@ -15,7 +15,7 @@
         <StackPanel Spacing="16">
             <StackPanel>
                 <TextBlock x:Uid="SettingsDialog_PaperSizeLabel" FontWeight="SemiBold" />
-                <ComboBox x:Name="PaperSizeCombo" Width="220" SelectionChanged="PaperSizeCombo_SelectionChanged">
+                <ComboBox x:Name="PaperSizeCombo" Width="320" SelectionChanged="PaperSizeCombo_SelectionChanged">
                     <ComboBoxItem x:Uid="SettingsDialog_PaperSize_Auto" />
                     <ComboBoxItem x:Uid="SettingsDialog_PaperSize_A4" />
                     <ComboBoxItem x:Uid="SettingsDialog_PaperSize_Letter" />
@@ -58,7 +58,7 @@
 
             <StackPanel>
                 <TextBlock x:Uid="SettingsDialog_OrientationLabel" FontWeight="SemiBold" Margin="0,4,0,0" />
-                <ComboBox x:Name="OrientationCombo" Width="220">
+                <ComboBox x:Name="OrientationCombo" Width="320">
                     <ComboBoxItem x:Uid="SettingsDialog_Orientation_Auto" />
                     <ComboBoxItem x:Uid="SettingsDialog_Orientation_Portrait" />
                     <ComboBoxItem x:Uid="SettingsDialog_Orientation_Landscape" />
@@ -67,7 +67,7 @@
 
             <StackPanel>
                 <TextBlock x:Uid="SettingsDialog_MarginsLabel" FontWeight="SemiBold" Margin="0,4,0,0" />
-                <ComboBox x:Name="MarginCombo" Width="220" SelectionChanged="MarginCombo_SelectionChanged">
+                <ComboBox x:Name="MarginCombo" Width="320" SelectionChanged="MarginCombo_SelectionChanged">
                     <ComboBoxItem x:Uid="SettingsDialog_Margins_None" />
                     <ComboBoxItem x:Uid="SettingsDialog_Margins_Narrow" />
                     <ComboBoxItem x:Uid="SettingsDialog_Margins_Normal" />
@@ -106,7 +106,7 @@
 
             <StackPanel>
                 <TextBlock x:Uid="SettingsDialog_CompressionLabel" FontWeight="SemiBold" Margin="0,4,0,0" />
-                <ComboBox x:Name="CompressionCombo" Width="220">
+                <ComboBox x:Name="CompressionCombo" Width="320" SelectionChanged="CompressionCombo_SelectionChanged">
                     <ComboBoxItem x:Uid="SettingsDialog_Compression_None" />
                     <ComboBoxItem x:Uid="SettingsDialog_Compression_Low" />
                     <ComboBoxItem x:Uid="SettingsDialog_Compression_Medium" />
@@ -114,7 +114,39 @@
                 </ComboBox>
             </StackPanel>
 
+            <!--
+                How images are encoded once they are scaled: the two encoders Windows has, then
+                any codec DLLs the user has added.
+            -->
+            <StackPanel x:Name="MethodPanel" Spacing="8">
+                <TextBlock x:Uid="SettingsDialog_MethodLabel" FontWeight="SemiBold" Margin="0,4,0,0" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <ComboBox x:Name="MethodCombo" MinWidth="320" MaxWidth="400" SelectionChanged="MethodCombo_SelectionChanged" />
+                    <Button x:Name="RemoveCodecButton" x:Uid="SettingsDialog_RemoveCodec" Click="RemoveCodec_Click" IsEnabled="False" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                    <Button x:Name="AddCodecButton" x:Uid="SettingsDialog_AddCodec" Click="AddCodec_Click" />
+                    <HyperlinkButton x:Uid="SettingsDialog_CodecDocs" NavigateUri="https://github.com/armiaab/Gladhen3/blob/master/CodecSdk/README.md" />
+                </StackPanel>
+                <InfoBar x:Name="CodecInfoBar" IsClosable="True" IsOpen="False" />
+            </StackPanel>
+
             <TextBlock x:Uid="SettingsDialog_CompressionNote" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+            <TextBlock x:Uid="SettingsDialog_CodecNote" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+            <!--
+                Each language is named in itself, so it can be found by someone who cannot read
+                the one the app is showing.
+            -->
+            <StackPanel>
+                <TextBlock x:Uid="SettingsDialog_LanguageLabel" FontWeight="SemiBold" Margin="0,4,0,0" />
+                <ComboBox x:Name="LanguageCombo" Width="320">
+                    <ComboBoxItem x:Uid="SettingsDialog_Language_System" Tag="" />
+                    <ComboBoxItem Content="English" Tag="en-US" />
+                    <ComboBoxItem Content="Bahasa Indonesia" Tag="id-ID" />
+                </ComboBox>
+                <TextBlock x:Uid="SettingsDialog_LanguageNote" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+            </StackPanel>
 
         </StackPanel>
     </ScrollViewer>

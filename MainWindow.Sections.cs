@@ -127,6 +127,8 @@ public sealed partial class MainWindow
 
     private void ApplyBreakPositions(IEnumerable<int> pagePositions)
     {
+        RecordUndo();
+
         var pageCount = Pages.Count();
 
         var wanted = pagePositions
@@ -199,7 +201,9 @@ public sealed partial class MainWindow
 
     #region Split commands
 
-    private void SplitHere_Click(object sender, RoutedEventArgs e)
+    private void SplitHere_Click(object sender, RoutedEventArgs e) => SplitBefore(CurrentTargetItem());
+
+    private void SplitBefore(DocumentItem? target)
     {
         if (!Pages.Any())
         {
@@ -207,7 +211,6 @@ public sealed partial class MainWindow
             return;
         }
 
-        var target = CurrentTargetItem();
         if (target == null || target.Type == DocumentType.SectionBreak)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusPickPageToSplit");
@@ -243,11 +246,13 @@ public sealed partial class MainWindow
 
         for (var i = 0; i < pages.Count; i++)
         {
-            var source = pages[i].Type == DocumentType.PdfPage
-                ? pages[i].SourcePdfPath ?? pages[i].FilePath
-                : pages[i].FilePath;
+            // An inserted blank page has no file of its own; it stays with the one it follows.
+            if (pages[i].Type == DocumentType.BlankPage) continue;
 
-            if (i > 0 && !string.Equals(source, previous, StringComparison.OrdinalIgnoreCase))
+            // FilePath: the file a page belongs to, even once it is read from a saved-over copy.
+            var source = pages[i].FilePath;
+
+            if (previous != null && !string.Equals(source, previous, StringComparison.OrdinalIgnoreCase))
                 positions.Add(i);
 
             previous = source;
@@ -319,6 +324,7 @@ public sealed partial class MainWindow
             return;
         }
 
+        RecordUndo();
         RemoveAllBreaks();
         UpdateUIState();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusSplitsRemoved");
@@ -329,6 +335,7 @@ public sealed partial class MainWindow
         if (sender is not FrameworkElement { DataContext: DocumentItem band }) return;
         if (band.Type != DocumentType.SectionBreak) return;
 
+        RecordUndo();
         _documentItems.Remove(band);
         RefreshSections();
         UpdateUIState();
@@ -337,6 +344,8 @@ public sealed partial class MainWindow
 
     private void SectionName_LostFocus(object sender, RoutedEventArgs e)
     {
+        SetTextEditingShortcutsEnabled(true);
+
         if (sender is not FrameworkElement { DataContext: DocumentItem band }) return;
         if (band.Type != DocumentType.SectionBreak) return;
         if (!string.IsNullOrWhiteSpace(band.SectionName)) return;
@@ -381,8 +390,19 @@ public sealed partial class MainWindow
 
     #region Keyboard reorder
 
-    private void DocumentView_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
+    private async void DocumentView_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
+        // Enter opens the page in the viewer. Ctrl+Enter is "split here", and Enter typed into
+        // a split's name lands on a divider, which is not a page - both are left alone.
+        if (e.Key == VirtualKey.Enter &&
+            !InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down) &&
+            ItemFromVisual(e.OriginalSource) is { } page && IsPage(page))
+        {
+            e.Handled = true;
+            await OpenViewerAsync(page);
+            return;
+        }
+
         if (e.Key != VirtualKey.Up && e.Key != VirtualKey.Down) return;
 
         var keyboard = InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control);
@@ -400,6 +420,7 @@ public sealed partial class MainWindow
         var target = e.Key == VirtualKey.Up ? index - 1 : index + 1;
         if (target < 0 || target >= _documentItems.Count) return;
 
+        RecordUndo();
         _documentItems.Move(index, target);
         e.Handled = true;
 
@@ -485,6 +506,7 @@ public sealed partial class MainWindow
         var written = new List<string>();
         var failed = new List<string>();
         var skippedItems = new List<string>();
+        var codecFailures = 0;
 
         try
         {
@@ -496,9 +518,12 @@ public sealed partial class MainWindow
 
                 try
                 {
+                    // One file of the split may overwrite a source the later ones still read.
+                    PreserveSourceBeforeOverwrite(path);
                     var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(sections[i].Items, path));
                     written.Add(names[i]);
                     foreach (var skipped in result.SkippedItems) skippedItems.Add(skipped);
+                    codecFailures += result.CodecFailures;
                 }
                 catch (PdfOperationException ex)
                 {
@@ -527,6 +552,7 @@ public sealed partial class MainWindow
             written.Count, failed.Count, folder);
 
         await ReportSectionOutcomeAsync(folder, written, failed, skippedItems);
+        await ReportCodecFailuresAsync(codecFailures);
     }
 
     private async Task ReportSectionOutcomeAsync(
