@@ -54,6 +54,15 @@
                     x:Uid="MenuRotate180"
                     Click="PageMenuItem_Click"
                     Tag="Rotate180" />
+                <MenuFlyoutItem
+                    x:Uid="MenuNormalize"
+                    Click="PageMenuItem_Click"
+                    KeyboardAcceleratorTextOverride="Ctrl+Shift+R"
+                    Tag="Normalize">
+                    <MenuFlyoutItem.Icon>
+                        <FontIcon Glyph="&#xE8B4;" />
+                    </MenuFlyoutItem.Icon>
+                </MenuFlyoutItem>
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem
                     x:Uid="MenuDuplicate"
@@ -239,6 +248,17 @@
                         x:Uid="MenuRotate180"
                         Click="PageCommand_Click"
                         Tag="Rotate180" />
+                    <MenuFlyoutItem
+                        x:Uid="MenuNormalize"
+                        Click="PageCommand_Click"
+                        Tag="Normalize">
+                        <MenuFlyoutItem.Icon>
+                            <FontIcon Glyph="&#xE8B4;" />
+                        </MenuFlyoutItem.Icon>
+                        <MenuFlyoutItem.KeyboardAccelerators>
+                            <KeyboardAccelerator Key="R" Modifiers="Control,Shift" />
+                        </MenuFlyoutItem.KeyboardAccelerators>
+                    </MenuFlyoutItem>
                     <MenuFlyoutSeparator />
                     <MenuFlyoutItem
                         x:Uid="MenuDuplicate"
@@ -388,6 +408,14 @@
                             Style="{StaticResource ToolButtonStyle}"
                             Tag="RotateRight">
                             <FontIcon FontSize="14" Glyph="&#xE7AD;" />
+                        </Button>
+                        <Button
+                            x:Name="NormalizeButton"
+                            x:Uid="TooltipNormalize"
+                            Click="PageCommand_Click"
+                            Style="{StaticResource ToolButtonStyle}"
+                            Tag="Normalize">
+                            <FontIcon FontSize="14" Glyph="&#xE8B4;" />
                         </Button>
 
                         <Border Margin="2,0" Style="{StaticResource ToolSeparatorStyle}" />
@@ -983,6 +1011,14 @@
                             <FontIcon Glyph="&#xE7AD;" />
                         </AppBarButton.Icon>
                     </AppBarButton>
+                    <AppBarButton
+                        x:Uid="ViewerNormalize"
+                        Click="PageCommand_Click"
+                        Tag="Normalize">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE8B4;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
                     <AppBarSeparator />
                     <AppBarButton
                         x:Uid="ViewerDuplicate"
@@ -1201,7 +1237,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!--  A saving PDF is the one slow thing this app does; say so.  -->
+                <!--  Saving and normalizing are the slow things this app does; say so.  -->
                 <ProgressBar
                     x:Name="BusyBar"
                     Grid.Row="0"
@@ -1237,12 +1273,40 @@
                         <Border Margin="4,0" Style="{StaticResource ToolSeparatorStyle}" />
                     </StackPanel>
 
-                    <TextBlock
-                        x:Name="StatusTextBlock"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        Style="{StaticResource SecondaryTextStyle}"
-                        TextTrimming="CharacterEllipsis" />
+                    <Grid Grid.Column="1" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="StatusTextBlock"
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource SecondaryTextStyle}"
+                            TextTrimming="CharacterEllipsis" />
+
+                        <!--
+                            Normalize's own actions: stopping a long check, and afterwards
+                            picking out the pages it could not judge, which are the ones that
+                            still need a look.
+                        -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <HyperlinkButton
+                                x:Name="NormalizeStopButton"
+                                x:Uid="ButtonStopNormalize"
+                                Padding="6,2"
+                                VerticalAlignment="Center"
+                                Click="NormalizeStop_Click"
+                                Visibility="Collapsed" />
+                            <HyperlinkButton
+                                x:Name="NormalizeReviewButton"
+                                x:Uid="ButtonSelectLeftAlone"
+                                Padding="6,2"
+                                VerticalAlignment="Center"
+                                Click="NormalizeReview_Click"
+                                Visibility="Collapsed" />
+                        </StackPanel>
+                    </Grid>
 
                     <StackPanel
                         Grid.Column="2"

@@ -15,6 +15,12 @@ a page for all of them.
 
 - **Rotate** pages left, right or 180°. A turned page is saved with its rotation flag
   (`/Rotate`), so nothing on it is redrawn or recompressed.
+- **Normalize orientation** turns every page so it reads the right way up: scans fed in
+  sideways or upside down, phone photos, PDFs assembled from turned pages. With nothing
+  selected it checks every page. A PDF's own text says which way it runs; pictures of pages are
+  read by Windows' built-in text recognition, every way round. A page it cannot judge, such as
+  a photo with no text, is left as it is, and *Select them* picks those out for a look. One
+  undo puts everything back.
 - **Duplicate** pages, or **insert a blank page** the size of the page before it.
 - **Reverse** the order of the selected pages, or of every page. This fixes a stack that went
   through the scanner face down.
@@ -76,6 +82,14 @@ the decoder for it. HEIC/HEIF and camera RAW are not supported: they need option
 codecs (HEIC also needs Microsoft's paid HEVC extension), so on most PCs they could be added
 but never saved.
 
+Photos are placed the way they were taken: the orientation a phone records with each picture is
+honoured whether or not the image is compressed.
+
+*Normalize orientation* reads pictures with the text recognition that comes with most Windows
+display languages. Windows has none for Indonesian, so on a PC set up in Indonesian alone, add
+English (or any other language) in Settings > Time & language > Language & region. PDF pages
+with a text layer are checked without it.
+
 The Explorer context menu appears on JPG, JPEG, PNG, BMP, GIF, TIFF, TIF and PDF files.
 
 ## Keyboard shortcuts
@@ -85,6 +99,7 @@ The Explorer context menu appears on JPG, JPEG, PNG, BMP, GIF, TIFF, TIF and PDF
 | `Ctrl` + `O` | Add files |
 | `Enter` | Open the page in the viewer |
 | `Ctrl` + `R` / `Ctrl` + `L` | Rotate right / left |
+| `Ctrl` + `Shift` + `R` | Normalize orientation |
 | `Ctrl` + `D` | Duplicate |
 | `Ctrl` + `B` | Insert a blank page after |
 | `Delete` | Remove |

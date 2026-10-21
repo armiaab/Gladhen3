@@ -850,6 +850,9 @@ public class PdfService
         XImage image;
         MemoryStream? owned = null;
         var final = false;
+
+        // Re-encoded images were decoded upright already; an original goes in as stored.
+        var stored = ExifTurn.None;
         if (encoded.TryGetValue(imagePath, out var pre) && pre.Bytes.Length > 0)
         {
             owned = new MemoryStream(pre.Bytes, writable: false);
@@ -859,13 +862,14 @@ public class PdfService
         else
         {
             image = XImage.FromFile(imagePath);
+            stored = ExifTurn.Read(imagePath);
         }
 
         try
         {
             var imgW = image.PixelWidth;
             var imgH = image.PixelHeight;
-            var frame = PageFrame.For(imgW, imgH, rotation, useCustomPageSize);
+            var frame = PageFrame.For(imgW, imgH, DocumentItem.NormaliseRotation(stored.Turn + rotation), useCustomPageSize);
 
             var page = output.AddPage();
             frame.Size(page);
@@ -873,6 +877,7 @@ public class PdfService
             using (var gfx = XGraphics.FromPdfPage(page))
             {
                 var (left, top, drawW, drawH, _) = frame.Fit(imgW, imgH, useCustomPageSize);
+                if (stored.Mirror) gfx.ScaleAtTransform(-1, 1, left + (drawW / 2), top);
                 gfx.DrawImage(image, left, top, drawW, drawH);
             }
 
@@ -969,6 +974,46 @@ public class PdfService
     }
 
     // ---------------------------------------------------------------------------- page rotation
+
+    /// <summary>How a photo's EXIF tag says to stand it up: mirrored or not, then turned clockwise.</summary>
+    /// <remarks>
+    /// A phone stores every photo the way the sensor saw it and records which way up it was
+    /// held. The viewer and the re-encoding path both decode with that applied, so a photo placed
+    /// as it is - no compression, or re-encoding that would have made it bigger - has to be
+    /// turned the same way here. It was not: a portrait photo came out on its side, and only
+    /// when compression was off. Turning the page leaves the JPEG's bytes alone.
+    /// </remarks>
+    private readonly record struct ExifTurn(int Turn, bool Mirror)
+    {
+        public static ExifTurn None => default;
+
+        /// <summary>The tag's eight values, in EXIF order: 1 is upright, 2 mirrored, 3 upside down, and so on.</summary>
+        public static ExifTurn FromTag(ushort tag) => tag switch
+        {
+            2 => new(0, true),
+            3 => new(180, false),
+            4 => new(180, true),
+            5 => new(270, true),
+            6 => new(90, false),
+            7 => new(90, true),
+            8 => new(270, false),
+            _ => None
+        };
+
+        /// <summary>Only JPEGs: the other formats placed as they are carry no orientation WIC reads.</summary>
+        public static ExifTurn Read(string path)
+        {
+            if (Path.GetExtension(path).ToLowerInvariant() is not (".jpg" or ".jpeg")) return None;
+
+            using var fs = File.OpenRead(path);
+            using var ras = fs.AsRandomAccessStream();
+            var decoder = BitmapDecoder.CreateAsync(ras).GetAwaiter().GetResult();
+            var found = decoder.BitmapProperties.GetPropertiesAsync([OrientationProperty]).GetAwaiter().GetResult();
+            return found.TryGetValue(OrientationProperty, out var value) && value.Value is ushort tag ? FromTag(tag) : None;
+        }
+
+        private const string OrientationProperty = "System.Photo.Orientation";
+    }
 
     /// <summary>The page's own /Rotate, as 0, 90, 180 or 270.</summary>
     /// <remarks>
@@ -1428,7 +1473,7 @@ public class PdfService
         }
     }
 
-    private static string? ReadName(PdfDictionary dict, string key) => dict.Elements.GetValue(key) switch
+    internal static string? ReadName(PdfDictionary dict, string key) => dict.Elements.GetValue(key) switch
     {
         PdfName name => name.Value,
         PdfNameObject nameObject => nameObject.Value,
@@ -1681,7 +1726,8 @@ public class PdfService
         return codec.Encode(bitmap, quality)?.Data.LongLength ?? fs.Length;
     }
 
-    private static SoftwareBitmap? DecodeScaled(BitmapDecoder decoder, int maxLongEdge, BitmapAlphaMode alphaMode)
+    private static SoftwareBitmap? DecodeScaled(BitmapDecoder decoder, int maxLongEdge, BitmapAlphaMode alphaMode,
+        ExifOrientationMode exif = ExifOrientationMode.RespectExifOrientation)
     {
         var transform = new BitmapTransform();
 
@@ -1700,16 +1746,22 @@ public class PdfService
             BitmapPixelFormat.Bgra8,
             alphaMode,
             transform,
-            ExifOrientationMode.RespectExifOrientation,
+            exif,
             ColorManagementMode.ColorManageToSRgb).GetAwaiter().GetResult();
     }
 
+    /// <summary>Decodes a JPEG stream from inside a PDF.</summary>
+    /// <remarks>
+    /// Ignoring any EXIF orientation, as PDF readers do: the page draws the samples as stored,
+    /// into a box the shape of /Width and /Height. Honouring it turned the picture inside its
+    /// box whenever a converter had embedded a phone photo byte for byte.
+    /// </remarks>
     private static SoftwareBitmap? WicDecodeScaled(byte[] data, int maxLongEdge)
     {
         using var ras = new InMemoryRandomAccessStream();
         Wic.WriteAll(ras, data);
         var decoder = BitmapDecoder.CreateAsync(ras).GetAwaiter().GetResult();
-        return DecodeScaled(decoder, maxLongEdge, BitmapAlphaMode.Ignore);
+        return DecodeScaled(decoder, maxLongEdge, BitmapAlphaMode.Ignore, ExifOrientationMode.IgnoreExifOrientation);
     }
 
     private static SoftwareBitmap? RawToBitmap(byte[] samples, int width, int height, int components, int maxLongEdge)

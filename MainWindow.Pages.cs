@@ -22,6 +22,7 @@ public sealed partial class MainWindow
         RotateRight,
         RotateLeft,
         Rotate180,
+        Normalize,
         Duplicate,
         InsertBlank,
         Reverse,
@@ -111,6 +112,12 @@ public sealed partial class MainWindow
         if (command == PageCommand.Reverse)
         {
             ReversePages();
+            return;
+        }
+
+        if (command == PageCommand.Normalize)
+        {
+            await NormalizeAsync(NormalizeTargets(anchor));
             return;
         }
 
@@ -347,6 +354,9 @@ public sealed partial class MainWindow
 
     private async Task StepThroughHistoryAsync(List<ListState> from, List<ListState> to, string doneKey, string emptyKey)
     {
+        // A check still running would go on turning pages after the list had been put back.
+        StopNormalize();
+
         if (from.Count == 0)
         {
             StatusTextBlock.Text = _resourceLoader.GetString(emptyKey);

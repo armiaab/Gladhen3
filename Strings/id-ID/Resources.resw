@@ -1012,4 +1012,69 @@ Klik dua kali sebuah halaman untuk membukanya di penampil, seret halaman untuk m
   <data name="SettingsDialog_LanguageNote.Text" xml:space="preserve">
     <value>Bahasa baru berlaku saat Gladhen3 dibuka lagi.</value>
   </data>
+  <data name="MenuNormalize.Text" xml:space="preserve">
+    <value>Normalkan orientasi</value>
+  </data>
+  <data name="TooltipNormalize.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Normalkan orientasi: tegakkan setiap halaman (Ctrl+Shift+R)</value>
+  </data>
+  <data name="TooltipNormalize.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Normalkan orientasi</value>
+  </data>
+  <data name="ViewerNormalize.Label" xml:space="preserve">
+    <value>Normalkan orientasi</value>
+  </data>
+  <data name="ViewerNormalize.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Normalkan orientasi (Ctrl+Shift+R)</value>
+  </data>
+  <data name="ButtonStopNormalize.Content" xml:space="preserve">
+    <value>Hentikan</value>
+  </data>
+  <data name="StatusNormalizing" xml:space="preserve">
+    <value>Memeriksa arah setiap halaman… {0} dari {1}</value>
+  </data>
+  <data name="StatusNormalizeBusy" xml:space="preserve">
+    <value>Masih memeriksa halaman. Tekan Hentikan untuk membatalkan.</value>
+  </data>
+  <data name="StatusNormalizeNothing" xml:space="preserve">
+    <value>Halaman kosong tidak perlu ditegakkan</value>
+  </data>
+  <data name="StatusNormalized" xml:space="preserve">
+    <value>Dinormalkan: {0}</value>
+  </data>
+  <data name="StatusNormalizeStopped" xml:space="preserve">
+    <value>Dihentikan setelah {0} dari {1} halaman: {2}</value>
+  </data>
+  <data name="StatusNormalizeStoppedEarly" xml:space="preserve">
+    <value>Dihentikan sebelum ada halaman yang diperiksa</value>
+  </data>
+  <data name="NormalizeTurned" xml:space="preserve">
+    <value>{0} ditegakkan</value>
+  </data>
+  <data name="NormalizeAlreadyUpright" xml:space="preserve">
+    <value>{0} sudah tegak</value>
+  </data>
+  <data name="NormalizeLeftAlone" xml:space="preserve">
+    <value>{0} tidak diubah (tidak ada teks sebagai acuan)</value>
+  </data>
+  <data name="NormalizeFailed" xml:space="preserve">
+    <value>{0} tidak dapat dibaca</value>
+  </data>
+  <data name="DialogTitleNoTextRecognition" xml:space="preserve">
+    <value>Pengenalan teks belum terpasang</value>
+  </data>
+  <data name="DialogContentNoTextRecognition" xml:space="preserve">
+    <value>{0} halaman berupa gambar tanpa lapisan teks. Windows membacanya dengan pengenalan teks, yang belum terpasang di PC ini, jadi halaman tersebut tidak diubah.
+
+Tambahkan bahasa yang menyertakannya, misalnya bahasa Inggris, di Pengaturan &gt; Waktu &amp; bahasa &gt; Bahasa &amp; wilayah, lalu normalkan lagi.</value>
+  </data>
+  <data name="DialogButtonOpenLanguageSettings" xml:space="preserve">
+    <value>Buka pengaturan bahasa</value>
+  </data>
+  <data name="ButtonSelectLeftAlone.Content" xml:space="preserve">
+    <value>Pilih halaman tersebut</value>
+  </data>
+  <data name="NormalizeNotChecked" xml:space="preserve">
+    <value>{0} tidak diperiksa (tidak ada pengenalan teks)</value>
+  </data>
 </root>

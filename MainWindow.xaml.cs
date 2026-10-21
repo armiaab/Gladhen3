@@ -113,6 +113,7 @@ public sealed partial class MainWindow : Window
         SaveButton.IsEnabled = hasPages;
         RotateLeftButton.IsEnabled = hasPages;
         RotateRightButton.IsEnabled = hasPages;
+        NormalizeButton.IsEnabled = hasPages;
         DuplicateButton.IsEnabled = hasPages;
         RemovePagesButton.IsEnabled = hasPages;
         UpdateUndoState();
@@ -824,7 +825,7 @@ public sealed partial class MainWindow : Window
 
         StatusTextBlock.Text = _resourceLoader.GetString("StatusCreatingPdf");
         SaveButton.IsEnabled = false;
-        BusyBar.Visibility = Visibility.Visible;
+        SetBusy(true);
         try
         {
             while (true)
@@ -924,7 +925,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             SaveButton.IsEnabled = true;
-            BusyBar.Visibility = Visibility.Collapsed;
+            SetBusy(false);
         }
     }
 

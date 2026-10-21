@@ -501,7 +501,7 @@ public sealed partial class MainWindow
         }
 
         SaveButton.IsEnabled = false;
-        BusyBar.Visibility = Visibility.Visible;
+        SetBusy(true);
 
         var written = new List<string>();
         var failed = new List<string>();
@@ -545,7 +545,7 @@ public sealed partial class MainWindow
         finally
         {
             SaveButton.IsEnabled = true;
-            BusyBar.Visibility = Visibility.Collapsed;
+            SetBusy(false);
         }
 
         Log.Information("Split save finished: {Written} written, {Failed} failed, into {Folder}",
