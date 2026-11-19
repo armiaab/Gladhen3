@@ -27,7 +27,7 @@ jobs:
             10.0.x
 
       - name: Build app (x64, no package)
-        run: dotnet build Gladhen3.csproj -c Release -p:Platform=x64 -p:GenerateAppxPackageOnBuild=false
+        run: dotnet build Gladhen3.csproj -c Release -p:Platform=x64 -p:GenerateAppxPackageOnBuild=false -p:AppxPackageSigningEnabled=false
 
       - name: Unit tests
         run: dotnet test tests/Gladhen3.Tests -c Release --logger "trx;LogFileName=results.trx"

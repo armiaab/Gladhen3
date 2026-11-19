@@ -19,7 +19,7 @@ using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
 
-public class PdfService
+public static class PdfService
 {
     private const long InFlightBudgetBytes = 384L * 1024 * 1024;
 
@@ -54,7 +54,7 @@ public class PdfService
 
     /// <summary>Writes <paramref name="items"/> to <paramref name="outputPath"/>.</summary>
     /// <param name="settings">Settings pinned for the whole build; the current ones if null.</param>
-    public PdfBuildResult CreatePdfFromDocuments(List<DocumentItem> items, string outputPath, AppSettings? settings = null)
+    public static PdfBuildResult CreatePdfFromDocuments(List<DocumentItem> items, string outputPath, AppSettings? settings = null)
     {
         ArgumentNullException.ThrowIfNull(items);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);

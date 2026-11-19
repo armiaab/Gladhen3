@@ -25,7 +25,6 @@ namespace Gladhen3;
 public sealed partial class MainWindow : Window
 {
     private readonly ObservableCollection<DocumentItem> _documentItems = [];
-    private readonly PdfService _pdfService = new();
     private readonly Microsoft.Windows.ApplicationModel.Resources.ResourceLoader _resourceLoader = new();
     private bool _isGridView = true;
     private bool _isSelectMode;
@@ -515,7 +514,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>Loads thumbnails in the background with bounded concurrency, one PDF open per source.</summary>
-    private async Task LoadThumbnailsInBackgroundAsync(IList<DocumentItem> items)
+    private static async Task LoadThumbnailsInBackgroundAsync(List<DocumentItem> items)
     {
         if (items.Count == 0) return;
 
@@ -768,7 +767,7 @@ public sealed partial class MainWindow : Window
                     // Snapshot now: edits made during the build belong to the next save.
                     var snapshot = SnapshotItems(items);
                     var settings = AppSettings.Current;
-                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(snapshot, outputPath, settings));
+                    var result = await Task.Run(() => PdfService.CreatePdfFromDocuments(snapshot, outputPath, settings));
 
                     StatusTextBlock.Text = _resourceLoader.GetString("StatusPdfCreatedSuccessfully");
                     await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSuccess"), string.Format(_resourceLoader.GetString("DialogContentPdfSaved"), outputPath));

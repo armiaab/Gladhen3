@@ -229,7 +229,7 @@ public sealed partial class MainWindow
 
     private void SplitBefore(DocumentItem? target)
     {
-        if (!Pages.Any())
+        if (Pages.Count == 0)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesToSplit");
             return;
@@ -566,7 +566,7 @@ public sealed partial class MainWindow
                     // One file may overwrite a source that later files still read.
                     PreserveSourceBeforeOverwrite(path, pending);
                     var items = snapshots[i];
-                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, path, settings));
+                    var result = await Task.Run(() => PdfService.CreatePdfFromDocuments(items, path, settings));
                     written.Add(names[i]);
                     foreach (var skipped in result.SkippedItems) skippedItems.Add(skipped);
                     codecFailures += result.CodecFailures;

@@ -17,8 +17,6 @@
 		<IsTestProject>true</IsTestProject>
 		<RootNamespace>Gladhen3.Tests</RootNamespace>
 		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-		<!-- Warnings in the linked application sources are the app's business. -->
-		<NoWarn>$(NoWarn);CA1822;CA1859</NoWarn>
 	</PropertyGroup>
 
 	<Import Project="..\LinkedSources.props" />

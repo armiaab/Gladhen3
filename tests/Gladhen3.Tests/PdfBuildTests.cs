@@ -97,7 +97,7 @@ public sealed class PdfBuildTests : IDisposable
 		string output;
 
 		output = Path.Combine(dir, "blank.pdf");
-		result = new PdfService().CreatePdfFromDocuments(
+		result = PdfService.CreatePdfFromDocuments(
 		    new List<DocumentItem> { Blank(), Blank(), Blank() }, output);
 		read = PdfReader.Open(output, PdfDocumentOpenMode.Import);
 
@@ -123,7 +123,7 @@ public sealed class PdfBuildTests : IDisposable
 		AppSettings.ReplaceForTesting(
 		    new AppSettings { PaperSize = PdfPaperSize.A3 });
 
-		new PdfService().CreatePdfFromDocuments(
+		PdfService.CreatePdfFromDocuments(
 		    new List<DocumentItem> { Blank() }, output, letter);
 		read = PdfReader.Open(output, PdfDocumentOpenMode.Import);
 
@@ -144,7 +144,7 @@ public sealed class PdfBuildTests : IDisposable
 		};
 
 		Assert.Throws<ArgumentException>(() =>
-		    new PdfService().CreatePdfFromDocuments(items,
+		    PdfService.CreatePdfFromDocuments(items,
 		    Path.Combine(dir, "x.pdf")));
 	}
 
@@ -162,7 +162,7 @@ public sealed class PdfBuildTests : IDisposable
 		third = PageOf(source, 3, 3);
 		third.Rotation = 90;
 
-		new PdfService().CreatePdfFromDocuments(
+		PdfService.CreatePdfFromDocuments(
 		    new List<DocumentItem> { third, first }, output);
 		read = PdfReader.Open(output, PdfDocumentOpenMode.Import);
 
@@ -187,7 +187,7 @@ public sealed class PdfBuildTests : IDisposable
 
 		source = SourcePdf("plain.pdf", 2);
 		output = Path.Combine(dir, "terminated.pdf");
-		new PdfService().CreatePdfFromDocuments(new List<DocumentItem> {
+		PdfService.CreatePdfFromDocuments(new List<DocumentItem> {
 			PageOf(source, 1, 2), Blank(), PageOf(source, 2, 2)
 		}, output);
 

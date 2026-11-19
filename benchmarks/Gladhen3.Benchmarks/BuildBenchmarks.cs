@@ -16,7 +16,6 @@ namespace Gladhen3.Benchmarks;
 [MemoryDiagnoser]
 public class BuildBenchmarks
 {
-	private readonly PdfService service = new();
 	private List<DocumentItem> items = new();
 	private string dir = string.Empty;
 	private string output = string.Empty;
@@ -78,7 +77,7 @@ public class BuildBenchmarks
 	Build()
 	{
 
-		return (service.CreatePdfFromDocuments(items, output)
+		return (PdfService.CreatePdfFromDocuments(items, output)
 		    .PagesWritten);
 	}
 

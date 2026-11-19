@@ -18,8 +18,6 @@
 		<RootNamespace>Gladhen3.Benchmarks</RootNamespace>
 		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 		<Optimize>true</Optimize>
-		<!-- Warnings in the linked application sources are the app's business. -->
-		<NoWarn>$(NoWarn);CA1822;CA1859</NoWarn>
 	</PropertyGroup>
 
 	<Import Project="..\..\tests\LinkedSources.props" />
