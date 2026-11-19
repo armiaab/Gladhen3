@@ -1,4 +1,4 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using PdfSharp.Pdf.IO;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Serilog;
@@ -21,13 +21,10 @@ public sealed record DocumentLoadResult(List<DocumentItem> Items, IReadOnlyList<
 
 public class DocumentService
 {
-    /// <summary>The image formats offered, each one tested end to end, less any this PC cannot decode.</summary>
+    /// <summary>Supported image formats, limited to the decoders installed on this PC.</summary>
     /// <remarks>
-    /// HEIC/HEIF and camera RAW (.raw .cr2 .nef .arw .dng) used to be listed too. They decode
-    /// only through optional Store codecs - HEIC needs Microsoft's paid HEVC extension on top of
-    /// the HEIF one - so on a stock PC the file was added, showed no thumbnail, and was dropped
-    /// at save time as a skipped page. The rest ship with Windows, but a codec such as WebP's can
-    /// be uninstalled, so the list is also held to the decoders actually present.
+    /// HEIC/HEIF and camera RAW are excluded: they need optional Store codecs, so on a stock PC
+    /// they would load without a thumbnail and be skipped at save time.
     /// </remarks>
     private static readonly string[] ImageExtensions = Decodable([
         ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".tif",
@@ -53,8 +50,7 @@ public class DocumentService
             foreach (var extension in decoder.FileExtensions) installed.Add(extension);
         }
 
-        // .hdp is HD Photo's original name for what became JPEG XR. The decoder reads it - it
-        // goes by content, not by name - but no longer claims the extension.
+        // .hdp (JPEG XR's old name) is still decoded by content, just not offered by extension.
         if (installed.Contains(".wdp")) installed.Add(".hdp");
 
         return wanted.Where(installed.Contains).ToArray();
@@ -218,8 +214,7 @@ public class DocumentService
 
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(pdfPath);
-            pdfDocument = await PdfDocument.LoadFromFileAsync(file);
+            pdfDocument = await OffUiStorage.LoadPdfAsync(pdfPath);
             pageCount = (int)pdfDocument.PageCount;
         }
         catch (Exception ex)
@@ -288,8 +283,7 @@ public class DocumentService
     {
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(filePath);
-            using var stream = await file.OpenAsync(FileAccessMode.Read);
+            using var stream = await OffUiStorage.OpenReadAsync(filePath);
 
             var bitmap = new BitmapImage { DecodePixelWidth = (int)ThumbnailWidth };
             await bitmap.SetSourceAsync(stream);

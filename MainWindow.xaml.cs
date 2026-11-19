@@ -35,8 +35,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Pages label themselves, and the model cannot reach the resources, so it is handed the
-        // wording here - before the first page is loaded and its label cached.
+        // The model cannot reach resources, so it gets its label formats here, before any page loads.
         DocumentItem.DisplayNameFormat = _resourceLoader.GetString("PageDisplayNameFormat");
         DocumentItem.PageInfoFormat = _resourceLoader.GetString("PageInfoFormat");
 
@@ -51,14 +50,12 @@ public sealed partial class MainWindow : Window
         DocumentGridView.ItemsSource = _documentItems;
         DocumentListView.ItemsSource = _documentItems;
 
-        // The estimate answers "how big will this be when I save it", so it follows the list
-        // itself rather than each of the dozen code paths that happen to mutate it.
+        // The estimate follows the collection rather than each code path that mutates it.
         _documentItems.CollectionChanged += DocumentItems_CollectionChanged;
 
         _isInitialized = true;
         ClearOriginals();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusReady");
-        _ = AppSettings.LoadAsync();
         UpdateUIState();
     }
 
@@ -72,10 +69,7 @@ public sealed partial class MainWindow : Window
 
             appWindow.SetIcon("Assets/Square44x44Logo.png");
         }
-        // Cosmetic: the window works perfectly well with the default icon. Narrow on
-        // purpose - the asset ships inside the package, so the only thing that can really go
-        // wrong here is the shell refusing the handle. Anything else is a defect and is left
-        // to escape rather than being written off as a missing icon.
+        // Cosmetic; only a shell failure is expected here.
         catch (COMException ex)
         {
             Log.Warning(ex, "Failed to set window icon");
@@ -88,9 +82,13 @@ public sealed partial class MainWindow : Window
         {
             var fileNames = paths.Select(Path.GetFileName).Take(3).ToList();
             StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusLoadingNamedFiles"), string.Join(", ", fileNames));
-            _ = LoadDocumentsAsync(paths);
+            InitialLoad = LoadDocumentsAsync(paths);
         }
     }
+
+    /// <summary>The load of the files this window opened with; completed if there were none.</summary>
+    /// <remarks>Later activations wait for it so their pages land after it.</remarks>
+    public Task InitialLoad { get; } = Task.CompletedTask;
 
     #region UI State
 
@@ -98,14 +96,13 @@ public sealed partial class MainWindow : Window
     {
         if (!_isInitialized) return;
 
-        // Section bands are rows but not pages, so a list holding nothing but a leftover
-        // divider is still empty as far as the empty state and the Save button are concerned.
+        // Section bands are rows, not pages: a list holding only a divider counts as empty.
         RefreshSections();
 
-        var hasPages = Pages.Any();
+        var hasPages = Pages.Count > 0;
         FadeTo(EmptyStatePanel, hasPages ? 0 : 1);
 
-        // An inserted blank page becomes a PDF page like any other, so it is counted as one.
+        // Inserted blank pages count as PDF pages.
         var imageCount = _documentItems.Count(d => d.Type == DocumentType.Image);
         var pdfPageCount = _documentItems.Count(d => d.Type is DocumentType.PdfPage or DocumentType.BlankPage);
         ItemCountTextBlock.Text = DescribeContents(imageCount, pdfPageCount);
@@ -120,14 +117,7 @@ public sealed partial class MainWindow : Window
         UpdateSelectionInfo();
     }
 
-    /// <summary>
-    /// Summarises what is in the list for the header subtitle.
-    /// </summary>
-    /// <remarks>
-    /// The single format string this replaced read "0 pages (0 images, 0 PDF pages)" on an
-    /// empty window and "12 pages (0 images, 12 PDF pages)" for one PDF - counting things
-    /// that are not there. Only the mixed case actually needs the breakdown.
-    /// </remarks>
+    /// <summary>The header subtitle; the image/PDF breakdown only when both are present.</summary>
     private string DescribeContents(int imageCount, int pdfPageCount)
     {
         if (imageCount == 0 && pdfPageCount == 0) return string.Empty;
@@ -153,8 +143,7 @@ public sealed partial class MainWindow : Window
             ListViewToggle.Checked += ListViewToggle_Checked;
         }
 
-        // Each view keeps its own selection; the one coming into sight takes over the other's,
-        // so switching views does not quietly drop what was chosen.
+        // The incoming view takes over the other's selection.
         var (shown, hidden) = _isGridView ? ((ListViewBase)DocumentGridView, (ListViewBase)DocumentListView) : (DocumentListView, DocumentGridView);
         if (!shown.SelectedItems.SequenceEqual(hidden.SelectedItems))
         {
@@ -167,19 +156,13 @@ public sealed partial class MainWindow : Window
         UpdateSelectionInfo();
     }
 
-    /// <summary>
-    /// Select mode puts a check box on every page, so a click ticks it instead of choosing it
-    /// alone - for a touch screen, or a mouse that would rather not hold Ctrl.
-    /// </summary>
-    /// <remarks>
-    /// Outside it the lists select the way Windows lists do (click, Ctrl+click, Shift+click).
-    /// Switching keeps whatever is selected: it is the same selection, ticked or highlighted.
-    /// </remarks>
+    /// <summary>Select mode: a check box on every page, so a click toggles it (touch friendly).</summary>
+    /// <remarks>The selection is kept across the switch.</remarks>
     private void UpdateSelectMode()
     {
         if (!_isInitialized) return;
 
-        // WinUI empties the selection whenever the mode changes, so it is carried across by hand.
+        // WinUI clears the selection on a mode change, so carry it across.
         var kept = ActiveView.SelectedItems.ToList();
 
         var mode = _isSelectMode ? ListViewSelectionMode.Multiple : ListViewSelectionMode.Extended;
@@ -193,11 +176,8 @@ public sealed partial class MainWindow : Window
         UpdateSelectionInfo();
     }
 
-    /// <summary>The count of selected pages, and the button that removes them.</summary>
-    /// <remarks>
-    /// Shown once there is a choice worth describing: in select mode, or with two or more pages
-    /// picked. One clicked page is just where the user is, and needs no announcement.
-    /// </remarks>
+    /// <summary>The selected-page count and the remove button.</summary>
+    /// <remarks>Shown in select mode or with two or more pages selected.</remarks>
     private void UpdateSelectionInfo()
     {
         if (!_isInitialized) return;
@@ -230,11 +210,7 @@ public sealed partial class MainWindow : Window
 
     #region Output Size Estimate
 
-    /// <remarks>
-    /// Estimating runs the real encoder over a sample of the largest images, which costs a
-    /// few hundred milliseconds on a big scan. Dropping twenty files in one go must not queue
-    /// up twenty of those, so the work waits for the list to settle first.
-    /// </remarks>
+    /// <remarks>Debounced: an estimate encodes sample images, so a burst of changes runs it once.</remarks>
     private static readonly TimeSpan EstimateDebounce = TimeSpan.FromMilliseconds(500);
 
     private DispatcherTimer? _estimateTimer;
@@ -242,31 +218,26 @@ public sealed partial class MainWindow : Window
 
     private void DocumentItems_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Counts only. Inserting a divider from here would be a mutation raised from the
-        // collection's own notification, which ObservableCollection refuses once the views are
-        // also subscribed, and naming has to see the finished structure rather than one
-        // insertion at a time; RefreshSections does both from the places that can.
+        _pagesCache = null;
+
+        // Counts only. Dividers cannot be inserted from inside the collection's own notification;
+        // RefreshSections does that from the callers.
         UpdateSectionSummaries();
 
-        // Reordering changes which page comes first, not how many bytes come out - unless the
-        // list is cut into several documents, where dragging a page across a divider moves its
-        // bytes out of one file and into another.
+        // A move only changes the size when it crosses a section divider.
         if (e.Action == NotifyCollectionChangedAction.Move && !HasSections) return;
 
         ScheduleEstimate();
     }
 
-    /// <summary>
-    /// Asks for a fresh estimate, replacing any run already under way.
-    /// </summary>
+    /// <summary>Schedules a fresh estimate, cancelling any run in progress.</summary>
     private void ScheduleEstimate()
     {
         if (!_isInitialized) return;
 
-        // Anything in flight is now answering a question about a list that no longer exists.
         _estimateCts?.Cancel();
 
-        if (!Pages.Any())
+        if (Pages.Count == 0)
         {
             _estimateTimer?.Stop();
             FadeTo(EstimatePanel, 0);
@@ -298,13 +269,14 @@ public sealed partial class MainWindow : Window
 
     private async Task RunEstimateAsync()
     {
-        // One measurement covering every section, so the bands and the total cannot
-        // disagree and a source document is not re-parsed once per output file.
+        // One pass for all sections, so the bands and the total agree.
         var sections = PdfSection.Split(_documentItems);
         var writable = sections.Where(s => !s.IsEmpty).ToList();
         if (writable.Count == 0) return;
 
-        var payload = writable.Select(s => (IReadOnlyList<DocumentItem>)s.Items).ToList();
+        // Clones, so the user can keep editing the originals.
+        var payload = writable.Select(s => (IReadOnlyList<DocumentItem>)SnapshotItems(s.Items)).ToList();
+        var settings = AppSettings.Current;
 
         var cts = new CancellationTokenSource();
         _estimateCts = cts;
@@ -312,7 +284,7 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            var sizes = await Task.Run(() => PdfService.EstimateSectionSizes(payload, token), token);
+            var sizes = await Task.Run(() => PdfService.EstimateSectionSizes(payload, settings, token), token);
             if (token.IsCancellationRequested) return;
 
             long total = 0;
@@ -335,8 +307,7 @@ public sealed partial class MainWindow : Window
                 _resourceLoader.GetString("EstimatedSizeFormat"),
                 DocumentService.FormatFileSize((ulong)Math.Max(0, total)));
 
-            // The total means something different once it is spread over several files, so it
-            // says how many rather than leaving the reader to assume one.
+            // With several output files, say how many.
             var multiple = writable.Count > 1;
             OutputCountText.Text = multiple
                 ? string.Format(_resourceLoader.GetString("OutputFileCount"), writable.Count)
@@ -345,11 +316,9 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException)
         {
-            // The list moved on while we were measuring; a newer run is already queued.
+            // Superseded by a newer run.
         }
-        // An estimate is a convenience, not a precondition for saving. If one cannot be
-        // produced - an unreadable source, a codec that refuses - the label goes away
-        // rather than the failure being pushed at the user.
+        // The estimate is optional; on failure just hide it.
         catch (Exception ex)
         {
             Log.Warning(ex, "Could not estimate output size");
@@ -365,23 +334,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Fades <paramref name="element"/> to <paramref name="opacity"/>, collapsing it once it
-    /// has faded out.
-    /// </summary>
+    /// <summary>Fades <paramref name="element"/> to <paramref name="opacity"/>, collapsing it once faded out.</summary>
     /// <remarks>
-    /// The empty state sits on top of the item views and accepts drops, so leaving it at zero
-    /// opacity but still visible would silently swallow every pointer event aimed at the list.
-    /// The visibility flip therefore has to happen at the far end of the animation - and only
-    /// if the element really did end up transparent, since a later call may have reversed
-    /// direction while this one was still running.
-    /// </remarks>
-    /// <remarks>
-    /// A fade still running decides what happens next, not the opacity read back: undo empties
-    /// the list and refills it in one go, and the fade-in that follows the fade-out arrives before
-    /// the opacity has moved at all. It used to see "visible, fully opaque", do nothing, and let
-    /// the fade-out finish and collapse the size estimate for good. Now the running fade is kept
-    /// if it is already heading the same way, and stopped if it is not.
+    /// The empty state overlays the lists and accepts drops, so it must be collapsed, not just
+    /// transparent. A running fade is the source of truth, not the current opacity: undo can
+    /// request a fade-in before a fade-out has moved, so the running fade is kept if it heads the
+    /// same way and stopped otherwise.
     /// </remarks>
     private static void FadeTo(UIElement element, double opacity, double milliseconds = 150)
     {
@@ -430,54 +388,41 @@ public sealed partial class MainWindow : Window
     #region File Operations
 
     private async void AddFilesButton_Click(object sender, RoutedEventArgs e)
-    {
-        var picker = new FileOpenPicker
-        {
-            ViewMode = PickerViewMode.Thumbnail,
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary
-        };
-
-        foreach (var ext in DocumentService.GetAllSupportedExtensions())
-            picker.FileTypeFilter.Add(ext);
-
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-        var files = await picker.PickMultipleFilesAsync();
-
-        if (files?.Count > 0)
-            await AddFilesAsync(files);
-    }
+        => await PickAndAddFilesAsync(PickerViewMode.Thumbnail, PickerLocationId.DocumentsLibrary, DocumentService.GetAllSupportedExtensions());
 
     private async void AddImagesButton_Click(object sender, RoutedEventArgs e)
-    {
-        var picker = new FileOpenPicker
-        {
-            ViewMode = PickerViewMode.Thumbnail,
-            SuggestedStartLocation = PickerLocationId.PicturesLibrary
-        };
-
-        foreach (var ext in DocumentService.GetImageExtensions())
-            picker.FileTypeFilter.Add(ext);
-
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-        var files = await picker.PickMultipleFilesAsync();
-
-        if (files?.Count > 0)
-            await AddFilesAsync(files);
-    }
+        => await PickAndAddFilesAsync(PickerViewMode.Thumbnail, PickerLocationId.PicturesLibrary, DocumentService.GetImageExtensions());
 
     private async void AddPdfsButton_Click(object sender, RoutedEventArgs e)
+        => await PickAndAddFilesAsync(PickerViewMode.List, PickerLocationId.DocumentsLibrary, DocumentService.GetPdfExtensions());
+
+    /// <summary>Asks for files and adds them. Never throws.</summary>
+    /// <remarks>The picker is a COM call and can fail; the callers are async void handlers.</remarks>
+    private async Task PickAndAddFilesAsync(PickerViewMode viewMode, PickerLocationId start, IEnumerable<string> extensions)
     {
-        var picker = new FileOpenPicker
+        IReadOnlyList<StorageFile>? files;
+        try
         {
-            ViewMode = PickerViewMode.List,
-            SuggestedStartLocation = PickerLocationId.DocumentsLibrary
-        };
+            var picker = new FileOpenPicker
+            {
+                ViewMode = viewMode,
+                SuggestedStartLocation = start
+            };
 
-        foreach (var ext in DocumentService.GetPdfExtensions())
-            picker.FileTypeFilter.Add(ext);
+            foreach (var ext in extensions)
+                picker.FileTypeFilter.Add(ext);
 
-        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-        var files = await picker.PickMultipleFilesAsync();
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
+            files = await picker.PickMultipleFilesAsync();
+        }
+        // Event-handler boundary, as in AddFilesAsync.
+        catch (Exception ex)
+        {
+            Log.Error(ex, "File picker failed");
+            StatusTextBlock.Text = _resourceLoader.GetString("StatusUnexpectedError");
+            await ShowDialogAsync(_resourceLoader.GetString("DialogTitleError"), _resourceLoader.GetString("DialogContentUnexpectedError"));
+            return;
+        }
 
         if (files?.Count > 0)
             await AddFilesAsync(files);
@@ -512,8 +457,7 @@ public sealed partial class MainWindow : Window
 
             await ReportSkippedFilesAsync(loaded.FailedFiles);
         }
-        // Event-handler boundary: this is the last place an exception can be turned into
-        // something the user can see rather than a silent no-op.
+        // Event-handler boundary.
         catch (Exception ex)
         {
             Log.Error(ex, "Error adding files");
@@ -549,7 +493,7 @@ public sealed partial class MainWindow : Window
 
             await ReportSkippedFilesAsync(loaded.FailedFiles);
         }
-        // Event-handler boundary; the list is left as it was and the user is told.
+        // Event-handler boundary; the list is left unchanged.
         catch (Exception ex)
         {
             Log.Error(ex, "Error loading documents");
@@ -558,11 +502,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Adds items to the bound collection in chunks, yielding to the dispatcher between
-    /// chunks so large batches (multi-hundred-page PDFs) render progressively instead of
-    /// blocking the UI thread until every item is added.
-    /// </summary>
+    /// <summary>Adds items in chunks, yielding between them so large PDFs appear progressively.</summary>
     private async Task AddItemsInBatchesAsync(IReadOnlyList<DocumentItem> items)
     {
         const int batchSize = 100;
@@ -574,10 +514,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Loads thumbnails in background without blocking UI using parallel processing.
-    /// Optimized with PDF document caching and controlled concurrency.
-    /// </summary>
+    /// <summary>Loads thumbnails in the background with bounded concurrency, one PDF open per source.</summary>
     private async Task LoadThumbnailsInBackgroundAsync(IList<DocumentItem> items)
     {
         if (items.Count == 0) return;
@@ -631,8 +568,7 @@ public sealed partial class MainWindow : Window
             if (thumbnail != null)
                 item.Thumbnail = thumbnail;
         }
-        // Thumbnails are decoration on a background task. A missing one costs a preview
-        // image, not the page it stands for.
+        // Thumbnails are decoration; a failure only loses the preview.
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading thumbnail for: {Path}", item.FilePath);
@@ -650,8 +586,7 @@ public sealed partial class MainWindow : Window
         {
             if (!File.Exists(sourcePath)) return;
 
-            var file = await StorageFile.GetFileFromPathAsync(sourcePath);
-            var pdfDocument = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
+            var pdfDocument = await OffUiStorage.LoadPdfAsync(sourcePath);
 
             const uint thumbnailWidth = 200;
 
@@ -678,15 +613,14 @@ public sealed partial class MainWindow : Window
                     await bitmap.SetSourceAsync(stream);
                     item.Thumbnail = bitmap;
                 }
-                // Per-page isolation: one page that will not render should not cost the
-                // other ninety-nine their thumbnails.
+                // One bad page must not cost the others their thumbnails.
                 catch (Exception ex)
                 {
                     Log.Warning(ex, "Error loading PDF page thumbnail: {Path} page {Page}", sourcePath, item.PageNumber);
                 }
             }
         }
-        // Background task with no caller to return to; the pages are already in the list.
+        // Background task; the pages are already in the list.
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading PDF thumbnails for: {Path}", sourcePath);
@@ -701,14 +635,13 @@ public sealed partial class MainWindow : Window
     {
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(filePath);
-            using var stream = await file.OpenAsync(FileAccessMode.Read);
+            using var stream = await OffUiStorage.OpenReadAsync(filePath);
 
             var bitmap = new BitmapImage { DecodePixelWidth = 200 };
             await bitmap.SetSourceAsync(stream);
             return bitmap;
         }
-        // As above: decoration only.
+        // Decoration only.
         catch (Exception ex)
         {
             Log.Warning(ex, "Error loading image thumbnail: {Path}", filePath);
@@ -723,27 +656,14 @@ public sealed partial class MainWindow : Window
     /// <summary>What came back from asking the user where to save.</summary>
     private enum DestinationOutcome { Picked, Cancelled, Failed }
 
-    /// <summary>
-    /// Asks the user where to write the PDF.
-    /// </summary>
-    /// <remarks>
-    /// This existed three times over in the save path - once up front and once in each of the
-    /// two "choose another location" branches - each with its own copy of the picker setup and
-    /// its own catch, and one of those copies had drifted onto the wrong error message. The
-    /// picker runs out of process and can fail as a COM error or as anything else the shell
-    /// decides to surface, so the catch stays general; but there is one of it now, and the
-    /// user is told the same thing wherever the picker was opened from.
-    /// </remarks>
+    /// <summary>Asks the user where to write the PDF.</summary>
     /// <param name="original">
-    /// The PDF every page came from, if there is exactly one. The picker then opens on that file,
-    /// in its folder, so the quickest edit there is - turn a page, save - writes back over the
-    /// original after the usual "replace?" from Windows, instead of starting in Documents with a
-    /// name like "Document".
+    /// The single source PDF, if any: the picker then opens on it, so saving over the original
+    /// is one step.
     /// </param>
     /// <remarks>
-    /// The App SDK's picker rather than the WinRT one: <c>FileSavePicker.SuggestedSaveFile</c>
-    /// in a desktop app sets the name but not the folder, so the "save over the original" offer
-    /// opened in Documents. This one takes the folder as a path.
+    /// Uses the App SDK picker because the WinRT one cannot preselect a folder in a desktop app.
+    /// The picker runs out of process and can fail in many ways, so the catch is general.
     /// </remarks>
     private async Task<(DestinationOutcome Outcome, string Path)> PickPdfDestinationAsync(string? suggestedName, string? original = null)
     {
@@ -755,7 +675,7 @@ public sealed partial class MainWindow : Window
         };
         picker.FileTypeChoices.Add(_resourceLoader.GetString("FileTypePdfDocument"), new List<string> { ".pdf" });
 
-        // Only if it is still there: a folder that has gone would leave the picker nowhere to open.
+        // A deleted folder would leave the picker nowhere to open.
         if (original != null && File.Exists(original))
         {
             picker.SuggestedFolder = Path.GetDirectoryName(original);
@@ -788,8 +708,7 @@ public sealed partial class MainWindow : Window
 
     private async void SaveButton_Click(object sender, RoutedEventArgs e)
     {
-        // Sections are derived here rather than stored, so with no dividers in the list this
-        // is one section holding every page and the save below is exactly what it always was.
+        // With no dividers this is a single section holding every page.
         var sections = PdfSection.Split(_documentItems).Where(s => !s.IsEmpty).ToList();
 
         if (sections.Count == 0)
@@ -807,11 +726,13 @@ public sealed partial class MainWindow : Window
         await SaveItemsAsync(sections[0].Items, null, SingleSourcePdf(sections[0].Items));
     }
 
-    /// <summary>The one PDF every page here came from, or null if they came from more than one, or from images.</summary>
-    /// <remarks>
-    /// FilePath, not SourcePdfPath: once the original has been saved over, rows read from a copy
-    /// of it, but the file they belong to is still the original.
-    /// </remarks>
+    /// <summary>Clones of <paramref name="items"/> for a background worker.</summary>
+    /// <remarks>Settings are copy-on-write, so <see cref="AppSettings.Current"/> taken alongside is already a snapshot.</remarks>
+    private static List<DocumentItem> SnapshotItems(IEnumerable<DocumentItem> items)
+        => [.. items.Select(item => item.Clone())];
+
+    /// <summary>The one PDF every page came from, or null for several sources or images.</summary>
+    /// <remarks>FilePath, not SourcePdfPath: after saving over the original, rows read from a copy.</remarks>
     private static string? SingleSourcePdf(IEnumerable<DocumentItem> items)
     {
         string? source = null;
@@ -843,12 +764,16 @@ public sealed partial class MainWindow : Window
                 try
                 {
                     PreserveSourceBeforeOverwrite(outputPath);
-                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, outputPath));
+
+                    // Snapshot now: edits made during the build belong to the next save.
+                    var snapshot = SnapshotItems(items);
+                    var settings = AppSettings.Current;
+                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(snapshot, outputPath, settings));
 
                     StatusTextBlock.Text = _resourceLoader.GetString("StatusPdfCreatedSuccessfully");
                     await ShowDialogAsync(_resourceLoader.GetString("DialogTitleSuccess"), string.Format(_resourceLoader.GetString("DialogContentPdfSaved"), outputPath));
 
-                    // A partial save is still a save, but the user has to know what is missing.
+                    // The save succeeded, but the user must know what was left out.
                     if (result.SkippedItems.Count > 0)
                     {
                         Log.Warning("{Count} item(s) omitted from {Path}", result.SkippedItems.Count, outputPath);
@@ -860,8 +785,7 @@ public sealed partial class MainWindow : Window
                     await ReportCodecFailuresAsync(result.CodecFailures);
                     break;
                 }
-                // Only a locked destination is offered a retry - retrying anything else just
-                // repeats the same failure.
+                // Only a locked destination is worth retrying.
                 catch (PdfOperationException ex) when (ex.Reason == PdfFailureReason.FileInUse)
                 {
                     Log.Warning(ex, "Destination in use: {Path}", outputPath);
@@ -921,8 +845,7 @@ public sealed partial class MainWindow : Window
                     await ShowDialogAsync(title, message);
                     return;
                 }
-                // Anything else is a defect rather than a situation, so the user gets a plain
-                // apology and the detail goes to the log instead of into a dialog.
+                // Anything else is a defect: a generic message, details in the log.
                 catch (Exception ex)
                 {
                     Log.Error(ex, "Unexpected failure creating PDF: {Path}", outputPath);
@@ -993,7 +916,7 @@ public sealed partial class MainWindow : Window
         if (_isSelectMode) return;
         if (ItemFromVisual(e.OriginalSource) is not { } item || !IsPage(item)) return;
 
-        // Event-handler boundary for an optional view; the list itself is unaffected.
+        // Event-handler boundary; the list is unaffected.
         try
         {
             await OpenViewerAsync(item);
@@ -1011,7 +934,7 @@ public sealed partial class MainWindow : Window
 
     private void DocumentView_DragItemsStarting(object sender, DragItemsStartingEventArgs e)
     {
-        // Taken now, because by the time the drop is reported the list has already moved.
+        // Captured now; by the time the drop is reported the list has moved.
         _dragStart = CaptureState();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusReordering");
     }
@@ -1025,19 +948,15 @@ public sealed partial class MainWindow : Window
 
         if (before != null) PushUndo(before);
 
-        // A drag can move a page across a divider, or move the divider itself, so the bands
-        // have to be re-derived. This fires after the collection has settled, which is why the
-        // divider-inserting half of the refresh is safe to run here and not in CollectionChanged.
+        // A drag can cross a divider, so re-derive the bands. Safe here, after the collection settles.
+        ReindexViewerPage();
         RefreshSections();
         StatusTextBlock.Text = _resourceLoader.GetString("StatusReorderComplete");
     }
 
     private void DocumentView_DragOver(object sender, DragEventArgs e)
     {
-        // Only a drop from outside the app is an "add". This used to be unconditional, so
-        // dragging a page into a new position - the thing this list exists for - was reported
-        // back as a Copy and captioned "Drop files here to add them", and DragUIOverride is
-        // not even available on an internal reorder.
+        // Only a drop from outside the app adds files; an internal drag is a reorder.
         if (!e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
         {
             e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
@@ -1069,7 +988,6 @@ public sealed partial class MainWindow : Window
 
     #region Selection & Sorting
 
-    /// <remarks>No longer by way of select mode: the lists hold any number of selected pages as they are.</remarks>
     private void SelectAllButton_Click(object sender, RoutedEventArgs e)
     {
         ActiveView.SelectAll();
@@ -1087,14 +1005,7 @@ public sealed partial class MainWindow : Window
         StatusTextBlock.Text = count > 0 ? string.Format(_resourceLoader.GetString("StatusRemovedPages"), count) : _resourceLoader.GetString("StatusNoPagesToRemove");
     }
 
-    /// <summary>
-    /// Sorts the pages, leaving the section dividers where they are.
-    /// </summary>
-    /// <remarks>
-    /// Each run between two dividers is sorted on its own. Sorting the whole list would drag
-    /// pages across dividers and silently re-file them into a different output document -
-    /// and would sort the dividers themselves into the middle of it.
-    /// </remarks>
+    /// <summary>Sorts the pages within each section, leaving the dividers in place.</summary>
     private void SortDocuments<T>(Func<DocumentItem, T?> keySelector, bool ascending) where T : IComparable
     {
         var ordered = new List<DocumentItem>(_documentItems.Count);
@@ -1164,9 +1075,17 @@ public sealed partial class MainWindow : Window
 
         if (await Dialogs.DialogHost.ShowAsync(dialog) == ContentDialogResult.Primary)
         {
+            if (dialog.SaveFailure != null)
+            {
+                await ShowDialogAsync(
+                    _resourceLoader.GetString("DialogTitleError"),
+                    _resourceLoader.GetString("DialogContentSettingsNotSaved"));
+                return;
+            }
+
             StatusTextBlock.Text = _resourceLoader.GetString("StatusSettingsSaved");
 
-            // Compression and paper size are exactly what the estimate is measuring.
+            // Compression and paper size change the estimate.
             ScheduleEstimate();
         }
     }
@@ -1180,14 +1099,7 @@ public sealed partial class MainWindow : Window
         await Dialogs.DialogHost.ShowAsync(dialog);
     }
 
-    /// <summary>
-    /// Turns a service-layer failure reason into a title and message worth showing a person.
-    /// </summary>
-    /// <remarks>
-    /// Mapping happens here, not in the service: the service has no business choosing English
-    /// text, and the UI needs something stable to switch on. Showing raw exception messages
-    /// was both untranslatable and, for anything unexpected, meaningless to the reader.
-    /// </remarks>
+    /// <summary>Maps a service failure reason to a localized title and message.</summary>
     private (string Title, string Message) DescribeFailure(PdfOperationException failure)
     {
         var name = Path.GetFileName(failure.Path ?? string.Empty);
@@ -1222,11 +1134,8 @@ public sealed partial class MainWindow : Window
         };
     }
 
-    /// <summary>Says so when the chosen codec failed on some images, which were kept as they were.</summary>
-    /// <remarks>
-    /// The file is fine and the save succeeded, but a plugin that quietly fails on every image
-    /// looks exactly like one that found nothing to shrink, and only one of those needs fixing.
-    /// </remarks>
+    /// <summary>Reports images the chosen codec failed on (kept unchanged).</summary>
+    /// <remarks>Otherwise a broken plugin looks the same as one with nothing to shrink.</remarks>
     private async Task ReportCodecFailuresAsync(int failures)
     {
         if (failures == 0) return;
@@ -1264,8 +1173,6 @@ public sealed partial class MainWindow : Window
 
     private async void LogButton_Click(object sender, RoutedEventArgs e)
     {
-        // FileService no longer swallows this, so pressing the button either opens the folder
-        // or says why it could not - rather than appearing to do nothing.
         try
         {
             FileService.OpenLogDirectory();
@@ -1284,7 +1191,8 @@ public sealed partial class MainWindow : Window
         Close();
     }
 
-    public async void AddFilesFromPaths(IEnumerable<string> paths)
+    /// <summary>Adds files handed over by another launch. Never throws.</summary>
+    public async Task AddFilesFromPathsAsync(IEnumerable<string> paths)
     {
         try
         {
@@ -1314,8 +1222,7 @@ public sealed partial class MainWindow : Window
 
             await ReportSkippedFilesAsync(loaded.FailedFiles);
         }
-        // "async void" is forced by the event signature, so nothing above can observe a
-        // failure here. It stops at this method or it takes the process down.
+        // Activation boundary.
         catch (Exception ex)
         {
             Log.Error(ex, "Error adding files from paths");
@@ -1323,9 +1230,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>
-    /// Tells the user which files did not make it in, if any.
-    /// </summary>
+    /// <summary>Tells the user which files were skipped, if any.</summary>
     private async Task ReportSkippedFilesAsync(IReadOnlyList<string> skipped)
     {
         if (skipped.Count == 0) return;
@@ -1338,7 +1243,7 @@ public sealed partial class MainWindow : Window
             string.Format(_resourceLoader.GetString("DialogContentSomeFilesSkipped"), FormatNameList(skipped)));
     }
 
-    /// <summary>Caps a name list so a hundred failures do not produce an unreadable dialog.</summary>
+    /// <summary>Caps a name list so a long one stays readable.</summary>
     private string FormatNameList(IReadOnlyList<string> names)
     {
         const int maxShown = 10;
@@ -1348,7 +1253,7 @@ public sealed partial class MainWindow : Window
             : shown;
     }
 
-    /// <summary>Says once, when the window is up, that this session is running without a log.</summary>
+    /// <summary>Tells the user once, after start-up, that logging is unavailable.</summary>
     private async void ReportLoggingFailure(object sender, RoutedEventArgs e)
     {
         ((FrameworkElement)Content).Loaded -= ReportLoggingFailure;

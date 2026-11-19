@@ -5,22 +5,11 @@ using System.Threading.Tasks;
 
 namespace Gladhen3.Dialogs;
 
-/// <summary>
-/// Shows one <see cref="ContentDialog"/> at a time, queueing any that arrive while another
-/// is open.
-/// </summary>
+/// <summary>Shows one <see cref="ContentDialog"/> at a time, queueing the rest.</summary>
 /// <remarks>
-/// WinUI permits exactly one ContentDialog per <c>XamlRoot</c>; a second <c>ShowAsync</c>
-/// throws <c>COMException 0x80000019</c> - "Only a single ContentDialog can be open at any
-/// time". Almost every caller here is an <c>async void</c> event handler, which is the end
-/// of the line for an exception: it reached <see cref="App"/>'s unhandled handler and took
-/// the process down. That cost the whole app for something entirely recoverable - a PDF
-/// that had already been written correctly still killed the window, because the previous
-/// dialog had not been dismissed yet.
-///
-/// Queueing is the right response rather than dropping the second dialog: each one is
-/// either a question whose answer the caller is waiting on (retry? choose another folder?)
-/// or the result the user explicitly asked to see.
+/// WinUI allows one ContentDialog per XamlRoot; a second ShowAsync throws, and from an
+/// async void handler that ends the process. Queued rather than dropped, because each
+/// dialog is either a question the caller awaits or a result the user asked for.
 /// </remarks>
 internal static class DialogHost
 {

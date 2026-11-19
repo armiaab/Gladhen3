@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
 
@@ -41,17 +42,35 @@ public class AppSettings
     public double CustomMarginTop { get; set; } = 0.5;
     public double CustomMarginBottom { get; set; } = 0.5;
     private static AppSettings _current = new();
+    private static readonly AsyncLocal<AppSettings?> Pinned = new();
 
-    public static AppSettings Current => _current;
+    /// <summary>The settings in force: a pinned snapshot inside a background operation, else the saved ones.</summary>
+    /// <remarks>Copy-on-write: a published instance is never modified, only replaced.</remarks>
+    public static AppSettings Current => Pinned.Value ?? _current;
 
     internal static void ReplaceForTesting(AppSettings settings) => _current = settings;
 
-    /// <summary>The margins in points, for the page as it is seen.</summary>
-    /// <remarks>
-    /// A preset puts the same margin on all four sides; Custom uses the four values as entered,
-    /// in their unit. Custom used to fall through to a fixed half inch all round, so the four
-    /// boxes in Settings changed nothing at all.
-    /// </remarks>
+    public AppSettings Clone() => (AppSettings)MemberwiseClone();
+
+    /// <summary>
+    /// Makes <paramref name="snapshot"/> what <see cref="Current"/> returns on this logical
+    /// thread, and the tasks it starts, until the result is disposed.
+    /// </summary>
+    /// <remarks>Lets a save or estimate keep the values it started with while Settings changes.</remarks>
+    public static IDisposable Pin(AppSettings snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var previous = Pinned.Value;
+        Pinned.Value = snapshot;
+        return new Unpin(previous);
+    }
+
+    private sealed class Unpin(AppSettings? previous) : IDisposable
+    {
+        public void Dispose() => Pinned.Value = previous;
+    }
+
+    /// <summary>The margins in points: a preset on all four sides, or the four custom values.</summary>
     public (double Left, double Top, double Right, double Bottom) GetMarginsInPoints()
     {
         if (Margin != PdfPageMargin.Custom)
@@ -110,17 +129,26 @@ public class AppSettings
         };
     }
 
-    public static async Task LoadAsync()
+    /// <summary>Upper bound on the settings file; real ones are a few hundred bytes.</summary>
+    private const long MaxSettingsFileBytes = 64 * 1024;
+
+    /// <summary>Reads the saved settings. Called once, before the first window exists.</summary>
+    /// <remarks>Synchronous so nothing can run on the defaults while the file is read.</remarks>
+    public static void Load()
     {
         try
         {
-            var folder = ApplicationData.Current.LocalFolder;
+            var path = Path.Combine(ApplicationData.Current.LocalFolder.Path, SettingsFileName);
+            var info = new FileInfo(path);
+            if (!info.Exists) return;
 
-            if (await folder.TryGetItemAsync(SettingsFileName) is not StorageFile file)
+            if (info.Length > MaxSettingsFileBytes)
+            {
+                Serilog.Log.Logger.Warning("Settings file is {Bytes} bytes, over the {Max} limit; continuing with defaults", info.Length, MaxSettingsFileBytes);
                 return;
+            }
 
-            var json = await FileIO.ReadTextAsync(file);
-            var loaded = JsonSerializer.Deserialize<AppSettings>(json);
+            var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path));
             if (loaded != null)
                 _current = loaded;
         }
@@ -134,12 +162,26 @@ public class AppSettings
         }
     }
 
-    public static async Task SaveAsync()
+    /// <summary>Writes <paramref name="settings"/>, then makes it <see cref="Current"/>.</summary>
+    /// <remarks>If the write fails, the in-memory settings stay as they were.</remarks>
+    public static async Task SaveAsync(AppSettings settings)
     {
+        ArgumentNullException.ThrowIfNull(settings);
+
         var folder = ApplicationData.Current.LocalFolder;
         var file = await folder.CreateFileAsync(SettingsFileName, CreationCollisionOption.ReplaceExisting);
 
-        var json = JsonSerializer.Serialize(_current);
+        var json = JsonSerializer.Serialize(settings);
         await FileIO.WriteTextAsync(file, json);
+
+        _current = settings;
+    }
+
+    /// <summary>Saves a copy of the current settings with <paramref name="change"/> applied.</summary>
+    public static Task UpdateAsync(Action<AppSettings> change)
+    {
+        var next = _current.Clone();
+        change(next);
+        return SaveAsync(next);
     }
 }

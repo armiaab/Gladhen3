@@ -1,4 +1,4 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using PdfSharp;
 using PdfSharp.Pdf.IO;
 using Serilog;
@@ -15,22 +15,22 @@ using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
 
-/// <summary>What told the detector which way up a page is - or why nothing did.</summary>
+/// <summary>What decided a page's orientation, or why nothing could.</summary>
 public enum OrientationEvidence
 {
-    /// <summary>The PDF's own text: which way the content stream draws it.</summary>
+    /// <summary>The PDF's own text layer.</summary>
     TextLayer,
 
-    /// <summary>An orientation model, looking at the page as a picture.</summary>
+    /// <summary>An orientation model, on the page as a picture.</summary>
     Model,
 
-    /// <summary>Windows' text recognition, reading the page as a picture every way round.</summary>
+    /// <summary>Windows text recognition, tried at every turn.</summary>
     Recognition,
 
-    /// <summary>Looked, and could not tell: no text, or nothing that agreed with itself.</summary>
+    /// <summary>Checked, but inconclusive.</summary>
     Undecided,
 
-    /// <summary>The page needed text recognition, and Windows has none installed.</summary>
+    /// <summary>Text recognition was needed, and Windows has none installed.</summary>
     NoRecognizer,
 
     /// <summary>The page could not be opened or read at all.</summary>
@@ -38,13 +38,12 @@ public enum OrientationEvidence
 }
 
 /// <param name="Turn">
-/// The <see cref="DocumentItem.Rotation"/> that stands the page upright, or null if the
-/// detector cannot tell. Absolute, not a step: checking an upright page again gives the same answer.
+/// The absolute <see cref="DocumentItem.Rotation"/> that makes the page upright, or null if unknown.
 /// </param>
 public readonly record struct OrientationFinding(int? Turn, OrientationEvidence Evidence);
 
-/// <summary>A page to check, as it stood when the check began.</summary>
-/// <param name="Rotation">The turn the page has now, which is tried first.</param>
+/// <summary>A page to check, as it was when the check began.</summary>
+/// <param name="Rotation">The page's current turn, tried first.</param>
 public sealed record PageToCheck(DocumentItem Item, DocumentType Type, string Path, int PageNumber, int Rotation)
 {
     public static PageToCheck Of(DocumentItem item)
@@ -52,13 +51,8 @@ public sealed record PageToCheck(DocumentItem Item, DocumentType Type, string Pa
 }
 
 /// <summary>How pictures of pages are judged.</summary>
-/// <param name="Method">
-/// <see cref="OrientationModels.BuiltInId"/>, an added model's id, or
-/// <see cref="OrientationModels.TextRecognitionId"/> for no model at all.
-/// </param>
-/// <param name="TextRecognitionFallback">
-/// When the model cannot tell, whether to try Windows' text recognition as well.
-/// </param>
+/// <param name="Method">A model id, or <see cref="OrientationModels.TextRecognitionId"/> for none.</param>
+/// <param name="TextRecognitionFallback">Whether to try text recognition when the model cannot tell.</param>
 public sealed record OrientationOptions(string Method, bool TextRecognitionFallback)
 {
     public static OrientationOptions Default { get; } = new(OrientationModels.BuiltInId, true);
@@ -66,56 +60,44 @@ public sealed record OrientationOptions(string Method, bool TextRecognitionFallb
     public bool UsesModel => Method != OrientationModels.TextRecognitionId;
 }
 
-/// <summary>
-/// Works out which way up each page is meant to be read, so that "normalize" can turn every
-/// page upright in one go.
-/// </summary>
+/// <summary>Works out which way up each page should be read.</summary>
 /// <remarks>
-/// A PDF page with a text layer is answered from it: exact, and costs no more than parsing the
-/// page. Everything else - photos, scans, PDFs of scans, handwriting - is looked at as a picture
-/// by an orientation model, a small image classifier that recognises how a page is turned
-/// without having to read it. Windows' text recognition can back the model up, or stand in for
-/// it. Pages that give no clear answer are left alone: turning a page the wrong way is worse
-/// than not turning it.
+/// A PDF text layer answers exactly. Everything else is judged as a picture by an
+/// orientation model, optionally backed by Windows text recognition. Inconclusive pages
+/// are left alone: a wrong turn is worse than none.
 /// </remarks>
 public sealed class OrientationDetector : IDisposable
 {
-    /// <summary>Text-layer characters that settle a page without looking at its pixels.</summary>
+    /// <summary>Text-layer characters enough to decide without the pixels.</summary>
     private const double TrustedCharacters = 40;
 
-    /// <summary>Fewer characters, still worth going by when there is nothing better.</summary>
+    /// <summary>Fewer characters, used when nothing better is available.</summary>
     private const double FallbackCharacters = 12;
 
-    /// <summary>
-    /// A page this much covered by images is probably a scan, and visible text on a scan may be
-    /// a stamp or a footer added afterwards - upright on a page that is not.
-    /// </summary>
+    /// <summary>Image coverage above which a page is treated as a scan, whose text layer may be a stamp.</summary>
     private const double ScanCoverage = 0.5;
 
-    /// <summary>Text recognition reads ordinary print comfortably at this resolution.</summary>
+    /// <summary>Resolution that text recognition reads ordinary print at.</summary>
     private const double RenderDpi = 150;
 
-    /// <summary>The long side of a picture handed to the recognizer. More is slower, not more accurate.</summary>
+    /// <summary>Long side of the picture given to the recognizer; larger is slower, not better.</summary>
     private const int MaxEdge = 2400;
 
-    /// <summary>Pages checked side by side, one model session and recognizer each; past four the gain is small.</summary>
+    /// <summary>Pages checked in parallel, each lane with its own session and recognizer.</summary>
     private static int Lanes => Math.Clamp(Environment.ProcessorCount / 2, 1, 4);
 
-    // Shared by the lanes, so that a 200 MB scan is opened once rather than once per lane.
-    // PDFsharp documents are not thread-safe, hence the locks.
+    // Shared across lanes so each source opens once; PDFsharp is not thread-safe, hence the locks.
     private readonly Dictionary<string, PdfSharp.Pdf.PdfDocument> _textDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Windows.Data.Pdf.PdfDocument> _renderDocuments = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim _renderGate = new(1, 1);
 
-    /// <summary>One lane's own tools: neither a model session nor a recognizer takes two pages at once.</summary>
-    /// <param name="TextRecognitionOnly">No model was asked for, so a missing recognizer is worth saying.</param>
+    /// <summary>One lane's tools; sessions and recognizers take one page at a time.</summary>
+    /// <param name="TextRecognitionOnly">No model was chosen, so a missing recognizer is worth reporting.</param>
     internal sealed record Tools(ImageOrientationModel.Session? Model, OcrEngine? Recognizer, bool TextRecognitionOnly);
 
-    /// <summary>Checks every page, reporting each finding as it is made, several pages at a time.</summary>
-    /// <param name="found">Told about each page as soon as it is checked, in no particular order.</param>
-    /// <exception cref="OrientationModelException">
-    /// The chosen model cannot be loaded. Thrown before any page is checked.
-    /// </exception>
+    /// <summary>Checks every page in parallel, reporting each finding as it is made.</summary>
+    /// <param name="found">Receives each finding, in no particular order.</param>
+    /// <exception cref="OrientationModelException">The chosen model cannot be loaded (thrown before any page).</exception>
     public static async Task DetectAsync(
         IReadOnlyList<PageToCheck> pages,
         OrientationOptions options,
@@ -147,8 +129,7 @@ public sealed class OrientationDetector : IDisposable
                 {
                     finding = await detector.DetectAsync(page, tools, cancellationToken);
                 }
-                // Per-item isolation: a page that cannot be opened is reported as such, and the
-                // rest are still checked.
+                // One unreadable page must not stop the rest.
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     Log.Warning(ex, "Could not check which way up {Path} page {Page} is", page.Path, page.PageNumber);
@@ -202,17 +183,14 @@ public sealed class OrientationDetector : IDisposable
             }
         }
 
-        // A few characters in agreement still beat a guess.
+        // A few agreeing characters still beat a guess.
         if (reading?.Turn(FallbackCharacters) is { } fromFewer)
             return new OrientationFinding(fromFewer, OrientationEvidence.TextLayer);
 
         return new OrientationFinding(null, tools.TextRecognitionOnly && tools.Recognizer == null ? OrientationEvidence.NoRecognizer : OrientationEvidence.Undecided);
     }
 
-    /// <summary>
-    /// The text layer settles the page unless the page looks like a scan with visible text on
-    /// top: then the scan's own text, read from the pixels, is what counts.
-    /// </summary>
+    /// <summary>The text layer decides, unless the page looks like a scan with text added on top.</summary>
     private static bool IsTrusted(TextLayerReading reading)
         => reading.ImageCoverage < ScanCoverage || reading.Invisible >= reading.Total / 2;
 
@@ -234,8 +212,7 @@ public sealed class OrientationDetector : IDisposable
             {
                 return TextLayerOrientation.Read(document.Pages[page.PageNumber - 1]);
             }
-            // A content stream PDFsharp cannot parse still renders in Windows' reader, which is
-            // all the fallback needs.
+            // Windows' renderer may still handle what PDFsharp cannot parse.
             catch (PdfSharpException ex)
             {
                 Log.Debug(ex, "Text layer of {Path} page {Page} unreadable; reading its pixels instead", page.Path, page.PageNumber);
@@ -244,13 +221,13 @@ public sealed class OrientationDetector : IDisposable
         }
     }
 
-    /// <summary>The page as a viewer shows it - turned by its own /Rotate.</summary>
+    /// <summary>The page as a viewer shows it, turned by its own /Rotate.</summary>
     private async Task<PagePicture> RenderPdfPageAsync(PageToCheck page)
     {
         var rendered = new InMemoryRandomAccessStream();
         var done = false;
 
-        // Only the rendering itself is one at a time; decoding it is each lane's own business.
+        // Only rendering is serialised; decoding happens per lane.
         await _renderGate.WaitAsync();
         try
         {
@@ -279,22 +256,19 @@ public sealed class OrientationDetector : IDisposable
         {
             _renderGate.Release();
 
-            // The stream becomes the caller's only once it is handed over.
+            // Dispose unless ownership was handed to the caller.
             if (!done) rendered.Dispose();
         }
 
         return new PagePicture(rendered, ExifOrientationMode.IgnoreExifOrientation);
     }
 
-    /// <summary>
-    /// A page as a picture, decoded on demand: small and in colour for a model, large and grey
-    /// for text recognition. Rendering or opening it is the expensive part, so it is done once.
-    /// </summary>
+    /// <summary>A page as a picture, opened once and decoded on demand (small colour for a model, large grey for OCR).</summary>
     private sealed class PagePicture(IRandomAccessStream stream, ExifOrientationMode exif, IDisposable? owner = null) : IDisposable
     {
         private BitmapDecoder? _decoder;
 
-        /// <summary>A photo as the viewer shows it, EXIF turn included.</summary>
+        /// <summary>A photo with its EXIF turn applied.</summary>
         public static PagePicture OpenImage(string path)
         {
             var file = File.OpenRead(path);
@@ -323,6 +297,7 @@ public sealed class OrientationDetector : IDisposable
             foreach (var document in _textDocuments.Values) document.Dispose();
             _textDocuments.Clear();
         }
+        // Windows.Data.Pdf.PdfDocument has no Close/Dispose; dropping the references releases it.
         _renderDocuments.Clear();
         _renderGate.Dispose();
     }

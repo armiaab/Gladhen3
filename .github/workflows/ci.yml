@@ -1,0 +1,48 @@
+# Every push and pull request: the app still builds, the tests pass, the
+# benchmarks still run, and the test/benchmark code keeps its style(9) rules.
+#
+# The native shell extension needs the C++ workload, which hosted runners
+# have, but it is not built here: the app build only warns when the DLL is
+# absent, and packaging (build-store-package.ps1) is where it is required.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build app (x64, no package)
+        run: dotnet build Gladhen3.csproj -c Release -p:Platform=x64 -p:GenerateAppxPackageOnBuild=false
+
+      - name: Unit tests
+        run: dotnet test tests/Gladhen3.Tests -c Release --logger "trx;LogFileName=results.trx"
+
+      - name: Benchmarks (smoke)
+        run: dotnet run -c Release --project benchmarks/Gladhen3.Benchmarks -- --filter "*" --job dry
+
+      - name: Style (tests, benchmarks)
+        run: |
+          dotnet format style tests/Gladhen3.Tests/Gladhen3.Tests.csproj --verify-no-changes --severity warn
+          dotnet format style benchmarks/Gladhen3.Benchmarks/Gladhen3.Benchmarks.csproj --verify-no-changes --severity warn
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: tests/Gladhen3.Tests/TestResults/

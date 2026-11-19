@@ -84,13 +84,7 @@ public class DocumentItem : INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// The clockwise turn the user has given this page: 0, 90, 180 or 270 degrees.
-    /// </summary>
-    /// <remarks>
-    /// Added on top of whatever rotation a source PDF page already carries, so a page that
-    /// arrived sideways and was turned upright reads 90 here, not its absolute orientation.
-    /// </remarks>
+    /// <summary>The user's clockwise turn: 0, 90, 180 or 270, on top of the page's own /Rotate.</summary>
     public int Rotation
     {
         get => _rotation;
@@ -105,14 +99,8 @@ public class DocumentItem : INotifyPropertyChanged
         }
     }
 
-    /// <summary>
-    /// <see cref="Rotation"/> as the double a RotateTransform's Angle takes; a classic binding
-    /// will not convert an int to it on its own.
-    /// </summary>
-    /// <remarks>
-    /// Deliberately not animated. Item containers are recycled as the list scrolls, and an
-    /// animated turn would spin every recycled thumbnail into its new angle.
-    /// </remarks>
+    /// <summary><see cref="Rotation"/> as a double, for RotateTransform.Angle.</summary>
+    /// <remarks>Not animated: recycled containers would visibly spin.</remarks>
     public double ThumbnailAngle => _rotation;
 
     /// <summary>Folds any whole number of quarter turns into 0, 90, 180 or 270.</summary>
@@ -158,14 +146,11 @@ public class DocumentItem : INotifyPropertyChanged
 
     public string SizeInfo => Type == DocumentType.Image ? FileSize : string.Empty;
 
-    // Parsed once: an 800-page book formats these 1600 times as its tiles appear.
+    // Cached: large documents format this for every tile.
     private static CompositeFormat _displayNameFormat = CompositeFormat.Parse("{0} (Page {1}/{2})");
     private static CompositeFormat _pageInfoFormat = CompositeFormat.Parse("Page {0} of {1}");
 
-    /// <summary>
-    /// How a PDF page names itself in a tooltip or to a screen reader: file name, page number,
-    /// page count. Set from the UI's resources at start-up; the model cannot reach them itself.
-    /// </summary>
+    /// <summary>Format for a PDF page's accessible name (file, page, count), set from resources at start-up.</summary>
     public static string DisplayNameFormat
     {
         get => _displayNameFormat.Format;

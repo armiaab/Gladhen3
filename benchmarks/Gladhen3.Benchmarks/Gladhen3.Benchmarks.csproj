@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<!--
+	  Microbenchmarks for the hot paths of a build and an estimate.
+	  How to run them is in Program.cs; XML comments cannot hold the
+	  double-dash options.
+	-->
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+		<Platforms>x64</Platforms>
+		<PlatformTarget>x64</PlatformTarget>
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>disable</ImplicitUsings>
+		<IsPackable>false</IsPackable>
+		<RootNamespace>Gladhen3.Benchmarks</RootNamespace>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<Optimize>true</Optimize>
+		<!-- Warnings in the linked application sources are the app's business. -->
+		<NoWarn>$(NoWarn);CA1822;CA1859</NoWarn>
+	</PropertyGroup>
+
+	<Import Project="..\..\tests\LinkedSources.props" />
+
+	<ItemGroup>
+		<PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+	</ItemGroup>
+
+</Project>

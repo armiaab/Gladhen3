@@ -10,13 +10,10 @@ using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
 
-/// <summary>An image encoded for embedding as a PDF image XObject.</summary>
-/// <param name="Filter">The PDF filter that decodes <paramref name="Data"/>, with its slash: <c>/DCTDecode</c>.</param>
+/// <summary>An image encoded for a PDF image XObject.</summary>
+/// <param name="Filter">The PDF filter for <paramref name="Data"/>, with its slash.</param>
 /// <param name="Components">1 for DeviceGray, 3 for DeviceRGB.</param>
-/// <param name="Predictor">
-/// The PNG predictor applied before deflating, or 0 for none. Only ever set on Flate data, and
-/// only by the built-in lossless codec.
-/// </param>
+/// <param name="Predictor">PNG predictor applied before Deflate, or 0 (built-in lossless codec only).</param>
 internal sealed record EncodedImage(
     byte[] Data,
     string Filter,
@@ -26,21 +23,15 @@ internal sealed record EncodedImage(
     int BitsPerComponent,
     int Predictor = 0);
 
-/// <summary>Turns decoded pixels into the bytes of a PDF image stream.</summary>
-/// <remarks>
-/// One instance serves one build or one estimate and is then disposed. That is what lets a
-/// plugin be removed while the app is running: nothing holds its DLL between operations.
-/// </remarks>
+/// <summary>Turns decoded pixels into a PDF image stream.</summary>
+/// <remarks>One instance per build or estimate, so a plugin DLL is never held between operations.</remarks>
 internal interface IImageCodec : IDisposable
 {
-    /// <summary>
-    /// True when <see cref="Encode"/> returns a complete JPEG file, which PDFsharp can place
-    /// on a page directly. Any other output can only be written into an existing image stream.
-    /// </summary>
+    /// <summary>True when the output is a complete JPEG file PDFsharp can place directly.</summary>
     bool ProducesJpegFile { get; }
 
     /// <summary>Encodes a <see cref="BitmapPixelFormat.Bgra8"/> bitmap.</summary>
-    /// <returns>The encoded image, or null to leave this image exactly as it was.</returns>
+    /// <returns>The encoded image, or null to keep the original.</returns>
     EncodedImage? Encode(SoftwareBitmap bitmap, double quality);
 }
 
@@ -48,17 +39,7 @@ internal interface IImageCodec : IDisposable
 /// <param name="LoadFailure">Why the plugin cannot be used, or null if it can.</param>
 public sealed record ImageCodecInfo(string Id, string FileName, string? Name, string? Filter, CodecFailureReason? LoadFailure);
 
-/// <summary>
-/// The encoders compressed images can go through: two built in, plus any codec DLLs the user
-/// has added.
-/// </summary>
-/// <remarks>
-/// The built-ins are the two image encodings Windows can produce without shipping a library:
-/// JPEG through WIC, and lossless Deflate through <see cref="System.IO.Compression"/>. Anything
-/// else - mozjpeg, JPEG 2000, JBIG2 for scans - arrives as a plugin. The interface plugins
-/// implement is a handful of C exports, described in CodecSdk/gladhen_codec.h, so a codec can
-/// be written in anything that builds a DLL.
-/// </remarks>
+/// <summary>Image encoders: JPEG (WIC) and lossless Deflate built in, plus user codec DLLs.</summary>
 public static class ImageCodecs
 {
     public const string JpegId = "jpeg";
@@ -67,7 +48,7 @@ public static class ImageCodecs
 
     private static string? _pluginDirectory;
 
-    /// <summary>Where installed codec DLLs are kept: a folder of the app's own local data.</summary>
+    /// <summary>Folder for installed codec DLLs, in the app's local data.</summary>
     public static string PluginDirectory
     {
         get => _pluginDirectory ??= Path.Combine(ApplicationData.Current.LocalFolder.Path, "Codecs");
@@ -76,7 +57,7 @@ public static class ImageCodecs
 
     public static bool IsPlugin(string? id) => id?.StartsWith(PluginPrefix, StringComparison.Ordinal) == true;
 
-    /// <summary>Opens the codec with this id; an unknown id means the default JPEG encoder.</summary>
+    /// <summary>Opens the codec with this id; an unknown id means JPEG.</summary>
     /// <exception cref="CodecException">The id names a plugin that cannot be loaded.</exception>
     internal static IImageCodec Open(string? id)
     {
@@ -85,12 +66,7 @@ public static class ImageCodecs
         return id == LosslessId ? new LosslessCodec() : new JpegCodec();
     }
 
-    /// <summary>Lists every DLL in <see cref="PluginDirectory"/>, including the ones that will not load.</summary>
-    /// <remarks>
-    /// Each one is loaded long enough to ask for its name and then released. A codec that
-    /// cannot be loaded is still listed, with the reason, so the user can see it and remove it
-    /// rather than wondering where it went.
-    /// </remarks>
+    /// <summary>Lists every DLL in <see cref="PluginDirectory"/>, with the reason for any that will not load.</summary>
     public static IReadOnlyList<ImageCodecInfo> ListPlugins()
     {
         var found = new List<ImageCodecInfo>();
@@ -104,8 +80,7 @@ public static class ImageCodecs
             var fileName = Path.GetFileName(path);
             var id = PluginPrefix + fileName;
 
-            // Per-item isolation: one broken DLL must not hide the others. Only the expected
-            // failure is caught; anything else is a defect in the loader.
+            // One broken DLL must not hide the others.
             try
             {
                 using var codec = NativeImageCodec.Load(path);
@@ -122,12 +97,8 @@ public static class ImageCodecs
     }
 
     /// <summary>Copies a codec DLL into <see cref="PluginDirectory"/> and checks that it works.</summary>
-    /// <remarks>
-    /// The copy is what gets loaded, now and later, so the plugin keeps working after the user
-    /// deletes or moves the original. A DLL that turns out not to be a usable codec is removed
-    /// again before this throws.
-    /// </remarks>
-    /// <exception cref="CodecException">The file is not a codec this app can use.</exception>
+    /// <remarks>The copy is what gets loaded, so moving the original is harmless; an unusable copy is removed.</remarks>
+    /// <exception cref="CodecException">The file is not a usable codec.</exception>
     public static ImageCodecInfo Install(string sourcePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -165,7 +136,7 @@ public static class ImageCodecs
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Loaded by a save or an estimate that is still running.
+            // Still loaded by a running save or estimate.
             throw new CodecException(CodecFailureReason.InUse, $"'{Path.GetFileName(path)}' is in use.", ex) { Path = path };
         }
 
@@ -173,10 +144,7 @@ public static class ImageCodecs
     }
 
     /// <summary>The DLL a plugin id refers to.</summary>
-    /// <remarks>
-    /// The id comes from the settings file, which anything can edit, so it is held to a bare
-    /// file name: an id must not be able to load a DLL from anywhere but the plugin folder.
-    /// </remarks>
+    /// <remarks>The id comes from an editable settings file, so only a bare file name in the plugin folder is accepted.</remarks>
     private static string PluginPath(string id)
     {
         var fileName = id[PluginPrefix.Length..];
@@ -189,9 +157,9 @@ public static class ImageCodecs
         return Path.Combine(PluginDirectory, fileName);
     }
 
-    // ------------------------------------------------------------------------- built-in codecs
+    // Built-in codecs.
 
-    /// <summary>Baseline JPEG through WIC: the smallest output for photographs and scans.</summary>
+    /// <summary>Baseline JPEG through WIC.</summary>
     private sealed class JpegCodec : IImageCodec
     {
         public bool ProducesJpegFile => true;
@@ -209,17 +177,11 @@ public static class ImageCodecs
         }
     }
 
-    /// <summary>
-    /// Deflate over PNG-predicted rows: every pixel survives, only the resolution changes.
-    /// </summary>
-    /// <remarks>
-    /// For screenshots, diagrams and line art, where JPEG smears the edges. The predictor is
-    /// what makes this worth choosing - plain Deflate over raw samples barely beats storing
-    /// them. Images whose pixels are all grey are stored as one channel instead of three.
-    /// </remarks>
+    /// <summary>Lossless: Deflate over PNG-predicted rows. Only the resolution changes.</summary>
+    /// <remarks>For screenshots and line art. All-grey images are stored as one channel.</remarks>
     private sealed class LosslessCodec : IImageCodec
     {
-        /// <summary>PNG predictor 15: each row names its own filter.</summary>
+        /// <summary>PNG predictor 15: each row carries its own filter.</summary>
         private const int PngOptimum = 15;
 
         public bool ProducesJpegFile => false;
@@ -267,17 +229,11 @@ public static class ImageCodecs
     }
 }
 
-/// <summary>The PNG row filters, as PDF's /Predictor 10-15 expects them in front of Deflate.</summary>
+/// <summary>PNG row filters, as PDF's /Predictor 10-15 expects before Deflate.</summary>
 internal static class PngPredictor
 {
-    /// <summary>
-    /// Filters every row with whichever of the five PNG filters leaves the smallest residue,
-    /// prefixing each with the filter's number.
-    /// </summary>
-    /// <remarks>
-    /// "Smallest" is the sum of the residues read as signed bytes - the heuristic libpng uses.
-    /// It does not guarantee the best compression, but it is the one that matters in practice.
-    /// </remarks>
+    /// <summary>Filters each row with the PNG filter leaving the smallest residue, prefixed with its number.</summary>
+    /// <remarks>"Smallest" is the sum of signed residues, libpng's heuristic.</remarks>
     public static byte[] Apply(byte[] samples, int rowBytes, int height, int bytesPerPixel)
     {
         var output = new byte[(long)(rowBytes + 1) * height];
@@ -314,9 +270,7 @@ internal static class PngPredictor
 
                     row[i] = value;
 
-                    // Widened before Abs: a residue of 0x80 is sbyte.MinValue, whose absolute
-                    // value does not fit back in an sbyte - Math.Abs throws on it, and noisy
-                    // images produce it constantly.
+                    // Widen before Abs: Math.Abs(sbyte.MinValue) throws, and 0x80 residues are common.
                     score += Math.Abs((int)(sbyte)value);
                 }
 
@@ -348,13 +302,10 @@ internal static class PngPredictor
     }
 }
 
-/// <summary>The WIC encode calls every codec path shares.</summary>
+/// <summary>WIC encode helpers shared by every codec.</summary>
 internal static class Wic
 {
-    /// <remarks>
-    /// The quality has to go in as a property set when the encoder is created. Setting it
-    /// afterwards writes metadata and silently leaves the encoding alone.
-    /// </remarks>
+    /// <remarks>Quality must be set when the encoder is created; setting it later changes nothing.</remarks>
     public static byte[] EncodeJpeg(SoftwareBitmap bitmap, double quality)
     {
         var props = new BitmapPropertySet

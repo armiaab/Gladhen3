@@ -1,4 +1,4 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -10,13 +10,10 @@ using System.Threading.Tasks;
 
 namespace Gladhen3;
 
-/// <summary>
-/// The quick edits - turning, copying, inserting, reversing and lifting out pages - and the
-/// undo history that makes them safe to reach for.
-/// </summary>
+/// <summary>Page commands (turn, duplicate, insert, reverse, extract, remove) and undo.</summary>
 public sealed partial class MainWindow
 {
-    /// <summary>The page commands, named by the Tag of whichever button or menu item asks for one.</summary>
+    /// <summary>Page commands, named by the Tag of the button or menu item.</summary>
     private enum PageCommand
     {
         RotateRight,
@@ -32,23 +29,78 @@ public sealed partial class MainWindow
         Preview
     }
 
-    /// <summary>The page the shared right-click menu was opened on, until one of its items runs.</summary>
+    /// <summary>The page the shared context menu was opened on.</summary>
     private DocumentItem? _menuAnchor;
 
     private ListViewBase ActiveView => _isGridView ? DocumentGridView : DocumentListView;
 
     private static bool IsPage(DocumentItem item) => item.Type != DocumentType.SectionBreak;
 
+    private static Dictionary<DocumentItem, int> BuildItemIndexMap(IReadOnlyList<DocumentItem> items)
+    {
+        var indexByItem = new Dictionary<DocumentItem, int>(items.Count);
+        for (var i = 0; i < items.Count; i++) indexByItem[items[i]] = i;
+        return indexByItem;
+    }
+
+    private void ReindexViewerPage()
+    {
+        if (!IsViewerOpen || _viewerItem == null) return;
+
+        var pages = new List<DocumentItem>();
+        var pageIndexByItem = new Dictionary<DocumentItem, int>();
+        foreach (var item in _documentItems)
+        {
+            if (!IsPage(item)) continue;
+            pageIndexByItem[item] = pages.Count;
+            pages.Add(item);
+        }
+
+        if (pages.Count == 0)
+        {
+            CloseViewer();
+            return;
+        }
+
+        if (!pageIndexByItem.TryGetValue(_viewerItem, out var index))
+        {
+            index = Math.Clamp(_viewerPosition, 0, pages.Count - 1);
+            _viewerItem = pages[index];
+        }
+
+        _viewerPosition = index;
+        UpdateViewerChrome(pages);
+    }
+
+    private void ReplaceAllDocumentItems(IReadOnlyList<DocumentItem> items, IReadOnlyCollection<DocumentItem>? selectionToRestore = null)
+    {
+        HashSet<DocumentItem>? selected = null;
+        if (selectionToRestore is { Count: > 0 }) selected = [.. selectionToRestore];
+
+        _documentItems.Clear();
+        for (var i = 0; i < items.Count; i++) _documentItems.Add(items[i]);
+
+        ReindexViewerPage();
+
+        if (selected == null) return;
+
+        DocumentGridView.SelectedItems.Clear();
+        DocumentListView.SelectedItems.Clear();
+        foreach (var item in _documentItems)
+        {
+            if (!selected.Contains(item)) continue;
+            DocumentGridView.SelectedItems.Add(item);
+            DocumentListView.SelectedItems.Add(item);
+        }
+    }
+
     #region Choosing pages
 
     /// <summary>The rows a command acts on, in list order.</summary>
     /// <remarks>
-    /// The selection - unless the menu was opened on a page outside it, which means that page
-    /// alone, as a right-click does everywhere else in Windows. A click selects the page it
-    /// lands on, so with nothing selected there is nothing to act on: never a page the user can
-    /// no longer see is meant. Section dividers count only for removal: turning or copying a
-    /// divider means nothing. While the viewer is open it is the page on show, whatever else is
-    /// selected underneath.
+    /// The page on show while the viewer is open; otherwise the selection, unless the menu was
+    /// opened on a page outside it, which then means that page alone. Section dividers count
+    /// only for removal.
     /// </remarks>
     private List<DocumentItem> TargetItems(DocumentItem? anchor, bool includeSectionBreaks = false)
     {
@@ -57,18 +109,34 @@ public sealed partial class MainWindow
         if (anchor == null && _viewerItem != null) return [_viewerItem];
 
         var selected = SelectedItemsInOrder(includeSectionBreaks);
-        if (selected.Count > 0 && (anchor == null || selected.Contains(anchor))) return selected;
+        if (selected.Count > 0)
+        {
+            var selectedSet = new HashSet<DocumentItem>(selected);
+            if (anchor == null || selectedSet.Contains(anchor)) return selected;
+        }
 
-        return anchor != null && Wanted(anchor) && _documentItems.Contains(anchor) ? [anchor] : [];
+        if (anchor != null && Wanted(anchor))
+        {
+            var indexByItem = BuildItemIndexMap(_documentItems);
+            if (indexByItem.ContainsKey(anchor)) return [anchor];
+        }
+
+        return [];
     }
 
     private List<DocumentItem> InListOrder(IEnumerable<DocumentItem> items)
-        => items
-            .Select(item => (Item: item, Index: _documentItems.IndexOf(item)))
-            .Where(entry => entry.Index >= 0)
-            .OrderBy(entry => entry.Index)
-            .Select(entry => entry.Item)
-            .ToList();
+    {
+        var indexByItem = BuildItemIndexMap(_documentItems);
+        var ordered = new List<(DocumentItem Item, int Index)>();
+
+        foreach (var item in items)
+        {
+            if (indexByItem.TryGetValue(item, out var index)) ordered.Add((item, index));
+        }
+
+        ordered.Sort((left, right) => left.Index.CompareTo(right.Index));
+        return ordered.Select(entry => entry.Item).ToList();
+    }
 
     private void PageMenu_Opening(object sender, object e)
         => _menuAnchor = sender is FlyoutBase { Target: { } target } ? ItemFromVisual(target) : null;
@@ -86,14 +154,12 @@ public sealed partial class MainWindow
     {
         if (sender is not FrameworkElement { Tag: string tag } || !Enum.TryParse<PageCommand>(tag, out var command)) return;
 
-        // Event-handler boundary: every caller is async void, where an escaping exception
-        // ends the process. The edits themselves are list operations that are not expected to
-        // fail; the save behind Extract reports its own failures.
+        // Event-handler boundary: every caller is async void.
         try
         {
             await RunPageCommandAsync(command, anchor);
 
-            // The viewer shows the result: the page turned, or the next one if it was removed.
+            // Show the result: the turned page, or the next one if it was removed.
             if (IsViewerOpen && command != PageCommand.Preview) await RefreshViewerAsync();
         }
         catch (Exception ex)
@@ -120,7 +186,7 @@ public sealed partial class MainWindow
         var targets = TargetItems(anchor, includeSectionBreaks: command == PageCommand.Remove);
         if (targets.Count == 0)
         {
-            StatusTextBlock.Text = _resourceLoader.GetString(Pages.Any() ? "StatusPickPageFirst" : "StatusNoPagesYet");
+            StatusTextBlock.Text = _resourceLoader.GetString(Pages.Count > 0 ? "StatusPickPageFirst" : "StatusNoPagesYet");
             return;
         }
 
@@ -168,37 +234,50 @@ public sealed partial class MainWindow
         StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusRotatedPages"), pages.Count);
     }
 
-    /// <summary>Copies the pages in as one run, straight after the last of them.</summary>
-    /// <remarks>
-    /// As a run rather than each copy beside its original, so that duplicating a chapter gives
-    /// the chapter twice, not every page doubled. A single page comes out the same either way.
-    /// </remarks>
+    /// <summary>Inserts copies as one run after the last page, so a duplicated chapter appears twice in order.</summary>
     private void Duplicate(List<DocumentItem> pages)
     {
         RecordUndo();
 
-        var at = _documentItems.IndexOf(pages[^1]) + 1;
-        foreach (var page in pages) _documentItems.Insert(at++, page.Clone());
+        var ordered = _documentItems.ToList();
+        var indexByItem = BuildItemIndexMap(ordered);
+        var insertAt = indexByItem[pages[^1]] + 1;
 
+        var duplicates = new List<DocumentItem>(pages.Count);
+        foreach (var page in pages) duplicates.Add(page.Clone());
+
+        ordered.InsertRange(insertAt, duplicates);
+
+        var selection = new HashSet<DocumentItem>(pages);
+        foreach (var duplicate in duplicates) selection.Add(duplicate);
+
+        ReplaceAllDocumentItems(ordered, selection);
         UpdateUIState();
         StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusDuplicatedPages"), pages.Count);
     }
 
-    /// <summary>Puts an empty page after each of these, the size of the page before it.</summary>
+    /// <summary>Inserts an empty page after each of these, sized like the page before it.</summary>
     private void InsertBlankAfter(List<DocumentItem> pages)
     {
         RecordUndo();
 
+        var selected = new HashSet<DocumentItem>(pages);
         var name = _resourceLoader.GetString("BlankPageName");
-        foreach (var page in pages)
+        var ordered = new List<DocumentItem>(_documentItems.Count + pages.Count);
+
+        foreach (var item in _documentItems)
         {
-            _documentItems.Insert(_documentItems.IndexOf(page) + 1, new DocumentItem
+            ordered.Add(item);
+            if (!selected.Contains(item)) continue;
+
+            ordered.Add(new DocumentItem
             {
                 Type = DocumentType.BlankPage,
                 FileName = name
             });
         }
 
+        ReplaceAllDocumentItems(ordered, selected);
         UpdateUIState();
         StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusInsertedBlankPages"), pages.Count);
     }
@@ -213,13 +292,10 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// Reverses the selected pages among the places they occupy, or with nothing selected,
-    /// every page - each split on its own, the way sorting works.
+    /// Reverses the selected pages within their own slots, or, with nothing chosen, every page
+    /// within each section.
     /// </summary>
-    /// <remarks>
-    /// The fix for a stack fed into a scanner face down. Within the selection's own slots so
-    /// that reversing pages 3, 5 and 9 leaves every other page where it was.
-    /// </remarks>
+    /// <remarks>For stacks scanned face down.</remarks>
     private void ReversePages()
     {
         var selected = SelectedItemsInOrder();
@@ -227,9 +303,13 @@ public sealed partial class MainWindow
         var ordered = _documentItems.ToList();
         int reversed;
 
-        if (selected.Count >= 2)
+        // As in Normalize: one clicked page is just focus, but a tick in select mode is a choice.
+        if (selected.Count >= (_isSelectMode ? 1 : 2))
         {
-            var slots = selected.Select(_documentItems.IndexOf).ToList();
+            var indexByItem = BuildItemIndexMap(ordered);
+            var slots = new List<int>(selected.Count);
+            foreach (var item in selected) slots.Add(indexByItem[item]);
+
             for (var k = 0; k < slots.Count; k++) ordered[slots[k]] = selected[slots.Count - 1 - k];
             reversed = selected.Count;
         }
@@ -242,7 +322,7 @@ public sealed partial class MainWindow
                 ordered.Reverse(start, i - start);
                 start = i + 1;
             }
-            reversed = Pages.Count();
+            reversed = Pages.Count;
         }
 
         if (reversed < 2)
@@ -257,29 +337,21 @@ public sealed partial class MainWindow
         StatusTextBlock.Text = string.Format(_resourceLoader.GetString("StatusReversedPages"), reversed);
     }
 
-    /// <summary>Moves rows into <paramref name="ordered"/>'s order without removing any.</summary>
-    /// <remarks>Moves, not a rebuild, so thumbnails stay and the views animate the change.</remarks>
+    /// <summary>Puts the rows into <paramref name="ordered"/>'s order, keeping the same instances.</summary>
     private void ApplyOrder(IReadOnlyList<DocumentItem> ordered)
     {
-        for (var target = 0; target < ordered.Count; target++)
-        {
-            var current = _documentItems.IndexOf(ordered[target]);
-            if (current != target) _documentItems.Move(current, target);
-        }
+        var selection = ActiveView.SelectedItems.OfType<DocumentItem>().ToList();
+        ReplaceAllDocumentItems(ordered, selection);
     }
 
     private void SelectOddPages_Click(object sender, RoutedEventArgs e) => SelectAlternatePages(odd: true);
 
     private void SelectEvenPages_Click(object sender, RoutedEventArgs e) => SelectAlternatePages(odd: false);
 
-    /// <summary>Selects every other page, counting from the first page in the list.</summary>
-    /// <remarks>
-    /// Mostly for duplex scans, where every back side needs the same treatment - turning
-    /// 180 degrees, or removing because it is blank.
-    /// </remarks>
+    /// <summary>Selects every other page from the first; useful for duplex scans.</summary>
     private void SelectAlternatePages(bool odd)
     {
-        if (!Pages.Any())
+        if (Pages.Count == 0)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesYet");
             return;
@@ -309,19 +381,16 @@ public sealed partial class MainWindow
 
     #region Undo
 
-    /// <summary>The list as it stood: which rows, in what order, turned which way, and what each split was called.</summary>
+    /// <summary>A list snapshot: rows, order, rotations and section names.</summary>
     private sealed record ListState(DocumentItem[] Items, int[] Rotations, string[] SectionNames);
 
-    /// <remarks>
-    /// Capped because every step keeps the rows it holds - thumbnails included - alive after
-    /// they leave the list. Twenty steps is plenty for what this is for: taking back a slip.
-    /// </remarks>
+    /// <remarks>Capped because each step keeps its rows, thumbnails included, alive.</remarks>
     private const int MaxUndoSteps = 20;
 
     private readonly List<ListState> _undo = [];
     private readonly List<ListState> _redo = [];
 
-    /// <summary>The list as a drag found it, kept until the drag turns out to have moved something.</summary>
+    /// <summary>The list when a drag started, recorded as an undo step if the drag moved anything.</summary>
     private ListState? _dragStart;
 
     private ListState CaptureState() => new(
@@ -329,7 +398,7 @@ public sealed partial class MainWindow
         [.. _documentItems.Select(item => item.Rotation)],
         [.. _documentItems.Select(item => item.SectionName)]);
 
-    /// <summary>Remembers the list as it is now, just before it is changed.</summary>
+    /// <summary>Records the current list as an undo step.</summary>
     private void RecordUndo() => PushUndo(CaptureState());
 
     private void PushUndo(ListState state)
@@ -348,7 +417,7 @@ public sealed partial class MainWindow
 
     private async Task StepThroughHistoryAsync(List<ListState> from, List<ListState> to, string doneKey, string emptyKey)
     {
-        // A check still running would go on turning pages after the list had been put back.
+        // A running check would otherwise turn pages after the list is restored.
         StopNormalize();
 
         if (from.Count == 0)
@@ -361,7 +430,7 @@ public sealed partial class MainWindow
         from.RemoveAt(from.Count - 1);
         to.Add(CaptureState());
 
-        // Event-handler boundary, reached from async void.
+        // Event-handler boundary.
         try
         {
             await RestoreAsync(state);
@@ -385,8 +454,7 @@ public sealed partial class MainWindow
             if (state.Items[i].Type == DocumentType.SectionBreak) state.Items[i].SectionName = state.SectionNames[i];
         }
 
-        // The same rows in another order is put back by moving them; anything else - rows
-        // added or removed - is rebuilt.
+        // Same rows in a new order are moved; otherwise the list is rebuilt.
         if (state.Items.Length == _documentItems.Count && new HashSet<DocumentItem>(state.Items).SetEquals(_documentItems))
         {
             ApplyOrder(state.Items);
@@ -413,29 +481,24 @@ public sealed partial class MainWindow
 
     #region Saving over a source
 
-    /// <summary>Where the copies of overwritten sources are kept, for this session only.</summary>
+    /// <summary>Session-only copies of sources that were saved over.</summary>
     private static string OriginalsDirectory
         => System.IO.Path.Combine(Windows.Storage.ApplicationData.Current.TemporaryFolder.Path, "Originals");
 
-    /// <summary>
-    /// Keeps the list meaning what it shows when a save is about to overwrite one of the files
-    /// its pages are read from.
-    /// </summary>
+    /// <summary>Copies a source aside before a save overwrites it, and points its rows at the copy.</summary>
     /// <remarks>
-    /// Saving over the original is the quickest edit there is, and it leaves every row from that
-    /// file describing a document that has just changed underneath it: the turn a row asks for
-    /// is already in the file, and an inserted blank has moved every later page number along by
-    /// one. Saving again would quietly apply everything twice, to the wrong pages. So the file is
-    /// copied aside first and those rows read from the copy - including rows only the undo
-    /// history still holds - and saving the same list again writes the same file again. Rows keep
-    /// their FilePath, which is what is shown and what "save over the original" offers.
+    /// After saving over the original, its rows would describe a file that already contains
+    /// their edits, so saving again would apply them twice. Rows in the undo history are
+    /// repointed too. FilePath is kept for display and for "save over the original".
     /// </remarks>
-    private void PreserveSourceBeforeOverwrite(string outputPath)
+    /// <param name="pending">Snapshots a running save still has to write; they are repointed as well.</param>
+    private void PreserveSourceBeforeOverwrite(string outputPath, IEnumerable<DocumentItem>? pending = null)
     {
         var target = System.IO.Path.GetFullPath(outputPath);
         if (!System.IO.File.Exists(target)) return;
 
         var readers = _documentItems
+            .Concat(pending ?? [])
             .Concat(_undo.SelectMany(state => state.Items))
             .Concat(_redo.SelectMany(state => state.Items))
             .Where(item => item.Type == DocumentType.PdfPage)
@@ -452,7 +515,7 @@ public sealed partial class MainWindow
         Log.Information("Saving over a source: {Count} row(s) of {Path} now read from {Copy}", readers.Count, target, copy);
     }
 
-    /// <summary>Removes the copies a previous session left behind.</summary>
+    /// <summary>Deletes copies left by a previous session.</summary>
     private static void ClearOriginals()
     {
         if (!System.IO.Directory.Exists(OriginalsDirectory)) return;
@@ -461,7 +524,7 @@ public sealed partial class MainWindow
         {
             System.IO.Directory.Delete(OriginalsDirectory, recursive: true);
         }
-        // Housekeeping: a copy still open somewhere is removed next time instead.
+        // A copy still in use is removed next time.
         catch (Exception ex) when (ex is System.IO.IOException or UnauthorizedAccessException)
         {
             Log.Debug(ex, "Leaving {Path} for next time", OriginalsDirectory);
@@ -472,17 +535,21 @@ public sealed partial class MainWindow
 
     #region Typing
 
-    private void SectionName_GotFocus(object sender, RoutedEventArgs e) => SetTextEditingShortcutsEnabled(false);
+    private void SectionName_GotFocus(object sender, RoutedEventArgs e)
+    {
+        SetTextEditingShortcutsEnabled(false);
 
-    /// <summary>
-    /// Hands the keys that edit text to the text box while a split's name is being typed.
-    /// </summary>
-    /// <remarks>
-    /// Delete, Ctrl+A, Ctrl+Z and Ctrl+Y all mean something to the page list and something
-    /// else to a text box. Left enabled, Delete removed the page behind the name being typed.
-    /// Disabling the accelerators, rather than checking focus when one fires, leaves the key
-    /// to the text box whichever of the two would otherwise see it first.
-    /// </remarks>
+        // Remember the list before the rename; recorded on lost focus if the name changed.
+        _renameStart = sender is FrameworkElement { DataContext: DocumentItem { Type: DocumentType.SectionBreak } band }
+            ? (band, band.SectionName, CaptureState())
+            : null;
+    }
+
+    /// <summary>The section being renamed, its old name, and the list before the edit.</summary>
+    private (DocumentItem Band, string Name, ListState State)? _renameStart;
+
+    /// <summary>Disables the list's editing shortcuts while a section name is being typed.</summary>
+    /// <remarks>Otherwise Delete, Ctrl+A, Ctrl+Z and Ctrl+Y act on the pages, not the text.</remarks>
     private void SetTextEditingShortcutsEnabled(bool enabled)
     {
         foreach (var item in new[] { UndoMenuItem, RedoMenuItem, SelectAllMenuItem, RemoveMenuItem })

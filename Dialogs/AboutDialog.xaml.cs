@@ -9,8 +9,7 @@ public sealed partial class AboutDialog : ContentDialog
     {
         InitializeComponent();
 
-        // From the package rather than the resources, where it had to be edited by hand - in
-        // every language - for every release, and was always one release out of date somewhere.
+        // Read from the package so it is never out of date.
         var version = Package.Current.Id.Version;
         VersionText.Text = string.Format(
             new Microsoft.Windows.ApplicationModel.Resources.ResourceLoader().GetString("AboutVersionFormat"),

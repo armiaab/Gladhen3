@@ -10,14 +10,8 @@ using Windows.System;
 
 namespace Gladhen3;
 
-/// <summary>
-/// Letting go of a selection the way Windows does: Esc, or a click on empty space.
-/// </summary>
-/// <remarks>
-/// Choosing pages needs no code: the lists are in Extended mode, which gives click, Ctrl+click,
-/// Shift+click, Shift+arrow and Ctrl+A as every Windows list has them. Select mode only swaps
-/// that for check boxes.
-/// </remarks>
+/// <summary>Clearing the selection: Esc, or a click on empty space.</summary>
+/// <remarks>Selecting itself is the lists' built-in Extended mode.</remarks>
 public sealed partial class MainWindow
 {
     /// <summary>Clears the selection, and leaves select mode if it was on.</summary>
@@ -30,12 +24,10 @@ public sealed partial class MainWindow
         StatusTextBlock.Text = _resourceLoader.GetString("StatusDeselectedAll");
     }
 
-    /// <summary>Esc lets go of the selection, wherever the focus is in the main window.</summary>
+    /// <summary>Esc clears the selection anywhere in the main window.</summary>
     /// <remarks>
-    /// At the root and on the way down, so that a toolbar button that has just been clicked
-    /// does not swallow it. Esc already means something else in two places, which keep it: the
-    /// viewer, where it goes back to the list, and a split's name, where it is the text box's.
-    /// Dialogs and menus are popups outside this tree and never send it here.
+    /// Handled on the way down so a focused toolbar button cannot swallow it. The viewer and a
+    /// section-name box keep their own meaning for Esc.
     /// </remarks>
     private void Root_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
@@ -47,13 +39,13 @@ public sealed partial class MainWindow
         e.Handled = true;
     }
 
-    /// <summary>A click on empty space between or after the pages lets go of the selection.</summary>
+    /// <summary>A click on empty space in a list clears the selection.</summary>
     private void DocumentView_Tapped(object sender, TappedRoutedEventArgs e)
     {
         if (sender is not ListViewBase view || view.SelectedItems.Count == 0) return;
         if (ItemFromVisual(e.OriginalSource) != null) return;
 
-        // The scroll bar is part of the list too, and dragging it is not a click on nothing.
+        // Dragging the scroll bar is not a click on empty space.
         for (var current = e.OriginalSource as DependencyObject; current != null && current != view; current = VisualTreeHelper.GetParent(current))
         {
             if (current is ScrollBar) return;
@@ -63,12 +55,8 @@ public sealed partial class MainWindow
         StatusTextBlock.Text = _resourceLoader.GetString("StatusDeselectedAll");
     }
 
-    /// <summary>Shift+F10 or the menu key opens the page menu for the page with the focus.</summary>
-    /// <remarks>
-    /// The menu hangs on each page's template, inside its list container. A right-click lands on
-    /// the template and finds it; the keyboard asks the focused container, which has none, so
-    /// the menu could not be reached from the keyboard at all.
-    /// </remarks>
+    /// <summary>Shift+F10 or the menu key opens the page menu for the focused page.</summary>
+    /// <remarks>The menu belongs to the item template, which the focused container does not expose.</remarks>
     private void DocumentView_ContextRequested(UIElement sender, ContextRequestedEventArgs e)
     {
         if (e.Handled || sender is not ListViewBase view) return;

@@ -10,16 +10,13 @@ namespace Gladhen3.Services;
 /// <summary>Which way a PDF page's text runs, as its content stream draws it.</summary>
 internal sealed class TextLayerReading
 {
-    /// <summary>
-    /// Characters by the clockwise turn that would stand them upright on the page as it is shown:
-    /// index 0 for text that already reads left to right, 1 for a quarter turn, and so on.
-    /// </summary>
+    /// <summary>Character counts by the clockwise turn that would make them upright (index 0 = already upright).</summary>
     public double[] ByTurn { get; } = new double[4];
 
-    /// <summary>How many of those characters are invisible: an OCR layer laid over a scan.</summary>
+    /// <summary>Invisible characters, i.e. an OCR layer over a scan.</summary>
     public double Invisible { get; set; }
 
-    /// <summary>How much of the page images cover, as a share of its area. Overlapping images count twice.</summary>
+    /// <summary>Share of the page area covered by images; overlaps count twice.</summary>
     public double ImageCoverage { get; set; }
 
     public double Total => ByTurn.Sum();
@@ -35,27 +32,18 @@ internal sealed class TextLayerReading
         return ByTurn[best] >= total * MajorityShare ? best * 90 : null;
     }
 
-    /// <summary>
-    /// Body text agrees with itself; what does not is a rotated table heading, a margin note or
-    /// a spine label, and those are never most of a page.
-    /// </summary>
+    /// <summary>Body text dominates; rotated headings, margin notes and labels never make a majority.</summary>
     private const double MajorityShare = 0.8;
 }
 
-/// <summary>
-/// Reads the direction of a page's text from its content stream: each piece of text is drawn
-/// through a matrix, and the matrix says which way its baseline points.
-/// </summary>
-/// <remarks>
-/// Exact and cheap where it applies - a born-digital page, or a scan that was run through OCR -
-/// and blind where it does not: text drawn as outlines, or a scan with no text layer at all.
-/// </remarks>
+/// <summary>Reads text direction from a page's content stream, via each text matrix's baseline.</summary>
+/// <remarks>Exact for born-digital or OCR'd pages; blind to outlined text or scans without a text layer.</remarks>
 internal static class TextLayerOrientation
 {
     /// <summary>Form XObjects nest; a malformed file can make them nest forever.</summary>
     private const int MaxFormDepth = 12;
 
-    /// <summary>How far off a quarter turn a baseline may lean and still count as one. A watermark at 45 degrees counts as none.</summary>
+    /// <summary>How far a baseline may lean from a quarter turn and still count; a 45° watermark counts as none.</summary>
     private const double QuarterTolerance = 25;
 
     /// <exception cref="PdfSharpException">The content stream cannot be parsed.</exception>
@@ -156,14 +144,10 @@ internal static class TextLayerOrientation
             }
         }
 
-        /// <summary>
-        /// Counts the characters, filed under the turn that would stand them upright.
-        /// </summary>
+        /// <summary>Counts the characters under the turn that would make them upright.</summary>
         /// <remarks>
-        /// The text rendering matrix's first row is the direction of the glyphs' own x axis on
-        /// the page. That is the baseline for horizontal writing and still the way an upright
-        /// glyph faces in vertical writing, so it answers the same question for both. The page's
-        /// own /Rotate then turns it once more, clockwise, on its way to the screen.
+        /// The text rendering matrix's first row is the glyph x axis, which answers this for both
+        /// horizontal and vertical writing; the page's /Rotate is applied on top.
         /// </remarks>
         private void Show(int characters, State state, Matrix textMatrix)
         {
@@ -233,8 +217,8 @@ internal static class TextLayerOrientation
         _ => 0
     };
 
-    /// <summary>How many character codes a string, or a TJ array of strings and kerning, shows.</summary>
-    /// <remarks>Bytes, not glyphs: a two-byte CID font counts double, which only scales its page's total.</remarks>
+    /// <summary>Character codes shown by a string or TJ array.</summary>
+    /// <remarks>Counts bytes, so two-byte CID fonts count double; that only scales the page total.</remarks>
     private static int Characters(CObject shown) => shown switch
     {
         CString text => text.Value.Length,

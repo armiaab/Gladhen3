@@ -8,14 +8,8 @@ using Windows.Storage;
 
 namespace Gladhen3.Services;
 
-/// <summary>
-/// Owns the application log: where it is written, at what level, and how much of it is kept.
-/// </summary>
-/// <remarks>
-/// The directory used to be built independently here and in <see cref="FileService"/>, so the
-/// "open log folder" button and the logger could disagree about where the log lives. There is
-/// one definition now and both use it.
-/// </remarks>
+/// <summary>Owns the application log: location, level and retention.</summary>
+/// <remarks>The single definition of the log directory, shared with <see cref="FileService"/>.</remarks>
 public static class AppLog
 {
     private const string FileNameTemplate = "gladhen3-.log";
@@ -32,10 +26,7 @@ public static class AppLog
     public static string Directory { get; } =
         Path.Combine(ApplicationData.Current.LocalFolder.Path, "Logs");
 
-    /// <summary>
-    /// Configures the logger and records what is running, so a log a user sends back
-    /// identifies its own build.
-    /// </summary>
+    /// <summary>Configures the logger and records the running build.</summary>
     public static void Initialize()
     {
 #if DEBUG
@@ -59,9 +50,8 @@ public static class AppLog
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Recorded, not shown: this runs before any window exists, and a MessageDialog with
-            // no owner window throws in a desktop app - the one time it was needed, it would
-            // have taken the app down. The main window reports it once it can.
+            // Recorded, not shown: no window exists yet, and an ownerless MessageDialog throws in a
+            // desktop app. The main window reports it later.
             InitializationFailure = ex;
             return;
         }
@@ -75,12 +65,7 @@ public static class AppLog
             RuntimeInformation.OSDescription);
     }
 
-    /// <summary>
-    /// Flushes and closes the log.
-    /// </summary>
-    /// <remarks>
-    /// Synchronous on purpose: an async flush races process exit, and the entries explaining
-    /// why the app is closing are exactly the ones worth not losing.
-    /// </remarks>
+    /// <summary>Flushes and closes the log.</summary>
+    /// <remarks>Synchronous: an async flush races process exit and loses the last entries.</remarks>
     public static void Shutdown() => Log.CloseAndFlush();
 }

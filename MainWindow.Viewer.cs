@@ -1,4 +1,5 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
+using Gladhen3.Services;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -10,6 +11,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Windows.Graphics.Imaging;
 using Windows.Storage;
@@ -19,24 +21,19 @@ using Windows.UI.Core;
 
 namespace Gladhen3;
 
-/// <summary>
-/// The page viewer: one page at a time, at any zoom, with every page command to hand.
-/// </summary>
+
+/// <summary>The page viewer: one page at a time, any zoom, with the page commands.</summary>
 /// <remarks>
-/// It replaced a ContentDialog, which WinUI caps at 548 pixels wide whatever MinWidth says: a
-/// landscape page came out as a cropped portrait sliver, the arrow keys went to the scroll
-/// viewer instead of the next page, and it rendered at a fixed 800 pixels, so zooming in only
-/// made it blurrier. This is part of the window instead, re-renders whenever the zoom needs
-/// more pixels than it has, and shows a turned page turned.
+/// Part of the window rather than a ContentDialog, which WinUI caps at 548 px wide. It
+/// re-renders whenever the zoom needs more pixels.
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001",
+    Justification = "_viewerLoadCts is disposed in CancelViewerLoad each time it is replaced and when the viewer closes; a Window is not IDisposable.")]
 public sealed partial class MainWindow
 {
     private enum ViewerFit { Page, Width, Free }
 
-    /// <summary>
-    /// Past this a render costs more memory than the sharpness is worth: 5000 pixels on the
-    /// long edge of an A4 page is about 430 dpi, and already 100 MB as a bitmap.
-    /// </summary>
+    /// <summary>Largest render edge: about 430 dpi on A4, already ~100 MB as a bitmap.</summary>
     private const uint MaxRenderEdge = 5000;
 
     /// <summary>The margin round the page, in the units the zoom applies to.</summary>
@@ -47,31 +44,31 @@ public sealed partial class MainWindow
     /// <summary>The page on show, or null while the viewer is closed.</summary>
     private DocumentItem? _viewerItem;
 
-    /// <summary>
-    /// Where that page sat among the pages, so that removing it moves on to the page that
-    /// took its place rather than back to the start.
-    /// </summary>
+    /// <summary>The page's position, so removing it moves to the page that took its place.</summary>
     private int _viewerPosition;
 
     private ViewerFit _viewerFit = ViewerFit.Page;
 
-    /// <summary>The zoom the viewer last set itself, to tell it apart from one the user chose.</summary>
+    /// <summary>The zoom the viewer last set itself, to tell it from one the user chose.</summary>
     private double _viewerAppliedZoom = 1;
 
-    /// <summary>Bumped on every page shown; a render that finishes after that is thrown away.</summary>
+    /// <summary>Bumped on every page shown; a render finishing after that is discarded.</summary>
     private int _viewerVersion;
 
-    /// <summary>The long edge, in pixels, of the bitmap on show, and the most it is worth rendering.</summary>
+    /// <summary>UI thread only; disposed by <see cref="CancelViewerLoad"/>.</summary>
+    private CancellationTokenSource? _viewerLoadCts;
+
+    /// <summary>The long edge of the bitmap on show, and the most worth rendering.</summary>
     private uint _viewerRenderedEdge;
     private uint _viewerMaxEdge;
 
-    /// <summary>The render under way, if any: which page showing it is for, and how large.</summary>
+    /// <summary>The render in progress: which page version and how large.</summary>
     private (int Version, uint Edge) _viewerInFlight;
 
     private bool _syncingFilmstrip;
 
-    /// <summary>Source PDFs opened for the viewer, kept while it is open so paging through one is not a reload per page.</summary>
-    private readonly Dictionary<string, Windows.Data.Pdf.PdfDocument> _viewerDocuments = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Source PDFs opened while the viewer is open, so paging does not reload them.</summary>
+    private readonly Dictionary<string, Task<Windows.Data.Pdf.PdfDocument>> _viewerDocumentTasks = new(StringComparer.OrdinalIgnoreCase);
 
     private bool IsViewerOpen => _viewerItem != null;
 
@@ -84,7 +81,7 @@ public sealed partial class MainWindow
         Filmstrip.ItemsSource ??= _documentItems;
         ViewerPanel.Visibility = Visibility.Visible;
 
-        // The bottom bar's "remove selected" button belongs to the page list, not to this.
+        // "Remove selected" belongs to the page list.
         SelectionInfoPanel.Visibility = Visibility.Collapsed;
 
         _viewerFit = ViewerFit.Page;
@@ -99,20 +96,24 @@ public sealed partial class MainWindow
         var last = _viewerItem;
         _viewerItem = null;
         _viewerVersion++;
+        CancelViewerLoad();
 
         ViewerPanel.Visibility = Visibility.Collapsed;
         ViewerProgress.IsActive = false;
         ReleaseViewerImage();
-        _viewerDocuments.Clear();
+        // Windows.Data.Pdf.PdfDocument has no Close/Dispose; dropping the references releases it.
+        lock (_viewerDocumentTasks)
+        {
+            _viewerDocumentTasks.Clear();
+        }
 
-        // Back to the page that was on show, so closing does not lose the place in a long list.
+        // Return to the page that was on show.
         if (last != null && _documentItems.Contains(last))
         {
             _lastFocusedItem = last;
             var view = ActiveView;
 
-            // Selected too, so the next command acts on the page just looked at - unless several
-            // pages were chosen before, which is a selection worth keeping.
+            // Select it too, unless the user had several pages selected.
             if (!_isSelectMode && view.SelectedItems.Count <= 1) view.SelectedItem = last;
 
             view.ScrollIntoView(last);
@@ -125,12 +126,45 @@ public sealed partial class MainWindow
 
     private void ViewerBack_Click(object sender, RoutedEventArgs e) => CloseViewer();
 
-    /// <summary>Shows the page again after a command, or the one that took its place if it went.</summary>
+    /// <summary>Cancels the load in progress and disposes its source.</summary>
+    /// <remarks>Cancelled before disposal, so a render still holding the token just sees it cancelled.</remarks>
+    private void CancelViewerLoad()
+    {
+        var cts = _viewerLoadCts;
+        if (cts == null) return;
+
+        _viewerLoadCts = null;
+        cts.Cancel();
+        cts.Dispose();
+    }
+
+    private async Task RenderViewerPageSafelyAsync(int version, double zoom)
+    {
+        var item = _viewerItem;
+        if (item == null || version != _viewerVersion || _viewerMaxEdge == 0) return;
+
+        var cancellationToken = _viewerLoadCts?.Token ?? CancellationToken.None;
+        try
+        {
+            await RenderViewerPageAsync(item, version, zoom, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer page or zoom.
+        }
+        catch (Exception ex)
+        {
+            if (version == _viewerVersion && ReferenceEquals(_viewerItem, item))
+                Log.Warning(ex, "Viewer could not render {Name} page {Page}", item.FileName, item.PageNumber);
+        }
+    }
+
+    /// <summary>Shows the page again after a command, or its replacement if it was removed.</summary>
     private async Task RefreshViewerAsync()
     {
         if (_viewerItem == null) return;
 
-        var pages = Pages.ToList();
+        var pages = Pages;
         if (pages.Count == 0)
         {
             CloseViewer();
@@ -149,24 +183,27 @@ public sealed partial class MainWindow
     private async Task ShowInViewerAsync(DocumentItem item, bool samePage)
     {
         var version = ++_viewerVersion;
+        CancelViewerLoad();
+        var loadCts = _viewerLoadCts = new CancellationTokenSource();
+        var cancellationToken = loadCts.Token;
         _viewerItem = item;
 
-        var pages = Pages.ToList();
-        _viewerPosition = Math.Max(0, pages.IndexOf(item));
+        var pages = Pages;
+        var position = 0;
+        while (position < pages.Count && !ReferenceEquals(pages[position], item)) position++;
+        _viewerPosition = Math.Min(position, Math.Max(0, pages.Count - 1));
         UpdateViewerChrome(pages);
 
+        ReleaseViewerImage();
         ViewerMessage.Visibility = Visibility.Collapsed;
         ViewerProgress.IsActive = true;
 
-        // Per-item isolation for a view: a page that will not render - a damaged PDF, a file
-        // moved away since it was added - says so in place, and the viewer and every other page
-        // keep working.
+        // A page that will not render says so in place; the viewer keeps working.
         try
         {
-            var (width, height, maxEdge) = await MeasureViewerPageAsync(item);
-            if (version != _viewerVersion) return;
+            var (width, height, maxEdge) = await MeasureViewerPageAsync(item, cancellationToken);
+            if (cancellationToken.IsCancellationRequested || version != _viewerVersion || !ReferenceEquals(_viewerItem, item)) return;
 
-            ReleaseViewerImage();
             _viewerRenderedEdge = 0;
             _viewerMaxEdge = maxEdge;
             ViewerSheet.Width = width;
@@ -182,11 +219,15 @@ public sealed partial class MainWindow
                 return;
             }
 
-            await RenderViewerPageAsync(version, zoom);
+            await RenderViewerPageAsync(item, version, zoom, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by another page or cancelled.
         }
         catch (Exception ex)
         {
-            if (version != _viewerVersion) return;
+            if (version != _viewerVersion || !ReferenceEquals(_viewerItem, item)) return;
 
             Log.Warning(ex, "Viewer could not show {Name} page {Page}", item.FileName, item.PageNumber);
             ReleaseViewerImage();
@@ -204,7 +245,7 @@ public sealed partial class MainWindow
         ViewerMessage.Visibility = Visibility.Visible;
     }
 
-    private void UpdateViewerChrome(List<DocumentItem> pages)
+    private void UpdateViewerChrome(IReadOnlyList<DocumentItem> pages)
     {
         var item = _viewerItem!;
 
@@ -230,9 +271,10 @@ public sealed partial class MainWindow
         SyncFilmstrip();
     }
 
-    /// <summary>The page's size at 100% as it will be seen - turned - and the most pixels worth rendering of it.</summary>
-    private async Task<(double Width, double Height, uint MaxEdge)> MeasureViewerPageAsync(DocumentItem item)
+    /// <summary>The page's turned size at 100%, and the most pixels worth rendering.</summary>
+    private async Task<(double Width, double Height, uint MaxEdge)> MeasureViewerPageAsync(DocumentItem item, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         double width, height;
         uint maxEdge;
 
@@ -240,10 +282,11 @@ public sealed partial class MainWindow
         {
             case DocumentType.PdfPage:
             {
-                var document = await ViewerDocumentAsync(item);
+                var document = await ViewerDocumentAsync(item, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
                 using var page = document.GetPage((uint)(item.PageNumber - 1));
 
-                // Already in DIPs, and already turned by the page's own /Rotate.
+                // In DIPs, already turned by the page's own /Rotate.
                 (width, height) = (page.Size.Width, page.Size.Height);
                 maxEdge = MaxRenderEdge;
                 break;
@@ -251,16 +294,16 @@ public sealed partial class MainWindow
 
             case DocumentType.Image:
             {
-                var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
-                using var stream = await file.OpenReadAsync();
-                var decoder = await BitmapDecoder.CreateAsync(stream);
+                // Not StorageFile: see OffUiStorage.
+                using var stream = await OffUiStorage.OpenReadAsync(item.FilePath, cancellationToken);
+                var decoder = await BitmapDecoder.CreateAsync(stream).AsTask(cancellationToken);
                 (width, height) = (decoder.OrientedPixelWidth, decoder.OrientedPixelHeight);
                 maxEdge = Math.Min(MaxRenderEdge, Math.Max(decoder.PixelWidth, decoder.PixelHeight));
                 break;
             }
 
             default:
-                // A blank page takes the size of the page before it when saved; A4 stands in here.
+                // A4 stands in; when saved, a blank page takes the size of the page before it.
                 (width, height) = (210 / 25.4 * 96, 297 / 25.4 * 96);
                 maxEdge = 0;
                 break;
@@ -269,35 +312,35 @@ public sealed partial class MainWindow
         return item.Rotation is 90 or 270 ? (height, width, maxEdge) : (width, height, maxEdge);
     }
 
-    private async Task<Windows.Data.Pdf.PdfDocument> ViewerDocumentAsync(DocumentItem item)
+    private async Task<Windows.Data.Pdf.PdfDocument> ViewerDocumentAsync(DocumentItem item, CancellationToken cancellationToken)
     {
         var path = item.SourcePdfPath ?? item.FilePath;
-        if (_viewerDocuments.TryGetValue(path, out var document)) return document;
-
-        var file = await StorageFile.GetFileFromPathAsync(path);
-        document = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(file);
-        _viewerDocuments[path] = document;
-        return document;
+        Task<Windows.Data.Pdf.PdfDocument> loadTask;
+        lock (_viewerDocumentTasks)
+        {
+            if (!_viewerDocumentTasks.TryGetValue(path, out loadTask!) || loadTask.IsFaulted)
+            {
+                // Shared by every page of the file, so it is not cancelled with one page.
+                loadTask = OffUiStorage.LoadPdfAsync(path, CancellationToken.None);
+                _viewerDocumentTasks[path] = loadTask;
+            }
+        }
+        return await loadTask.WaitAsync(cancellationToken);
     }
 
-    /// <summary>Renders the page sharp at <paramref name="zoom"/>, unless what is on show already is.</summary>
-    private async Task RenderViewerPageAsync(int version, double zoom)
+    /// <summary>Renders the page sharp at <paramref name="zoom"/>, unless the current bitmap already is.</summary>
+    private async Task RenderViewerPageAsync(DocumentItem item, int version, double zoom, CancellationToken cancellationToken)
     {
-        var item = _viewerItem;
-        if (item == null || item.Type == DocumentType.BlankPage || _viewerMaxEdge == 0) return;
+        if (cancellationToken.IsCancellationRequested || version != _viewerVersion || !ReferenceEquals(_viewerItem, item)) return;
+        if (item.Type == DocumentType.BlankPage || _viewerMaxEdge == 0) return;
 
-        // Never fewer pixels than the sheet's own layout size, even zoomed out. The image is laid
-        // out at 100% and the scroll viewer's zoom shrinks it afterwards, so a bitmap rendered at
-        // the zoomed-out size was first stretched up to 100% and then shrunk back down - two
-        // resamples, and small text came out visibly soft. Rendered at 100% or more, it is
-        // only ever scaled once.
+        // Never below the layout size: the ScrollViewer zooms after layout, so a smaller bitmap
+        // would be resampled twice and text would blur.
         var scale = ViewerScroll.XamlRoot?.RasterizationScale ?? 1.0;
         var needed = Math.Max(ViewerSheet.Width, ViewerSheet.Height) * Math.Max(zoom, 1.0) * scale;
         var edge = (uint)Math.Clamp(Math.Ceiling(needed), 64, _viewerMaxEdge);
 
-        // Re-rendering for a few pixels more is wasted work that the eye cannot see. Nor is a
-        // second render started while one at least as large is still under way: showing a page
-        // and the zoom settling both ask for one, a few milliseconds apart.
+        // Skip renders that gain only a few pixels, or that one already in progress covers.
         if (_viewerRenderedEdge > 0 && edge <= _viewerRenderedEdge * 1.1) return;
         if (_viewerInFlight.Version == version && _viewerInFlight.Edge >= edge) return;
 
@@ -305,23 +348,24 @@ public sealed partial class MainWindow
         SoftwareBitmap bitmap;
         try
         {
-            bitmap = await RenderPageBitmapAsync(item, edge);
+            bitmap = await RenderPageBitmapAsync(item, edge, cancellationToken);
         }
         finally
         {
             if (_viewerInFlight == (version, edge)) _viewerInFlight = default;
         }
-        if (version != _viewerVersion)
+
+        if (cancellationToken.IsCancellationRequested || version != _viewerVersion || !ReferenceEquals(_viewerItem, item))
         {
             bitmap.Dispose();
             return;
         }
 
         var source = new SoftwareBitmapSource();
-        await source.SetBitmapAsync(bitmap);
+        await source.SetBitmapAsync(bitmap).AsTask(cancellationToken);
         bitmap.Dispose();
 
-        if (version != _viewerVersion)
+        if (cancellationToken.IsCancellationRequested || version != _viewerVersion || !ReferenceEquals(_viewerItem, item))
         {
             source.Dispose();
             return;
@@ -335,9 +379,11 @@ public sealed partial class MainWindow
             edge, ViewerSheet.Width, ViewerSheet.Height, zoom, scale);
     }
 
-    /// <summary>The page, turned as it will be saved, with <paramref name="edge"/> pixels on its long side.</summary>
-    private async Task<SoftwareBitmap> RenderPageBitmapAsync(DocumentItem item, uint edge)
+    /// <summary>The page, turned as it will be saved, <paramref name="edge"/> pixels on its long side.</summary>
+    private async Task<SoftwareBitmap> RenderPageBitmapAsync(DocumentItem item, uint edge, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var rotation = item.Rotation switch
         {
             90 => BitmapRotation.Clockwise90Degrees,
@@ -348,7 +394,8 @@ public sealed partial class MainWindow
 
         if (item.Type == DocumentType.PdfPage)
         {
-            var document = await ViewerDocumentAsync(item);
+            var document = await ViewerDocumentAsync(item, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             using var page = document.GetPage((uint)(item.PageNumber - 1));
             var scale = edge / Math.Max(page.Size.Width, page.Size.Height);
 
@@ -357,25 +404,24 @@ public sealed partial class MainWindow
             {
                 DestinationWidth = (uint)Math.Max(1, Math.Round(page.Size.Width * scale)),
                 DestinationHeight = (uint)Math.Max(1, Math.Round(page.Size.Height * scale)),
-                // BMP: nothing to compress on the way out and nothing to inflate on the way back.
+                // BMP: no compression cost either way.
                 BitmapEncoderId = BitmapEncoder.BmpEncoderId
-            });
+            }).AsTask(cancellationToken);
 
-            var decoder = await BitmapDecoder.CreateAsync(rendered);
+            cancellationToken.ThrowIfCancellationRequested();
+            var decoder = await BitmapDecoder.CreateAsync(rendered).AsTask(cancellationToken);
             return await decoder.GetSoftwareBitmapAsync(
                 BitmapPixelFormat.Bgra8,
                 BitmapAlphaMode.Premultiplied,
                 new BitmapTransform { Rotation = rotation },
                 ExifOrientationMode.IgnoreExifOrientation,
-                ColorManagementMode.DoNotColorManage);
+                ColorManagementMode.DoNotColorManage).AsTask(cancellationToken);
         }
 
-        var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
-        using var stream = await file.OpenReadAsync();
-        var imageDecoder = await BitmapDecoder.CreateAsync(stream);
+        using var stream = await OffUiStorage.OpenReadAsync(item.FilePath, cancellationToken);
+        var imageDecoder = await BitmapDecoder.CreateAsync(stream).AsTask(cancellationToken);
 
-        // Scaled from the stored size, before any EXIF turn - a uniform scale, so the turn does
-        // not change it.
+        // Scale from the stored size; a uniform scale is unaffected by the EXIF turn.
         var fit = Math.Min(1.0, edge / (double)Math.Max(imageDecoder.PixelWidth, imageDecoder.PixelHeight));
         return await imageDecoder.GetSoftwareBitmapAsync(
             BitmapPixelFormat.Bgra8,
@@ -388,13 +434,10 @@ public sealed partial class MainWindow
                 Rotation = rotation
             },
             ExifOrientationMode.RespectExifOrientation,
-            ColorManagementMode.ColorManageToSRgb);
+            ColorManagementMode.ColorManageToSRgb).AsTask(cancellationToken);
     }
 
-    /// <remarks>
-    /// Disposed rather than left to the collector: the pixels live in unmanaged memory the GC
-    /// cannot see, and paging through a scan would otherwise pile up hundreds of megabytes.
-    /// </remarks>
+    /// <remarks>Disposed explicitly: the pixels are unmanaged memory the GC does not see.</remarks>
     private void ReleaseViewerImage()
     {
         if (ViewerImage.Source is SoftwareBitmapSource source)
@@ -403,6 +446,8 @@ public sealed partial class MainWindow
             source.Dispose();
         }
         _viewerRenderedEdge = 0;
+        _viewerMaxEdge = 0;
+        _viewerInFlight = default;
     }
 
     #endregion
@@ -411,7 +456,7 @@ public sealed partial class MainWindow
 
     private async Task StepViewerAsync(int delta)
     {
-        var pages = Pages.ToList();
+        var pages = Pages;
         if (pages.Count == 0) return;
 
         var target = pages[Math.Clamp(_viewerPosition + delta, 0, pages.Count - 1)];
@@ -446,10 +491,7 @@ public sealed partial class MainWindow
         }
     }
 
-    /// <summary>
-    /// Page keys for the viewer, taken before the scroll viewer sees them - otherwise Left and
-    /// Right scroll a page that already fits and never turn it.
-    /// </summary>
+    /// <summary>Page keys, handled before the ScrollViewer can use Left/Right to scroll.</summary>
     private async void ViewerPanel_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (!IsViewerOpen) return;
@@ -533,10 +575,10 @@ public sealed partial class MainWindow
         _viewerFit = fit;
         UpdateFitToggles();
         var zoom = ApplyViewerFit();
-        _ = RenderViewerPageAsync(_viewerVersion, zoom);
+        _ = RenderViewerPageSafelyAsync(_viewerVersion, zoom);
     }
 
-    /// <summary>Zooms about the middle of what is on screen, so the part being read stays put.</summary>
+    /// <summary>Zooms about the centre of the view.</summary>
     private void ZoomViewerBy(double factor)
     {
         var current = ViewerScroll.ZoomFactor;
@@ -561,7 +603,7 @@ public sealed partial class MainWindow
 
     private void ViewerFitWidth_Click(object sender, RoutedEventArgs e) => SetViewerFit(ViewerFit.Width);
 
-    /// <summary>Double-click to look closer at that spot, and again to see the whole page.</summary>
+    /// <summary>Double-click zooms in on that spot; again fits the page.</summary>
     private void ViewerSheet_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
     {
         e.Handled = true;
@@ -591,14 +633,14 @@ public sealed partial class MainWindow
         UpdateZoomText(zoom);
         if (e.IsIntermediate) return;
 
-        // Ctrl+wheel or a pinch: the zoom is the user's now, and fitting stops.
+        // Ctrl+wheel or pinch: the user's zoom, so stop fitting.
         if (_viewerFit != ViewerFit.Free && Math.Abs(zoom - _viewerAppliedZoom) > 0.01)
         {
             _viewerFit = ViewerFit.Free;
             UpdateFitToggles();
         }
 
-        _ = RenderViewerPageAsync(_viewerVersion, zoom);
+        _ = RenderViewerPageSafelyAsync(_viewerVersion, zoom);
     }
 
     private void ViewerScroll_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -606,7 +648,7 @@ public sealed partial class MainWindow
         if (!IsViewerOpen || _viewerFit == ViewerFit.Free) return;
 
         var zoom = ApplyViewerFit();
-        _ = RenderViewerPageAsync(_viewerVersion, zoom);
+        _ = RenderViewerPageSafelyAsync(_viewerVersion, zoom);
     }
 
     private void UpdateZoomText(double zoom) => ViewerZoomText.Text = $"{Math.Round(zoom * 100)}%";
@@ -623,11 +665,10 @@ public sealed partial class MainWindow
     {
         if (_viewerItem is not { } item || string.IsNullOrEmpty(item.FilePath)) return;
 
-        // Event-handler boundary: nothing visible happens if this fails, so the user is told
-        // rather than left wondering whether the button works.
+        // Event-handler boundary; report the failure so the button does not seem dead.
         try
         {
-            var file = await StorageFile.GetFileFromPathAsync(item.FilePath);
+            var file = await OffUiStorage.GetFileAsync(item.FilePath);
             await Launcher.LaunchFileAsync(file);
         }
         catch (Exception ex)

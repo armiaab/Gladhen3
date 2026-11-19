@@ -1,0 +1,33 @@
+<!--
+  The application's own Models and Services sources, compiled straight into the
+  test and benchmark assemblies.
+
+  The app is a WinUI 3 MSIX executable, which a test host cannot reference. Linking
+  the sources with UNIT_TEST defined builds the same code without the XAML types;
+  Stubs/ supplies the few names those guards remove. Anything under Services that
+  needs the window itself is left out below.
+-->
+<Project>
+	<PropertyGroup>
+		<DefineConstants>$(DefineConstants);UNIT_TEST</DefineConstants>
+		<!-- NativeImageCodec calls plugin DLLs through function pointers. -->
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<AppSourceDir>$(MSBuildThisFileDirectory)..\</AppSourceDir>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="$(AppSourceDir)Models\*.cs" LinkBase="App\Models" />
+		<Compile Include="$(AppSourceDir)Services\*.cs" LinkBase="App\Services" />
+
+		<!-- Loads files through StorageFile into XAML thumbnails. -->
+		<Compile Remove="$(AppSourceDir)Services\DocumentService.cs" />
+
+		<Compile Include="$(MSBuildThisFileDirectory)Stubs\*.cs" LinkBase="Stubs" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="PDFsharp" Version="6.2.4" />
+		<PackageReference Include="Serilog" Version="4.4.0" />
+		<PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
+	</ItemGroup>
+</Project>

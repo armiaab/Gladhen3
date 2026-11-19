@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Frozen;
 using System.IO;
 using System.IO.Compression;
@@ -10,22 +10,11 @@ using Windows.Storage.Streams;
 
 namespace Gladhen3.Services;
 
-/// <summary>
-/// A codec implemented by a DLL the user installed, speaking the C interface in
-/// CodecSdk/gladhen_codec.h.
-/// </summary>
+/// <summary>A codec in a user-installed DLL, using the C interface in CodecSdk/gladhen_codec.h.</summary>
 /// <remarks>
-/// <para>
-/// A plain C interface rather than a .NET one so that a codec can be built from whatever the
-/// algorithm already exists in - most image codecs worth having are C libraries - without the
-/// author needing this app's assemblies, or .NET at all.
-/// </para>
-/// <para>
-/// The plugin runs inside this process. A fault in its code ends the app and there is no
-/// catching it; what can be checked is the data it returns, and every stream is checked before
-/// it is allowed near a page, because a malformed one would not fail here - it would produce a
-/// PDF that fails later, in someone else's reader.
-/// </para>
+/// A C interface so codecs can be built from existing C libraries without .NET. The plugin
+/// runs in-process, so a crash in it ends the app; its output is validated before use,
+/// since a malformed stream would only fail later in someone's PDF reader.
 /// </remarks>
 internal sealed unsafe class NativeImageCodec : IImageCodec
 {
@@ -40,11 +29,8 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
     private const int MaxNameBytes = 256;
     private const int MaxNameLength = 64;
 
-    /// <summary>The filters a plugin may produce: those every PDF reader can decode without help.</summary>
-    /// <remarks>
-    /// CCITTFaxDecode is absent because it needs decode parameters this interface has no way
-    /// to carry; LZWDecode because nothing is gained by it over Flate.
-    /// </remarks>
+    /// <summary>Filters a plugin may produce: those every PDF reader decodes.</summary>
+    /// <remarks>No CCITTFax (needs decode parameters the interface cannot carry), no LZW (no gain over Flate).</remarks>
     private static readonly FrozenSet<string> SupportedFilters = new[]
     {
         "/DCTDecode", "/JPXDecode", "/FlateDecode", "/JBIG2Decode", "/RunLengthDecode"
@@ -73,7 +59,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
     private readonly delegate* unmanaged[Cdecl]<NativeImage*, float, NativeOutput*, int> _encode;
     private readonly delegate* unmanaged[Cdecl]<byte*, void> _free;
 
-    /// <summary>Serialises calls into a plugin that has not said it is safe to call concurrently.</summary>
+    /// <summary>Serialises calls into a plugin that is not declared thread-safe.</summary>
     private readonly object? _gate;
 
     private bool _disposed;
@@ -113,10 +99,10 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
         _gate = (flags & FlagThreadSafe) != 0 ? null : new object();
     }
 
-    /// <summary>What the plugin calls itself, for the compression-method list.</summary>
+    /// <summary>The plugin's display name.</summary>
     public string Name { get; }
 
-    /// <summary>The PDF filter its output decodes with, with the leading slash.</summary>
+    /// <summary>The PDF filter of its output, with the leading slash.</summary>
     public string Filter { get; }
 
     public bool ProducesJpegFile => false;
@@ -148,7 +134,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
         }
         catch
         {
-            // Not a codec after all; nothing will ever call into it, so let it go now.
+            // Not a codec; release it now.
             NativeLibrary.Free(library);
             throw;
         }
@@ -162,8 +148,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
         var width = bitmap.PixelWidth;
         var height = bitmap.PixelHeight;
 
-        // ABI 1 always hands over 8-bit RGB, tightly packed and top-down: one format for every
-        // plugin to handle, whatever the source was.
+        // ABI 1 always passes 8-bit RGB, tightly packed, top-down.
         var bgra = new byte[(long)width * height * 4];
         bitmap.CopyToBuffer(bgra.AsBuffer());
         var rgb = new byte[(long)width * height * 3];
@@ -211,14 +196,13 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
         }
     }
 
-    /// <summary>Copies out what the plugin produced, refusing anything that does not decode to this image.</summary>
+    /// <summary>Copies out the plugin's output, rejecting anything that is not this image.</summary>
     private EncodedImage Validate(NativeOutput output, int width, int height)
     {
         if (output.Data == null || output.Size == 0)
             throw Invalid("returned no data");
 
-        // Generous: well past anything a real encoder produces, and far short of what would
-        // take the process down when it is copied.
+        // Far above any real encoder's output, far below what copying could not survive.
         var ceiling = ((long)width * height * 3 * 2) + (1L << 20);
         if (output.Size > (nuint)ceiling)
             throw Invalid($"returned {output.Size} bytes for a {width}x{height} image");
@@ -243,6 +227,11 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
 
             case "/JBIG2Decode":
                 if (channels != 1 || bitsPerComponent != 1) throw Invalid("returned JBIG2 data that is not 1-bit grey");
+                CheckHeaderSize(Jbig2PageSize(data), width, height, "JBIG2");
+                break;
+
+            case "/JPXDecode":
+                CheckJpxHeader(data, width, height, channels);
                 break;
 
             case "/FlateDecode":
@@ -254,11 +243,103 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
                 break;
 
             default:
-                // JPXDecode: nothing on Windows decodes JPEG 2000 to check it against.
-                break;
+                throw Invalid($"uses {Filter}, which this app cannot check");
         }
 
         return new EncodedImage(data, Filter, width, height, channels, bitsPerComponent);
+    }
+
+    // Windows cannot decode JPEG 2000 or JBIG2, so those are checked against their headers only.
+
+    private void CheckHeaderSize((long Width, long Height)? found, int width, int height, string format)
+    {
+        if (found is not { } size) throw Invalid($"returned data that is not a {format} stream");
+        if (size.Width != width || size.Height != height)
+            throw Invalid($"returned a {size.Width}x{size.Height} {format} image for a {width}x{height} image");
+    }
+
+    private void CheckJpxHeader(byte[] data, int width, int height, int channels)
+    {
+        var header = JpxHeader(data) ?? throw Invalid("returned data that is not JPEG 2000");
+        CheckHeaderSize((header.Width, header.Height), width, height, "JPEG 2000");
+        if (header.Components != channels)
+            throw Invalid($"returned a {header.Components}-component JPEG 2000 image for {channels} channels");
+    }
+
+    private static uint ReadUInt32BigEndian(byte[] data, int offset)
+        => System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(data.AsSpan(offset, 4));
+
+    private static ushort ReadUInt16BigEndian(byte[] data, int offset)
+        => System.Buffers.Binary.BinaryPrimitives.ReadUInt16BigEndian(data.AsSpan(offset, 2));
+
+    /// <summary>Size and component count from a JP2 ihdr box or a raw codestream's SIZ marker.</summary>
+    internal static (long Width, long Height, int Components)? JpxHeader(byte[] data)
+    {
+        // Raw codestream: SOC, SIZ; Xsiz, Ysiz, XOsiz, YOsiz follow Lsiz and Rsiz; Csiz after the tile fields.
+        if (data.Length >= 40 && data[0] == 0xFF && data[1] == 0x4F && data[2] == 0xFF && data[3] == 0x51)
+        {
+            long xs = ReadUInt32BigEndian(data, 8), ys = ReadUInt32BigEndian(data, 12);
+            long xo = ReadUInt32BigEndian(data, 16), yo = ReadUInt32BigEndian(data, 20);
+            if (xo >= xs || yo >= ys) return null;
+            return (xs - xo, ys - yo, ReadUInt16BigEndian(data, 38));
+        }
+
+        // JP2 file: boxes; jp2h contains ihdr (height, width, components).
+        var offset = 0;
+        while (offset + 8 <= data.Length)
+        {
+            long length = ReadUInt32BigEndian(data, offset);
+            var type = ReadUInt32BigEndian(data, offset + 4);
+            var body = offset + 8;
+
+            if (length == 1)
+            {
+                if (offset + 16 > data.Length) return null;
+                length = (long)System.Buffers.Binary.BinaryPrimitives.ReadUInt64BigEndian(data.AsSpan(offset + 8, 8));
+                body = offset + 16;
+            }
+            else if (length == 0)
+            {
+                length = data.Length - offset;
+            }
+
+            if (length < body - offset || offset + length > data.Length) return null;
+
+            if (type == 0x6A703268) // 'jp2h': a superbox, so step into it
+            {
+                offset = body;
+                continue;
+            }
+
+            if (type == 0x69686472) // 'ihdr'
+            {
+                if (body + 10 > data.Length) return null;
+                return (ReadUInt32BigEndian(data, body + 4), ReadUInt32BigEndian(data, body), ReadUInt16BigEndian(data, body + 8));
+            }
+
+            offset += (int)length;
+        }
+
+        return null;
+    }
+
+    /// <summary>The page size from the page-information segment opening an embedded JBIG2 stream.</summary>
+    internal static (long Width, long Height)? Jbig2PageSize(byte[] data)
+    {
+        if (data.Length < 11) return null;
+
+        // Bytes 0-3: segment number.
+        var flags = data[4];
+        var type = flags & 0x3F;
+        var longPageAssociation = (flags & 0x40) != 0;
+
+        // Page information: type 48, no referred-to segments.
+        if (type != 48 || data[5] >> 5 != 0) return null;
+
+        var offset = 6 + (longPageAssociation ? 4 : 1) + 4;
+        if (offset + 8 > data.Length) return null;
+
+        return (ReadUInt32BigEndian(data, offset), ReadUInt32BigEndian(data, offset + 4));
     }
 
     private void CheckLength(long actual, long expected)
@@ -284,7 +365,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
             throw Invalid($"returned a {decoder.PixelWidth}x{decoder.PixelHeight} JPEG for a {width}x{height} image");
     }
 
-    /// <summary>Inflates at most one byte more than the image needs, so a runaway stream cannot exhaust memory.</summary>
+    /// <summary>Inflates at most one byte past what the image needs.</summary>
     private long InflatedLength(byte[] zlib, long expected)
     {
         var buffer = new byte[Math.Min(expected + 1, 1 << 20)];
@@ -305,10 +386,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
         return total;
     }
 
-    /// <summary>
-    /// The length a RunLengthDecode stream expands to, stopping just past what the image needs;
-    /// -1 if a run claims more bytes than the stream holds.
-    /// </summary>
+    /// <summary>The RunLengthDecode output length, stopping just past what the image needs; -1 if a run overruns the input.</summary>
     private static long RunLengthDecodedLength(byte[] data, long expected)
     {
         long total = 0;
@@ -319,8 +397,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
             int length = data[i++];
             if (length == 128) return total; // end of data
 
-            // A literal run copies length + 1 bytes; a repeat run reads one and writes it
-            // 257 - length times.
+            // Literal run: length + 1 bytes. Repeat run: one byte, 257 - length times.
             var consumed = length < 128 ? length + 1 : 1;
             if (i + consumed > data.Length) return -1;
 
@@ -351,7 +428,7 @@ internal sealed unsafe class NativeImageCodec : IImageCodec
         return Encoding.UTF8.GetString(text, length);
     }
 
-    /// <summary>One line of plain text: control characters become spaces, and runs of them one space.</summary>
+    /// <summary>One line of plain text: control characters collapse to single spaces.</summary>
     private static string Sanitise(string name)
     {
         var builder = new StringBuilder(name.Length);

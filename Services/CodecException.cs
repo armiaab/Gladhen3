@@ -34,13 +34,8 @@ public enum CodecFailureReason
     EncodeFailed
 }
 
-/// <summary>
-/// A codec plugin that could not be loaded, installed, removed or run.
-/// </summary>
-/// <remarks>
-/// Like <see cref="PdfOperationException"/> it carries a reason rather than a sentence, so the
-/// UI chooses the wording.
-/// </remarks>
+/// <summary>A codec plugin that could not be loaded, installed, removed or run.</summary>
+/// <remarks>Carries a reason, not a message, so the UI chooses the wording.</remarks>
 public class CodecException : Exception
 {
     public CodecException()

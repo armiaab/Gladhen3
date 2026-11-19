@@ -1,4 +1,4 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using Gladhen3.Services;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -23,8 +23,20 @@ namespace Gladhen3;
 public sealed partial class MainWindow
 {
     private bool HasSections => _documentItems.Any(d => d.Type == DocumentType.SectionBreak);
-    private IEnumerable<DocumentItem> Pages => _documentItems.Where(d => d.Type != DocumentType.SectionBreak);
+    private IReadOnlyList<DocumentItem> Pages => _pagesCache ??= BuildPagesCache();
+    private List<DocumentItem>? _pagesCache;
     private DocumentItem? _lastFocusedItem;
+
+    private List<DocumentItem> BuildPagesCache()
+    {
+        var pages = new List<DocumentItem>(_documentItems.Count);
+        foreach (var item in _documentItems)
+        {
+            if (item.Type != DocumentType.SectionBreak) pages.Add(item);
+        }
+
+        return pages;
+    }
 
     #region Section maintenance
 
@@ -118,29 +130,41 @@ public sealed partial class MainWindow
 
     private void RemoveAllBreaks()
     {
-        for (var i = _documentItems.Count - 1; i >= 0; i--)
+        var pages = new List<DocumentItem>(_documentItems.Count);
+        foreach (var item in _documentItems)
         {
-            if (_documentItems[i].Type == DocumentType.SectionBreak)
-                _documentItems.RemoveAt(i);
+            if (item.Type != DocumentType.SectionBreak) pages.Add(item);
         }
+
+        var selection = ActiveView.SelectedItems.OfType<DocumentItem>().ToList();
+        ReplaceAllDocumentItems(pages, selection);
     }
 
     private void ApplyBreakPositions(IEnumerable<int> pagePositions)
     {
         RecordUndo();
 
-        var pageCount = Pages.Count();
+        var pages = new List<DocumentItem>(_documentItems.Count);
+        foreach (var item in _documentItems)
+        {
+            if (item.Type != DocumentType.SectionBreak) pages.Add(item);
+        }
 
-        var wanted = pagePositions
-            .Where(p => p >= 0 && p < pageCount)
-            .Distinct()
-            .OrderByDescending(p => p)
-            .ToList();
+        var wanted = new HashSet<int>();
+        foreach (var position in pagePositions)
+        {
+            if ((uint)position < (uint)pages.Count) wanted.Add(position);
+        }
 
-        RemoveAllBreaks();
+        var ordered = new List<DocumentItem>(pages.Count + wanted.Count);
+        for (var i = 0; i < pages.Count; i++)
+        {
+            if (wanted.Contains(i)) ordered.Add(CreateSectionBreak(string.Empty));
+            ordered.Add(pages[i]);
+        }
 
-        foreach (var position in wanted)
-            _documentItems.Insert(position, CreateSectionBreak(string.Empty));
+        var selection = ActiveView.SelectedItems.OfType<DocumentItem>().ToList();
+        ReplaceAllDocumentItems(ordered, selection);
 
         RefreshSections();
         UpdateUIState();
@@ -165,6 +189,7 @@ public sealed partial class MainWindow
     private DocumentItem? CurrentTargetItem()
     {
         var view = _isGridView ? (ListViewBase)DocumentGridView : DocumentListView;
+        var indexByItem = BuildItemIndexMap(_documentItems);
 
         if (view.SelectedItems.Count > 0)
         {
@@ -173,8 +198,7 @@ public sealed partial class MainWindow
 
             foreach (var selected in view.SelectedItems.OfType<DocumentItem>())
             {
-                var index = _documentItems.IndexOf(selected);
-                if (index >= 0 && index < earliestIndex)
+                if (indexByItem.TryGetValue(selected, out var index) && index < earliestIndex)
                 {
                     earliestIndex = index;
                     earliest = selected;
@@ -187,7 +211,7 @@ public sealed partial class MainWindow
         var focused = ItemFromVisual(FocusManager.GetFocusedElement(Content.XamlRoot));
         if (focused != null) return focused;
 
-        return _lastFocusedItem != null && _documentItems.Contains(_lastFocusedItem)
+        return _lastFocusedItem != null && indexByItem.ContainsKey(_lastFocusedItem)
             ? _lastFocusedItem
             : null;
     }
@@ -217,8 +241,15 @@ public sealed partial class MainWindow
             return;
         }
 
-        var position = Pages.ToList().IndexOf(target);
-        if (position <= 0)
+        var pagePositions = new Dictionary<DocumentItem, int>();
+        var pageIndex = 0;
+        foreach (var item in _documentItems)
+        {
+            if (item.Type == DocumentType.SectionBreak) continue;
+            pagePositions[item] = pageIndex++;
+        }
+
+        if (!pagePositions.TryGetValue(target, out var position) || position <= 0)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusPickPageToSplit");
             return;
@@ -234,7 +265,7 @@ public sealed partial class MainWindow
 
     private void SplitBySource_Click(object sender, RoutedEventArgs e)
     {
-        var pages = Pages.ToList();
+        var pages = Pages;
         if (pages.Count == 0)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesToSplit");
@@ -246,10 +277,10 @@ public sealed partial class MainWindow
 
         for (var i = 0; i < pages.Count; i++)
         {
-            // An inserted blank page has no file of its own; it stays with the one it follows.
+            // A blank page has no file; it stays with the page it follows.
             if (pages[i].Type == DocumentType.BlankPage) continue;
 
-            // FilePath: the file a page belongs to, even once it is read from a saved-over copy.
+            // FilePath: the original file, even when reading from a saved-over copy.
             var source = pages[i].FilePath;
 
             if (previous != null && !string.Equals(source, previous, StringComparison.OrdinalIgnoreCase))
@@ -264,7 +295,7 @@ public sealed partial class MainWindow
 
     private async void SplitEveryN_Click(object sender, RoutedEventArgs e)
     {
-        var pageCount = Pages.Count();
+        var pageCount = Pages.Count;
         if (pageCount < 2)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesToSplit");
@@ -287,7 +318,7 @@ public sealed partial class MainWindow
 
     private async void SplitIntoN_Click(object sender, RoutedEventArgs e)
     {
-        var pageCount = Pages.Count();
+        var pageCount = Pages.Count;
         if (pageCount < 2)
         {
             StatusTextBlock.Text = _resourceLoader.GetString("StatusNoPagesToSplit");
@@ -346,13 +377,22 @@ public sealed partial class MainWindow
     {
         SetTextEditingShortcutsEnabled(true);
 
+        var start = _renameStart;
+        _renameStart = null;
+
         if (sender is not FrameworkElement { DataContext: DocumentItem band }) return;
         if (band.Type != DocumentType.SectionBreak) return;
-        if (!string.IsNullOrWhiteSpace(band.SectionName)) return;
 
-        band.SectionName = string.Empty;
-        NameUnnamedSections();
-        UpdateSectionSummaries();
+        if (string.IsNullOrWhiteSpace(band.SectionName))
+        {
+            band.SectionName = string.Empty;
+            NameUnnamedSections();
+            UpdateSectionSummaries();
+        }
+
+        // The rename was typed straight into the row; record the pre-edit state if the name changed.
+        if (start is { } s && ReferenceEquals(s.Band, band) && !string.Equals(s.Name, band.SectionName, StringComparison.Ordinal))
+            PushUndo(s.State);
     }
 
     private async Task<int?> PromptForCountAsync(string title, string label, int minimum, int maximum, int initial)
@@ -392,8 +432,7 @@ public sealed partial class MainWindow
 
     private async void DocumentView_PreviewKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // Enter opens the page in the viewer. Ctrl+Enter is "split here", and Enter typed into
-        // a split's name lands on a divider, which is not a page - both are left alone.
+        // Enter opens the viewer; Ctrl+Enter (split here) and Enter on a divider are left alone.
         if (e.Key == VirtualKey.Enter &&
             !InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down) &&
             ItemFromVisual(e.OriginalSource) is { } page && IsPage(page))
@@ -424,6 +463,7 @@ public sealed partial class MainWindow
         _documentItems.Move(index, target);
         e.Handled = true;
 
+        ReindexViewerPage();
         RefreshSections();
 
         var view = sender as ListViewBase ?? (_isGridView ? DocumentGridView : DocumentListView);
@@ -503,6 +543,11 @@ public sealed partial class MainWindow
         SaveButton.IsEnabled = false;
         SetBusy(true);
 
+        // Write every file from the same snapshot, whatever is edited meanwhile.
+        var snapshots = sections.Select(section => SnapshotItems(section.Items)).ToList();
+        var pending = snapshots.SelectMany(items => items).ToList();
+        var settings = AppSettings.Current;
+
         var written = new List<string>();
         var failed = new List<string>();
         var skippedItems = new List<string>();
@@ -518,9 +563,10 @@ public sealed partial class MainWindow
 
                 try
                 {
-                    // One file of the split may overwrite a source the later ones still read.
-                    PreserveSourceBeforeOverwrite(path);
-                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(sections[i].Items, path));
+                    // One file may overwrite a source that later files still read.
+                    PreserveSourceBeforeOverwrite(path, pending);
+                    var items = snapshots[i];
+                    var result = await Task.Run(() => _pdfService.CreatePdfFromDocuments(items, path, settings));
                     written.Add(names[i]);
                     foreach (var skipped in result.SkippedItems) skippedItems.Add(skipped);
                     codecFailures += result.CodecFailures;

@@ -16,8 +16,8 @@ internal sealed class GrayBitmap(int width, int height, byte[] pixels)
     public int Height { get; } = height;
     public byte[] Pixels { get; } = pixels;
 
-    /// <summary>Decodes to grey, scaled down so the long side is at most <paramref name="maxEdge"/> pixels.</summary>
-    /// <param name="exif">Respected for a photo, as the viewer shows it; ignored for a rendered page, which has none.</param>
+    /// <summary>Decodes to grey, long side at most <paramref name="maxEdge"/> pixels.</summary>
+    /// <param name="exif">Respected for photos; rendered pages have none.</param>
     public static async Task<GrayBitmap> DecodeAsync(BitmapDecoder decoder, int maxEdge, ExifOrientationMode exif)
     {
         var (w, h) = ((int)decoder.PixelWidth, (int)decoder.PixelHeight);
@@ -84,19 +84,14 @@ internal sealed class GrayBitmap(int width, int height, byte[] pixels)
     }
 }
 
-/// <summary>How much of what text recognition read looks like words, which is what tells upright text from upside down.</summary>
+/// <summary>Scores how word-like the recognised text is, which separates upright text from upside down.</summary>
 /// <remarks>
-/// Windows' recognizer reads only upright text. Turned a quarter, a page yields a handful of
-/// stray characters; upside down it yields plenty of text, but not words - "and" comes out as
-/// "pue", "of" as "JO". So each candidate turn is read, and scored on how many clean words and
-/// common words it gave.
+/// The recognizer reads only upright text: a quarter turn yields stray characters, upside
+/// down yields text that is not words ("and" becomes "pue").
 /// </remarks>
 internal readonly record struct ReadingScore(int Words, int Clean, int Common)
 {
-    /// <summary>
-    /// Short, frequent words in the languages this app is used in. Three letters or more, and
-    /// none of them reads as another one upside down.
-    /// </summary>
+    /// <summary>Short common words (three letters or more) that do not read as other words upside down.</summary>
     private static readonly HashSet<string> CommonWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "the", "and", "that", "with", "for", "this", "from", "are", "was", "which", "have", "not", "been",
@@ -110,10 +105,7 @@ internal readonly record struct ReadingScore(int Words, int Clean, int Common)
         "setiap", "maka", "harus", "lebih", "bapak", "ibu"
     };
 
-    /// <summary>
-    /// The letters an upside-down digit is read as: 0 as O, 1 as I or l, 2 as Z, 3 as E, 4 as h,
-    /// 5 as S, 7 as L, 8 as B.
-    /// </summary>
+    /// <summary>Letters upside-down digits are read as: 0→O, 1→I/l, 2→Z, 3→E, 4→h, 5→S, 7→L, 8→B.</summary>
     private const string DigitLookalikes = "OoIlZzEhSsLB";
 
     /// <summary>The fewest points a reading needs before it can win at all.</summary>
@@ -139,16 +131,10 @@ internal readonly record struct ReadingScore(int Words, int Clean, int Common)
     /// <summary>Numbers that only read as numbers the right way up; see <see cref="IsFigure"/>.</summary>
     public int Figures { get; init; }
 
-    /// <summary>
-    /// Points: two for a clean word, six for a common one, one for a figure - figures count for
-    /// less because a page of them is rarer evidence than a page of words.
-    /// </summary>
+    /// <summary>Points: 2 per clean word, 6 per common word, 1 per figure.</summary>
     public int Value => (2 * Clean) + (6 * Common) + Figures;
 
-    /// <summary>
-    /// So many common words that this cannot be anything but upright text, without reading the
-    /// other three ways. Upside-down readings of whole pages never managed more than two.
-    /// </summary>
+    /// <summary>Common words enough to accept a reading as upright without trying the other turns.</summary>
     public bool IsConclusive => Common >= 6 && Common * 20 >= Words;
 
     /// <summary>The turn whose reading is clearly the best, or null if none is.</summary>
@@ -167,15 +153,9 @@ internal readonly record struct ReadingScore(int Words, int Clean, int Common)
     }
 
     /// <summary>
-    /// Three letters or more, all letters, cased the way words are: lower, Capitalised or upper.
-    /// Rules out the "u!", "'6unpueg" and "OJ!I" an upside-down page produces, and a run of one
-    /// repeated letter, which reads the same either way up.
+    /// Three or more letters, cased like a word, not one repeated letter, and not spelt only
+    /// with letters that upside-down digits become (2025 reads as "SZOZ").
     /// </summary>
-    /// <remarks>
-    /// Nor a word spelt only with letters a digit turns into upside down. A table of figures read
-    /// the wrong way up is full of them - 2025 comes out as "SZOZ" - and it was those, against no
-    /// words at all the right way up, that turned a page of numbers upside down every time.
-    /// </remarks>
     private static bool IsClean(string word)
     {
         if (word.Length < 3 || !word.All(char.IsLetter)) return false;
@@ -185,13 +165,8 @@ internal readonly record struct ReadingScore(int Words, int Clean, int Common)
         return word.Skip(1).All(char.IsLower) || !word.Any(char.IsLower);
     }
 
-    /// <summary>
-    /// A figure of three digits or more - "1,245.50", "2025-03" - with a 2, 3, 4, 5 or 7 in it.
-    /// </summary>
-    /// <remarks>
-    /// Those five digits read as letters upside down, so a figure holding one cannot come out of
-    /// the flipped reading as a figure too. 0, 1, 6, 8 and 9 read as digits either way.
-    /// </remarks>
+    /// <summary>A figure of three or more digits containing a 2, 3, 4, 5 or 7.</summary>
+    /// <remarks>Those digits become letters upside down, so such a figure only reads correctly upright.</remarks>
     private static bool IsFigure(string token)
     {
         if (token.Length < 3 || !char.IsAsciiDigit(token[0]) || !char.IsAsciiDigit(token[^1])) return false;
@@ -217,11 +192,10 @@ internal readonly record struct ReadingScore(int Words, int Clean, int Common)
 /// <summary>Finds which way up a picture of a page is by reading it every way round.</summary>
 internal static class TextRecognitionOrientation
 {
-    /// <summary>A recognizer for the user's own languages, or any installed one, or null if Windows has none.</summary>
+    /// <summary>A recognizer for the user's languages, any installed one, or null.</summary>
     /// <remarks>
-    /// Any will do: the question is which way up the text is, not what it says, and a Latin-script
-    /// recognizer reads Indonesian - for which Windows has none of its own - perfectly well.
-    /// One per thread: a recognizer refuses a second page while it is still reading the first.
+    /// Any Latin-script recognizer works, since only orientation matters (Windows has none for
+    /// Indonesian). One per thread: a recognizer reads one page at a time.
     /// </remarks>
     public static OcrEngine? CreateEngine()
         => OcrEngine.TryCreateFromUserProfileLanguages()
@@ -232,18 +206,15 @@ internal static class TextRecognitionOrientation
     /// <summary>Smaller than this and there is nothing worth reading.</summary>
     private const int MinimumEdge = 48;
 
-    /// <summary>The clockwise turn that stands <paramref name="page"/> upright, or null if its text does not say.</summary>
-    /// <param name="current">
-    /// The turn the page has now. Read first, because it is usually right already, and one
-    /// conclusive reading is enough to say so.
-    /// </param>
+    /// <summary>The clockwise turn that makes <paramref name="page"/> upright, or null.</summary>
+    /// <param name="current">The page's current turn, tried first since it is usually right.</param>
     public static async Task<int?> DetectAsync(OcrEngine engine, GrayBitmap page, int current, CancellationToken cancellationToken)
     {
         if (Math.Min(page.Width, page.Height) < MinimumEdge) return null;
 
         var scores = new ReadingScore[4];
 
-        // Upside down is the commonest mistake after none at all, so it is tried second.
+        // Upside down is the next most common case.
         foreach (var offset in new[] { 0, 180, 90, 270 })
         {
             cancellationToken.ThrowIfCancellationRequested();

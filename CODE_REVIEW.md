@@ -12,6 +12,29 @@ Scope: tracked C#, XAML, C++, project/manifest files, build scripts, and the cur
 - NuGet vulnerability lookup could not reach `https://api.nuget.org/v3/index.json`; dependency advisories still need to be checked in CI.
 - No maintained test project is present in the repository. The project only references a removed/excluded `Gladhen3.Tests` tree.
 
+## Resolution (2026-11-20)
+
+| Finding | Status |
+| --- | --- |
+| Pipe framing / startup / interleaving | Fixed. `Services/ActivationProtocol.cs` reads header and body with `ReadExactlyAsync`, rejects bad UTF-8; `App` queues activations until the window exists and drains them one batch at a time after `MainWindow.InitialLoad`. Verified live: a launch racing the first instance's startup was received and added. |
+| Settings load race | Fixed. `AppSettings.Load()` is synchronous, size-capped, and runs in `OnLaunched` before the window. |
+| Picker exceptions | Fixed. The three add-file handlers go through `PickAndAddFilesAsync`, which catches. |
+| Save/estimate on mutable UI objects | Fixed. Rows are cloned and settings are copy-on-write; workers pin their snapshot (`AppSettings.Pin`). Copy-aside on overwrite also updates pending snapshots. |
+| Unbounded inflation / image limits | Fixed. Adler-32 pass streams through `InflateBounded` (1 GiB cap, no buffer); Flate images are measured against `/Width`×`/Height` before PDFsharp unfilters them; decodes capped at 16384² pixels. Page-count caps were not added: large page counts are legitimate and bounded per page. |
+| Settings dialog success before persistence | Fixed. Button deferral, save to a clone, swap only on success; the caller reports failure after the dialog closes. |
+| Reserved device names | Fixed. Matched on the part before the first dot (trailing spaces trimmed), plus `CONIN$`, `CONOUT$`, superscript COM/LPT. |
+| Section rename undo | Fixed. State captured on focus, pushed on lost focus if the name changed. |
+| Reverse with one selected page | Fixed for select mode (a tick narrows the command, as Normalize does). One page clicked outside select mode still means "all pages", by design. |
+| Viewer CTS / document cleanup | CTS cancelled and disposed on every replacement. `Windows.Data.Pdf.PdfDocument` has no Close/Dispose (only its pages do, and they are disposed), so dropping it is the release. The rapid-navigation TODO and a UI test remain open. |
+| Concurrent PDFsharp access | Fixed. `ImageJob.Prepare` (the PDFsharp read) runs under a document lock; decode/encode stays parallel. |
+| Native codec isolation | Not done (needs an out-of-process host). JPX and JBIG2 output is now checked against its header size; unknown filters are refused. |
+| Model/spec bounds | Fixed. `OrientationModelSpec.IsWithinBounds` (edges ≤ 2048, finite values, non-zero std), spec files capped at 64 KB; sizes read from the model itself are bounded too. |
+| URI commas | Fixed. Raw query split first, each part decoded once with `Uri.UnescapeDataString`. Verified live with `second, with comma.pdf`. |
+| Shell-extension fallback | Fixed. Root fallback removed, ARM64 no longer points at x64 output; packaging builds fail if the matching DLL is missing. |
+| Tests | Added `tests/Gladhen3.Tests` (79 tests), `benchmarks/Gladhen3.Benchmarks`, and `.github/workflows/ci.yml`. |
+
+Not done: the reducer/state-layer refactor, the rope/index-map structure, and a single operation queue (structural items 1, 2, 5).
+
 ## Findings that can break behavior
 
 ### High: named-pipe IPC assumes one read returns the complete frame

@@ -1,16 +1,13 @@
 ﻿using Microsoft.UI.Xaml;
 using Serilog;
 using System;
-using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Web;
 
 namespace Gladhen3;
 
@@ -22,6 +19,11 @@ public partial class App : Application
     private static Mutex? _mutex;
     private static CancellationTokenSource? _pipeServerCts;
     private MainWindow? _mainWindow;
+    private Microsoft.UI.Dispatching.DispatcherQueue? _uiQueue;
+
+    /// <summary>Files from other launches, waiting their turn. UI thread only.</summary>
+    private readonly Queue<List<string>> _pendingActivations = new();
+    private bool _drainingActivations;
 
     public static App? Instance { get; private set; }
 
@@ -33,15 +35,10 @@ public partial class App : Application
         HookGlobalExceptionHandlers();
     }
 
-    /// <summary>
-    /// Last line of defence for exceptions nothing else caught.
-    /// </summary>
+    /// <summary>Logs anything nothing else caught.</summary>
     /// <remarks>
-    /// There was no handler at all before this, so a failure on a background thread or inside
-    /// an unawaited task ended the process with nothing written to the log to say why.
-    /// Nothing here marks the exception handled: the process state is unknown at that point,
-    /// and carrying on regardless is how corrupt output gets written. It fails, but it fails
-    /// with a record of what happened.
+    /// Nothing is marked handled: the process state is unknown by then, and carrying on risks
+    /// writing corrupt output.
     /// </remarks>
     private void HookGlobalExceptionHandlers()
     {
@@ -59,7 +56,7 @@ public partial class App : Application
 
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            // Marked observed so it does not escalate on finalization, but it is still a bug.
+            // Observed so it does not escalate on finalization; it is still a bug.
             Log.Error(e.Exception, "Unobserved task exception");
             e.SetObserved();
         };
@@ -76,18 +73,52 @@ public partial class App : Application
         {
             Log.Information("Another instance is running, sending files to existing instance");
             SendFilesToExistingInstance(filePaths);
-            // Environment.Exit runs no finalizers, so the log has to be flushed by hand here
-            // or this instance's entries - including any failure handing the files over -
-            // never reach the file.
+            // Environment.Exit skips finalizers, so flush the log by hand.
             Services.AppLog.Shutdown();
             Environment.Exit(0);
             return;
         }
 
+        // Loaded before the window so nothing runs on the defaults.
+        Models.AppSettings.Load();
+
+        // Until the window exists, received files wait in the queue.
+        _uiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         StartPipeServer();
 
         _mainWindow = filePaths.Count > 0 ? new MainWindow(filePaths) : new MainWindow();
         _mainWindow.Activate();
+        _ = DrainActivationsAsync();
+    }
+
+    /// <summary>Queues files handed over by another launch. UI thread only.</summary>
+    private void EnqueueActivation(List<string> paths)
+    {
+        _pendingActivations.Enqueue(paths);
+        _ = DrainActivationsAsync();
+    }
+
+    /// <summary>Adds queued activations one batch at a time, after the start-up load.</summary>
+    /// <remarks>Serialised so launches cannot interleave pages or undo steps. UI thread only.</remarks>
+    private async Task DrainActivationsAsync()
+    {
+        if (_drainingActivations || _mainWindow == null) return;
+        _drainingActivations = true;
+
+        try
+        {
+            await _mainWindow.InitialLoad;
+
+            while (_pendingActivations.TryDequeue(out var paths))
+            {
+                await _mainWindow.AddFilesFromPathsAsync(paths);
+                BringWindowToFront();
+            }
+        }
+        finally
+        {
+            _drainingActivations = false;
+        }
     }
 
     private static void SendFilesToExistingInstance(List<string> filePaths)
@@ -97,19 +128,12 @@ public partial class App : Application
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             client.Connect(2000);
 
-            var message = string.Join("|", filePaths);
-            var bytes = Encoding.UTF8.GetBytes(message);
-
-            var lengthBytes = BitConverter.GetBytes(bytes.Length);
-            client.Write(lengthBytes, 0, lengthBytes.Length);
-            client.Write(bytes, 0, bytes.Length);
-            client.Flush();
+            Services.ActivationProtocol.Write(client, filePaths);
 
             Log.Information("Sent {Count} file(s) to existing instance", filePaths.Count);
         }
-        // The other instance may be busy, shutting down, or gone between the mutex check and
-        // now. This one is exiting either way, so there is nobody left to report to.
-        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException)
+        // The other instance may be busy or gone; this one is exiting either way.
+        catch (Exception ex) when (ex is TimeoutException or IOException or UnauthorizedAccessException or ArgumentException)
         {
             Log.Error(ex, "Could not hand {Count} file(s) to the running instance", filePaths.Count);
         }
@@ -141,45 +165,21 @@ public partial class App : Application
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
-                var lengthBuffer = new byte[4];
-                var bytesRead = await server.ReadAsync(lengthBuffer.AsMemory(0, 4), cancellationToken);
-                if (bytesRead < 4) continue;
+                var paths = await Services.ActivationProtocol.ReadAsync(server, cancellationToken);
+                if (paths == null) continue;
 
-                var messageLength = BitConverter.ToInt32(lengthBuffer, 0);
-                if (messageLength <= 0 || messageLength > 1024 * 1024) continue; // Max 1 MB
+                var existing = paths.Where(File.Exists).ToList();
+                if (existing.Count == 0) continue;
 
-                var messageBuffer = ArrayPool<byte>.Shared.Rent(messageLength);
-                try
-                {
-                    bytesRead = await server.ReadAsync(messageBuffer.AsMemory(0, messageLength), cancellationToken);
-                    if (bytesRead < messageLength) continue;
-
-                    var message = Encoding.UTF8.GetString(messageBuffer, 0, messageLength);
-                    var receivedPaths = message.Split('|', StringSplitOptions.RemoveEmptyEntries)
-                                               .Where(File.Exists)
-                                               .ToList();
-
-                    if (receivedPaths.Count > 0)
-                    {
-                        Log.Information("Received {Count} file(s) from another instance", receivedPaths.Count);
-                        _mainWindow?.DispatcherQueue.TryEnqueue(() =>
-                        {
-                            AddFilesToMainWindow(receivedPaths);
-                            BringWindowToFront();
-                        });
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(messageBuffer);
-                }
+                Log.Information("Received {Count} file(s) from another instance", existing.Count);
+                if (_uiQueue?.TryEnqueue(() => EnqueueActivation(existing)) != true)
+                    Log.Warning("Could not queue {Count} received file(s); the window is shutting down", existing.Count);
             }
             catch (OperationCanceledException)
             {
                 break;
             }
-            // A long-lived background loop: one bad message or a client that disconnects
-            // mid-write must not take the listener down for the rest of the session.
+            // One bad message must not stop the listener.
             catch (Exception ex)
             {
                 Log.Error(ex, "Error in pipe server; continuing to listen");
@@ -190,21 +190,11 @@ public partial class App : Application
         Log.Information("IPC pipe server stopped");
     }
 
-    private void AddFilesToMainWindow(List<string> filePaths)
-    {
-        if (_mainWindow == null) return;
-
-        // No try/catch: AddFilesFromPaths is "async void", so it never throws back to this
-        // caller - an exception inside it goes to the synchronization context, not up the
-        // stack - and it already reports its own failures. Wrapping it caught nothing.
-        _mainWindow.AddFilesFromPaths(filePaths);
-    }
-
     private void BringWindowToFront()
     {
         if (_mainWindow == null) return;
 
-        // Purely cosmetic, and the window handle is gone if the window is already closing.
+        // Cosmetic; the handle is gone if the window is closing.
         try
         {
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_mainWindow);
@@ -236,30 +226,9 @@ public partial class App : Application
     }
 
     private static void ParseGladhenUri(string uriString, List<string> filePaths)
-    {
-        // Anything can invoke a registered protocol, so malformed input is ordinary rather
-        // than exceptional - it is tested for instead of being caught after the fact.
-        if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri))
-        {
-            Log.Warning("Ignoring a malformed activation URI");
-            return;
-        }
+        => filePaths.AddRange(Services.ActivationProtocol.ParseUri(uriString).Where(File.Exists));
 
-        var files = HttpUtility.ParseQueryString(uri.Query)["files"];
-        if (string.IsNullOrEmpty(files))
-            return;
-
-        foreach (var encodedPath in files.Split(','))
-        {
-            var decodedPath = HttpUtility.UrlDecode(encodedPath);
-            if (!string.IsNullOrEmpty(decodedPath) && File.Exists(decodedPath))
-                filePaths.Add(decodedPath);
-        }
-    }
-
-    /// <summary>
-    /// Cleanup on app shutdown
-    /// </summary>
+    /// <summary>Releases the pipe server and the single-instance mutex.</summary>
     public static void Cleanup()
     {
         _pipeServerCts?.Cancel();

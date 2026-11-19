@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 
 namespace Gladhen3.Dialogs;
 
-/// <summary>Says why a codec plugin could not be used, in words for the person who installed it.</summary>
+/// <summary>Explains why a codec plugin could not be used.</summary>
 internal static class CodecText
 {
     public static string Reason(ResourceLoader loader, CodecFailureReason reason) => reason switch

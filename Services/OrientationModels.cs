@@ -1,4 +1,4 @@
-using Serilog;
+﻿using Serilog;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -23,10 +23,7 @@ public enum OrientationModelFailureReason
     /// <summary>Windows could not load the file as an ONNX model.</summary>
     LoadFailed,
 
-    /// <summary>
-    /// Windows could not load the model, and it uses a newer ONNX opset than the oldest Windows
-    /// versions run - most likely the reason.
-    /// </summary>
+    /// <summary>Windows could not load the model, which uses a newer ONNX opset than old Windows versions support.</summary>
     NeedsNewerWindows,
 
     /// <summary>The model does not take a colour image or does not give four answers.</summary>
@@ -85,11 +82,8 @@ public enum ModelResize
     Stretch
 }
 
-/// <summary>How to feed a model a picture, and what its four answers mean.</summary>
-/// <remarks>
-/// Written beside an installed model as <c>&lt;model&gt;.json</c>. The same file may come with a
-/// model the user adds; it is then checked rather than believed.
-/// </remarks>
+/// <summary>How to feed a model a picture, and what its four outputs mean.</summary>
+/// <remarks>Stored beside an installed model as <c>&lt;model&gt;.json</c>; one supplied with a new model is verified, not trusted.</remarks>
 public sealed record OrientationModelSpec
 {
     public string Name { get; init; } = string.Empty;
@@ -101,7 +95,7 @@ public sealed record OrientationModelSpec
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public ModelResize Resize { get; init; } = ModelResize.Crop;
 
-    /// <summary>For <see cref="ModelResize.Crop"/>: the share of the scaled short side that is kept, as 224 of 256.</summary>
+    /// <summary>For <see cref="ModelResize.Crop"/>: the share of the scaled short side kept (224 of 256).</summary>
     public double CropShare { get; init; } = 224d / 256d;
 
     /// <summary>"RGB" or "BGR".</summary>
@@ -114,16 +108,10 @@ public sealed record OrientationModelSpec
 
     public float[] Std { get; init; } = [0.229f, 0.224f, 0.225f];
 
-    /// <summary>
-    /// For each of the model's four outputs, how far the page it saw is turned clockwise, in
-    /// degrees. Learned from the sample pages when a model is installed.
-    /// </summary>
+    /// <summary>For each output, the clockwise turn of the page it saw, learned from the sample pages.</summary>
     public int[] Labels { get; init; } = [0, 90, 180, 270];
 
-    /// <summary>
-    /// The averaged probability a reading needs before a page is turned. Below it, and whenever
-    /// the four readings disagree, the page is left as it is.
-    /// </summary>
+    /// <summary>Averaged probability required to turn a page; below it, or if readings disagree, it is left alone.</summary>
     public double MinimumConfidence { get; init; } = 0.7;
 
     [JsonIgnore]
@@ -139,22 +127,30 @@ public sealed record OrientationModelSpec
 
     internal bool HasValidLabels
         => Labels.Length == 4 && Labels.All(l => l % 90 == 0) && Labels.Select(l => Models.DocumentItem.NormaliseRotation(l)).Distinct().Count() == 4;
+
+    /// <summary>Largest accepted input edge; orientation classifiers take 224 to 512.</summary>
+    internal const int MaxInputEdge = 2048;
+
+    /// <summary>Whether every value can actually be fed to a model.</summary>
+    /// <remarks>The description is user-editable; huge sizes or zero/NaN deviations would allocate absurdly or poison the input.</remarks>
+    internal bool IsWithinBounds
+        => Width is > 0 and <= MaxInputEdge
+        && Height is > 0 and <= MaxInputEdge
+        && double.IsFinite(CropShare) && CropShare is > 0 and <= 1
+        && float.IsFinite(Scale) && Scale != 0
+        && Channels is "RGB" or "BGR"
+        && Mean is { Length: 3 } && Mean.All(float.IsFinite)
+        && Std is { Length: 3 } && Std.All(v => float.IsFinite(v) && MathF.Abs(v) >= 1e-6f);
 }
 
 /// <summary>One entry in the list of models a user has added.</summary>
 /// <param name="LoadFailure">Why the model cannot be used, or null if it can.</param>
 public sealed record OrientationModelInfo(string Id, string FileName, string? Name, OrientationModelFailureReason? LoadFailure);
 
-/// <summary>
-/// The ways normalize can tell which way up a picture of a page is: the model that ships with the
-/// app, models the user adds, or Windows' own text recognition.
-/// </summary>
+/// <summary>Ways to judge a page picture's orientation: the built-in model, user models, or Windows text recognition.</summary>
 /// <remarks>
-/// A model is any ONNX image classifier with four outputs, one per quarter turn - there are
-/// several on Hugging Face. Models run on Windows ML, which is part of Windows, so they cost the
-/// package nothing but the model file. Each one a user adds is tried on sample pages turned all
-/// four ways before it is accepted, which also works out how it wants to be fed and what its
-/// outputs mean: a model that turns pages the wrong way is far worse than none.
+/// A model is any ONNX classifier with four outputs, one per quarter turn, run on the
+/// inbox Windows ML. User models are calibrated on sample pages before they are accepted.
 /// </remarks>
 public static class OrientationModels
 {
@@ -169,16 +165,15 @@ public static class OrientationModels
     public const string BuiltInFileName = "pp-lcnet-doc-ori.onnx";
 
     /// <summary>
-    /// PP-LCNet_x1_0_doc_ori as published by PaddlePaddle: ImageNet normalisation, 224 pixels cut
-    /// from the centre of a 256-pixel scale, labels "0", "90", "180", "270" for a page turned
-    /// that far clockwise. Its ONNX opset is 7, which every Windows this app runs on supports.
+    /// PP-LCNet_x1_0_doc_ori: ImageNet normalisation, 224 px centre crop of a 256 px scale,
+    /// labels 0/90/180/270 clockwise; ONNX opset 7.
     /// </summary>
     public static OrientationModelSpec BuiltInSpec { get; } = new() { Name = "PP-LCNet document orientation" };
 
     private static string? _modelDirectory;
     private static string? _assetDirectory;
 
-    /// <summary>Where added models are kept: a folder of the app's own local data.</summary>
+    /// <summary>Folder for added models, in the app's local data.</summary>
     public static string ModelDirectory
     {
         get => _modelDirectory ??= Path.Combine(ApplicationData.Current.LocalFolder.Path, "OrientationModels");
@@ -208,8 +203,8 @@ public static class OrientationModels
             OrientationModelFailureReason.FailedCheck, $"'{Path.GetFileName(path)}' has no description; add it again.") { Path = path });
     }
 
-    /// <summary>Lists the models in <see cref="ModelDirectory"/>, including ones that are no longer usable.</summary>
-    /// <remarks>Reads only the descriptions; nothing is loaded until a check runs.</remarks>
+    /// <summary>Lists the models in <see cref="ModelDirectory"/>, including unusable ones.</summary>
+    /// <remarks>Reads descriptions only; nothing is loaded.</remarks>
     public static IReadOnlyList<OrientationModelInfo> List()
     {
         var found = new List<OrientationModelInfo>();
@@ -228,14 +223,12 @@ public static class OrientationModels
         return found;
     }
 
-    /// <summary>Copies a model into <see cref="ModelDirectory"/>, once it has shown it can orient the sample pages.</summary>
+    /// <summary>Copies a model into <see cref="ModelDirectory"/> once it orients the sample pages correctly.</summary>
     /// <remarks>
-    /// A description beside the source (<c>model.json</c> for <c>model.onnx</c>) says how to
-    /// feed it; without one the usual conventions are each tried in turn. Either way the labels
-    /// are taken from what the model actually does with the sample pages. What was learned is
-    /// written beside the copy, so the check is not repeated each time the model is used.
+    /// A <c>model.json</c> beside the source says how to feed it; otherwise common conventions
+    /// are tried. Labels always come from calibration. The result is saved beside the copy.
     /// </remarks>
-    /// <exception cref="OrientationModelException">The file is not a model this app can use.</exception>
+    /// <exception cref="OrientationModelException">The file is not a usable model.</exception>
     public static async Task<OrientationModelInfo> InstallAsync(string sourcePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
@@ -256,7 +249,7 @@ public static class OrientationModels
         Directory.CreateDirectory(ModelDirectory);
         File.Copy(sourcePath, target);
 
-        // A copy without its description would be listed as broken, so it goes if that cannot be written.
+        // A copy without its description would be listed as broken, so remove it if that write fails.
         var described = false;
         try
         {
@@ -285,7 +278,7 @@ public static class OrientationModels
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Loaded by a check that is still running.
+            // Still loaded by a running check.
             throw new OrientationModelException(OrientationModelFailureReason.InUse, $"'{Path.GetFileName(path)}' is in use.", ex) { Path = path };
         }
 
@@ -293,10 +286,7 @@ public static class OrientationModels
     }
 
     /// <summary>The model file an id refers to.</summary>
-    /// <remarks>
-    /// The id comes from the settings file, which anything can edit, so it is held to a bare
-    /// file name: an id must not be able to load a file from anywhere but the model folder.
-    /// </remarks>
+    /// <remarks>The id comes from an editable settings file, so only a bare file name in the model folder is accepted.</remarks>
     private static string ModelPath(string id)
     {
         var fileName = id[ModelPrefix.Length..];
@@ -318,15 +308,25 @@ public static class OrientationModels
         WriteIndented = true
     };
 
+    private const long MaxSpecBytes = 64 * 1024;
+
     /// <returns>Null if there is no description, or it cannot be read as one.</returns>
     private static OrientationModelSpec? ReadSpec(string path)
     {
-        if (!File.Exists(path)) return null;
+        var info = new FileInfo(path);
+        if (!info.Exists) return null;
+
+        // Descriptions are a few hundred bytes; refuse anything far larger.
+        if (info.Length > MaxSpecBytes)
+        {
+            Log.Warning("Model description {Path} is {Bytes} bytes, over the {Max} limit", path, info.Length, MaxSpecBytes);
+            return null;
+        }
 
         try
         {
             var spec = JsonSerializer.Deserialize<OrientationModelSpec>(File.ReadAllText(path), SpecJson);
-            return spec is { Width: > 0, Height: > 0, Mean.Length: 3, Std.Length: 3 } && spec.HasValidLabels ? spec : null;
+            return spec is { IsWithinBounds: true, HasValidLabels: true } ? spec : null;
         }
         catch (JsonException ex)
         {
@@ -335,15 +335,16 @@ public static class OrientationModels
         }
     }
 
-    // ------------------------------------------------------------------------------ calibration
+    // Calibration.
 
-    /// <summary>
-    /// The ways image classifiers are usually fed, for a model that came without a description:
-    /// three ways of fitting the picture, three normalisations, two channel orders.
-    /// </summary>
+    /// <summary>Common input conventions to try for a model without a description.</summary>
     private static IEnumerable<OrientationModelSpec> Conventions(ImageOrientationModel model, string name)
     {
         var (width, height) = model.InputSize ?? (224, 224);
+
+        // The size comes from the model file, which is untrusted too.
+        if (width is <= 0 or > OrientationModelSpec.MaxInputEdge || height is <= 0 or > OrientationModelSpec.MaxInputEdge)
+            yield break;
         (float[] Mean, float[] Std)[] normalisations =
         [
             ([0.485f, 0.456f, 0.406f], [0.229f, 0.224f, 0.225f]),
@@ -361,17 +362,12 @@ public static class OrientationModels
     internal static IEnumerable<string> SamplePages()
         => Directory.Exists(AssetDirectory) ? Directory.GetFiles(AssetDirectory, "sample-page-*.jpg").Order(StringComparer.OrdinalIgnoreCase) : [];
 
-    /// <summary>
-    /// Shows the model every sample page at every quarter turn, and keeps the way of feeding it
-    /// under which it reads them most confidently - provided it reads them all consistently.
-    /// </summary>
+    /// <summary>Picks the input convention under which the model reads every sample page at every turn most confidently.</summary>
     /// <remarks>
-    /// Consistent means each turn always gets the same answer, on every page, and the four turns
-    /// four different answers. That is also what the labels mean, whatever the model calls them,
-    /// so they are taken from here rather than from any description: a model whose "90" means
-    /// anticlockwise works as well as one whose "90" means clockwise.
+    /// Each turn must always get the same answer and the four turns four different answers;
+    /// that mapping becomes the labels, whatever the model calls them.
     /// </remarks>
-    /// <returns>The description to use, or null if no way of feeding it passes.</returns>
+    /// <returns>The description to use, or null if no convention passes.</returns>
     private static async Task<OrientationModelSpec?> CalibrateAsync(ImageOrientationModel model, IEnumerable<OrientationModelSpec> candidates, CancellationToken cancellationToken)
     {
         var pages = SamplePages().ToList();
@@ -413,8 +409,7 @@ public static class OrientationModels
             Log.Debug("Model calibration: {Resize} {Channels} mean [{Mean}] reads the samples at {Confidence:P0}, labels [{Labels}]",
                 candidate.Resize, candidate.Channels, string.Join(", ", candidate.Mean), confidence, string.Join(", ", labels));
 
-            // The candidates come commonest first, and a later one has to be clearly better to
-            // replace an earlier one: a model that works several ways is fed the usual way.
+            // Commonest first; a later candidate must be clearly better to replace an earlier one.
             if (confidence >= CalibrationConfidence && confidence > bestConfidence + ClearlyBetter)
             {
                 best = candidate with { Labels = labels };
@@ -425,7 +420,7 @@ public static class OrientationModels
         return best;
     }
 
-    /// <summary>How sure, on average, a model has to be of the sample pages - all typed, all clear.</summary>
+    /// <summary>Average confidence a model needs on the sample pages.</summary>
     private const double CalibrationConfidence = 0.6;
 
     private const double ClearlyBetter = 0.02;

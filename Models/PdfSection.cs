@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,8 +14,19 @@ public sealed class PdfSection(string requestedName, DocumentItem? breakItem, Li
     {
         "CON", "PRN", "AUX", "NUL",
         "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "COM0",
-        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT0"
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9", "LPT0",
+        "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³",
+        "CONIN$", "CONOUT$"
     };
+
+    /// <summary>Whether Windows treats <paramref name="stem"/> as a device name.</summary>
+    /// <remarks>Matched on the part before the first dot, trailing spaces removed ("CON.report").</remarks>
+    internal static bool IsReservedDeviceName(string stem)
+    {
+        var dot = stem.IndexOf('.');
+        var basePart = (dot < 0 ? stem : stem[..dot]).TrimEnd(' ');
+        return ReservedNames.Contains(basePart);
+    }
 
     private const int MaxStemLength = 100;
 
@@ -100,7 +111,7 @@ public sealed class PdfSection(string requestedName, DocumentItem? breakItem, Li
 
         if (cleaned.Length == 0) return string.Empty;
 
-        return ReservedNames.Contains(cleaned) ? "_" + cleaned : cleaned;
+        return IsReservedDeviceName(cleaned) ? "_" + cleaned : cleaned;
     }
 
     public static string SuggestName(IReadOnlyList<DocumentItem> items)
@@ -114,8 +125,7 @@ public sealed class PdfSection(string requestedName, DocumentItem? breakItem, Li
             // An inserted blank page belongs to no file, so it says nothing about the name.
             if (item.Type is DocumentType.SectionBreak or DocumentType.BlankPage) continue;
 
-            // FilePath rather than SourcePdfPath: after the original has been saved over, a page
-            // is read from a copy with a meaningless name, but it still belongs to the original.
+            // FilePath, not SourcePdfPath: after saving over the original, pages read from a copy.
             var source = item.FilePath;
 
             if (string.IsNullOrEmpty(source)) return string.Empty;

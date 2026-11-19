@@ -4,9 +4,8 @@ using System.Collections.Generic;
 namespace Gladhen3.Services;
 
 /// <param name="CodecFailures">
-/// Images the chosen compression method failed on, which were therefore kept as they were.
-/// Only a plugin can fail this way; it is reported so that a broken codec does not pass for one
-/// that simply found nothing to shrink.
+/// Images the chosen plugin failed on (kept unchanged), reported so a broken codec does not
+/// look like one with nothing to shrink.
 /// </param>
 public sealed record PdfBuildResult(int PagesWritten, IReadOnlyList<string> SkippedItems, int CodecFailures = 0);
 
@@ -46,6 +45,6 @@ public class PdfOperationException : Exception
 
     public string? Path { get; init; }
 
-    /// <summary>Set with <see cref="PdfFailureReason.CodecUnavailable"/>: why the plugin would not load.</summary>
+    /// <summary>With <see cref="PdfFailureReason.CodecUnavailable"/>: why the plugin would not load.</summary>
     public CodecFailureReason? CodecReason { get; init; }
 }

@@ -12,10 +12,7 @@ using System.Threading.Tasks;
 
 namespace Gladhen3;
 
-/// <summary>
-/// Normalize: turn every page so that it reads the right way up - the fix for a stack of scans
-/// fed in every which way, or a PDF assembled from pages that were never turned.
-/// </summary>
+/// <summary>Normalize: turns every page the right way up.</summary>
 public sealed partial class MainWindow
 {
     /// <summary>The check under way, if there is one.</summary>
@@ -26,10 +23,7 @@ public sealed partial class MainWindow
 
     private bool _watchingStatus;
 
-    /// <summary>
-    /// Save and normalize can run at once, and each used to hide the busy bar when it finished
-    /// whether or not the other still needed it.
-    /// </summary>
+    /// <summary>How many operations are using the busy bar; save and normalize can overlap.</summary>
     private int _busyCount;
 
     private void SetBusy(bool busy)
@@ -40,26 +34,21 @@ public sealed partial class MainWindow
 
     /// <summary>The pages to normalize.</summary>
     /// <remarks>
-    /// The page right-clicked or in the viewer; pages the user chose; otherwise every page,
-    /// since "make all of these the right way up" is what the command is for. A single page
-    /// selected by an ordinary click is just where the user happens to be, so it takes two or
-    /// more to narrow the command - or any in select mode, where every tick is deliberate.
-    /// Reverse draws the same line.
+    /// The anchored or viewed page; else the selection when it is a real choice (two or more,
+    /// or any in select mode); else every page.
     /// </remarks>
     private List<DocumentItem> NormalizeTargets(DocumentItem? anchor)
     {
         if (anchor != null || _viewerItem != null) return TargetItems(anchor);
 
         var selected = SelectedItemsInOrder();
-        return selected.Count >= (_isSelectMode ? 1 : 2) ? selected : Pages.ToList();
+        return selected.Count >= (_isSelectMode ? 1 : 2) ? selected : [.. Pages];
     }
 
-    /// <summary>Checks each page and turns it upright as soon as its answer is in.</summary>
+    /// <summary>Checks each page and turns it as soon as its result arrives.</summary>
     /// <remarks>
-    /// Turns are applied as they arrive, so a long scan visibly straightens itself rather than
-    /// sitting still for a minute. The list stays editable meanwhile: a page that has been
-    /// removed, or that the user has turned by hand since, is left as it is now - their turn
-    /// wins - and undo or redo stops the check, so that it cannot turn pages back after them.
+    /// The list stays editable: a page removed or turned by hand meanwhile is left alone, and
+    /// undo or redo stops the check.
     /// </remarks>
     private async Task NormalizeAsync(List<DocumentItem> targets)
     {
@@ -73,21 +62,18 @@ public sealed partial class MainWindow
         var pages = targets.Where(item => item.Type is DocumentType.PdfPage or DocumentType.Image).Select(PageToCheck.Of).ToList();
         if (pages.Count == 0)
         {
-            StatusTextBlock.Text = _resourceLoader.GetString(Pages.Any() ? "StatusNormalizeNothing" : "StatusNoPagesYet");
+            StatusTextBlock.Text = _resourceLoader.GetString(Pages.Count > 0 ? "StatusNormalizeNothing" : "StatusNoPagesYet");
             return;
         }
 
-        // One undo step for the whole run, taken now: a user's own edit made while this runs
-        // then lands on top of it, and undoing that edit cannot also undo this.
+        // One undo step for the whole run, recorded before it starts.
         RecordUndo();
         var undoStep = _undo[^1];
 
         var cts = new CancellationTokenSource();
         _normalizeCts = cts;
 
-        // Everything the lanes found, and - on this thread - what was acted on. They differ after
-        // a stop: pages still being read finish and report, but are not turned, and must not be
-        // counted as upright either.
+        // Everything found, and what was actually applied; they differ after a stop.
         var results = new ConcurrentDictionary<PageToCheck, OrientationFinding>();
         var handled = new Dictionary<PageToCheck, OrientationFinding>();
 
@@ -117,8 +103,7 @@ public sealed partial class MainWindow
         {
             // Stopped; the token says so below.
         }
-        // The chosen model would not load, so no page was checked. Said once, here, rather
-        // than as a failure on every page.
+        // The model failed to load: report it once, not per page.
         catch (OrientationModelException ex)
         {
             Log.Warning(ex, "Normalize: the orientation model {Method} could not be used ({Reason})", options.Method, ex.Reason);
@@ -126,8 +111,7 @@ public sealed partial class MainWindow
         }
         finally
         {
-            // From the token, not from whether the run threw: a stop that arrives after the last
-            // page was checked throws nothing, and still has to keep the turns below from landing.
+            // Check the token, not whether it threw: a late stop throws nothing.
             stopped = cts.IsCancellationRequested;
             NormalizeStopButton.Visibility = Visibility.Collapsed;
             SetBusy(false);
@@ -135,8 +119,7 @@ public sealed partial class MainWindow
             cts.Dispose();
         }
 
-        // Progress reports are posted to this thread and may still be queued behind the end of
-        // the run; whatever has not arrived yet is taken from the full set instead.
+        // Progress reports may still be queued; take what has not arrived from the full set.
         if (!stopped)
         {
             foreach (var (page, finding) in results)
@@ -173,18 +156,14 @@ public sealed partial class MainWindow
         if (unreadable > 0) await OfferTextRecognitionAsync(unreadable);
     }
 
-    /// <summary>
-    /// Shows "Select them" beside the summary when some pages could not be judged: those are the
-    /// ones still worth a look, and in a long scan they are hard to find by eye.
-    /// </summary>
-    /// <remarks>Not for the one page in the viewer, which is already the one on show.</remarks>
+    /// <summary>Shows "Select them" when some pages could not be judged.</summary>
+    /// <remarks>Not for a single page in the viewer.</remarks>
     private void OfferLeftAlone(IEnumerable<DocumentItem> pages)
     {
         _leftAlone = InListOrder(pages);
         if (_leftAlone.Count == 0 || IsViewerOpen) return;
 
-        // The link describes the summary next to it, so it goes as soon as the status says
-        // anything else.
+        // The link belongs to the summary, so hide it once the status changes.
         if (!_watchingStatus)
         {
             StatusTextBlock.RegisterPropertyChangedCallback(TextBlock.TextProperty, (_, _) => NormalizeReviewButton.Visibility = Visibility.Collapsed);
@@ -209,10 +188,8 @@ public sealed partial class MainWindow
     private readonly record struct NormalizeSummary(int Turned, int Upright, int Unsure, int NotChecked, int Failed);
 
     /// <remarks>
-    /// A page counts as turned only if it now has the turn that was found for it, and as upright
-    /// only if that turn is the one it already had. A page the user turned by hand meanwhile, or
-    /// removed, is neither: what happened to it was their doing. A picture that nothing could
-    /// read is "not checked" rather than "no text": it very likely has text.
+    /// Turned or upright only if the page still has the found turn; pages the user changed or
+    /// removed meanwhile count as neither. An unreadable picture is "not checked", not "no text".
     /// </remarks>
     private static NormalizeSummary Summarize(Dictionary<PageToCheck, OrientationFinding> handled) => new(
         handled.Count(h => h.Value.Turn is { } turn && turn != h.Key.Rotation && h.Key.Item.Rotation == turn),
@@ -221,7 +198,7 @@ public sealed partial class MainWindow
         handled.Count(h => h.Value.Evidence == OrientationEvidence.NoRecognizer),
         handled.Count(h => h.Value.Evidence == OrientationEvidence.Failed));
 
-    /// <summary>Turns one page as its finding says, unless the page has moved on since it was checked.</summary>
+    /// <summary>Turns one page as found, unless it changed since it was checked.</summary>
     private void Apply(PageToCheck page, OrientationFinding finding)
     {
         if (finding.Turn is not { } turn) return;
@@ -232,7 +209,7 @@ public sealed partial class MainWindow
         item.Rotation = turn;
     }
 
-    /// <summary>Stops the check, keeping whatever it has turned so far; one undo puts those back.</summary>
+    /// <summary>Stops the check, keeping the turns so far; one undo reverts them.</summary>
     private void StopNormalize() => _normalizeCts?.Cancel();
 
     private void NormalizeStop_Click(object sender, RoutedEventArgs e) => StopNormalize();
@@ -252,7 +229,6 @@ public sealed partial class MainWindow
         Add(summary.NotChecked, "NormalizeNotChecked");
         Add(summary.Failed, "NormalizeFailed");
 
-        // A comma in both languages this app speaks.
         var described = string.Join(", ", parts);
         if (!stopped) return string.Format(_resourceLoader.GetString("StatusNormalized"), described);
 
@@ -261,14 +237,10 @@ public sealed partial class MainWindow
             : string.Format(_resourceLoader.GetString("StatusNormalizeStopped"), handled, total, described);
     }
 
-    /// <summary>
-    /// Says why pictures of pages were skipped, when the reason is that Windows has no text
-    /// recognizer - and where to get one.
-    /// </summary>
+    /// <summary>Explains skipped pictures when Windows has no text recognizer installed.</summary>
     /// <remarks>
-    /// Only when text recognition was chosen instead of a model: Windows has none for Indonesian,
-    /// so a PC set up in Indonesian alone has none at all. Adding English, or any language that
-    /// comes with text recognition, fixes it - or going back to the model, which needs neither.
+    /// Only when text recognition is the chosen method; Windows has none for Indonesian, so
+    /// adding a language that has one (or using the model) fixes it.
     /// </remarks>
     private async Task OfferTextRecognitionAsync(int pages)
     {
@@ -286,7 +258,7 @@ public sealed partial class MainWindow
             await Windows.System.Launcher.LaunchUriAsync(new Uri("ms-settings:regionlanguage"));
     }
 
-    /// <summary>Keeps every finding, and passes each one on to be applied as it arrives.</summary>
+    /// <summary>Records every finding and forwards each to be applied.</summary>
     private sealed class Tee(
         ConcurrentDictionary<PageToCheck, OrientationFinding> results,
         IProgress<(PageToCheck Page, OrientationFinding Finding)> next) : IProgress<(PageToCheck Page, OrientationFinding Finding)>

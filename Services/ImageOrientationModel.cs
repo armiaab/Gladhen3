@@ -16,10 +16,7 @@ internal sealed class BgraPicture(int width, int height, byte[] pixels)
     public int Height { get; } = height;
     public byte[] Pixels { get; } = pixels;
 
-    /// <summary>
-    /// Decodes at about the size <paramref name="spec"/> needs, so the model's own fitting is
-    /// nearly one to one and the downscaling is WIC's.
-    /// </summary>
+    /// <summary>Decodes near the size <paramref name="spec"/> needs, so WIC does most of the downscaling.</summary>
     public static async Task<BgraPicture> DecodeAsync(BitmapDecoder decoder, OrientationModelSpec spec, ExifOrientationMode exif)
     {
         var swapped = exif == ExifOrientationMode.RespectExifOrientation && decoder.OrientedPixelWidth != decoder.PixelWidth;
@@ -68,10 +65,7 @@ internal sealed class BgraPicture(int width, int height, byte[] pixels)
         return new BgraPicture(turnedW, turnedH, turned);
     }
 
-    /// <summary>
-    /// Writes the picture into <paramref name="tensor"/> at <paramref name="offset"/>, fitted
-    /// and normalised as <paramref name="spec"/> says.
-    /// </summary>
+    /// <summary>Writes the picture into <paramref name="tensor"/> at <paramref name="offset"/>, fitted and normalised per <paramref name="spec"/>.</summary>
     public void Fill(float[] tensor, int offset, OrientationModelSpec spec, bool channelsLast)
     {
         var (outW, outH) = (spec.Width, spec.Height);
@@ -136,11 +130,7 @@ internal sealed class BgraPicture(int width, int height, byte[] pixels)
 internal readonly record struct ModelReading(int? Turn, double Confidence, int Agreeing);
 
 /// <summary>An ONNX orientation classifier loaded into Windows ML.</summary>
-/// <remarks>
-/// Windows ML is part of Windows itself - the same ONNX Runtime, shipped with the OS - so a model
-/// costs the package nothing beyond its own file. Which ONNX opsets it runs depends on the
-/// Windows version; the built-in model is opset 7, which all of them do.
-/// </remarks>
+/// <remarks>Windows ML ships with Windows, so a model costs only its file. The built-in model is opset 7, which every supported version runs.</remarks>
 public sealed class ImageOrientationModel : IDisposable
 {
     private readonly LearningModel _model;
@@ -193,8 +183,7 @@ public sealed class ImageOrientationModel : IDisposable
         {
             model = LearningModel.LoadFromFilePath(path);
         }
-        // What Windows ML throws for a file it cannot run: not ONNX at all, or operators this
-        // version of Windows does not have.
+        // Windows ML's error for a file it cannot run: not ONNX, or unsupported operators.
         catch (Exception ex) when (ex is COMException or ArgumentException)
         {
             var opset = OnnxHeader.Opset(path);
@@ -234,15 +223,11 @@ public sealed class ImageOrientationModel : IDisposable
         /// <summary>The model's four probabilities for one picture, read with <paramref name="spec"/>.</summary>
         public float[] Probabilities(BgraPicture picture, OrientationModelSpec spec) => Evaluate([picture], spec)[0];
 
-        /// <summary>
-        /// Reads the picture at all four quarter turns and combines them.
-        /// </summary>
+        /// <summary>Reads the picture at all four quarter turns and combines them.</summary>
         /// <remarks>
-        /// Each reading says how the page it saw is turned; turned back by the amount it was
-        /// turned for that reading, all four should name the same correction. Averaging them
-        /// makes the answer the same whichever way the picture arrived, and requiring all four
-        /// to agree is what keeps a model away from pictures it does not understand - a photo
-        /// with no text gets four different guesses, a page of text gets one answer four times.
+        /// Corrected for the turn applied, all four readings should agree. Averaging makes the
+        /// answer independent of how the picture arrived; requiring agreement rejects pictures the
+        /// model does not understand.
         /// </remarks>
         public ModelReading Read(BgraPicture picture)
         {

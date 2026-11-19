@@ -1,4 +1,4 @@
-using Gladhen3.Models;
+﻿using Gladhen3.Models;
 using Gladhen3.Services;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -169,8 +169,7 @@ public sealed partial class SettingsDialog : ContentDialog
             Log.Warning(ex, "Could not read the codec folder {Path}", ImageCodecs.PluginDirectory);
         }
 
-        // A plugin chosen earlier but since deleted from outside the app is still shown, marked,
-        // so that the setting does not quietly turn into JPEG behind the user's back.
+        // Keep showing a plugin deleted outside the app, marked, rather than silently using JPEG.
         if (ImageCodecs.IsPlugin(selectedId) && !plugins.Exists(p => p.Id == selectedId))
             plugins.Add(new ImageCodecInfo(selectedId, selectedId[ImageCodecs.PluginPrefix.Length..], null, null, CodecFailureReason.NotFound));
 
@@ -218,8 +217,7 @@ public sealed partial class SettingsDialog : ContentDialog
 
         var fileName = string.Empty;
 
-        // Event-handler boundary: async void, and every outcome is reported in the dialog itself
-        // - a second ContentDialog cannot open while this one is up.
+        // Event-handler boundary; outcomes are shown inside this dialog, since a second one cannot open.
         try
         {
             var file = await picker.PickSingleFileAsync();
@@ -261,13 +259,9 @@ public sealed partial class SettingsDialog : ContentDialog
         {
             ImageCodecs.Uninstall(plugin.Id);
 
-            // The saved method goes with its DLL, whether or not OK is pressed: left pointing at
-            // a file that no longer exists, it would fail the next save.
+            // Saved right away, OK or not: the setting must not point at a deleted DLL.
             if (AppSettings.Current.ImageCodec == plugin.Id)
-            {
-                AppSettings.Current.ImageCodec = ImageCodecs.JpegId;
-                await AppSettings.SaveAsync();
-            }
+                await AppSettings.UpdateAsync(settings => settings.ImageCodec = ImageCodecs.JpegId);
 
             PopulateMethods(ImageCodecs.JpegId);
             ShowCodecMessage(InfoBarSeverity.Success, string.Format(_resourceLoader.GetString("SettingsCodecRemoved"), name));
@@ -316,8 +310,7 @@ public sealed partial class SettingsDialog : ContentDialog
             Log.Warning(ex, "Could not read the model folder {Path}", OrientationModels.ModelDirectory);
         }
 
-        // A model chosen earlier but since deleted from outside the app is still shown, marked,
-        // so that the setting does not quietly turn into the built-in one behind the user's back.
+        // Keep showing a model deleted outside the app, marked, rather than silently using the built-in one.
         if (OrientationModels.IsModel(selectedId) && !models.Exists(m => m.Id == selectedId))
             models.Add(new OrientationModelInfo(selectedId, selectedId[OrientationModels.ModelPrefix.Length..], null, OrientationModelFailureReason.NotFound));
 
@@ -376,15 +369,14 @@ public sealed partial class SettingsDialog : ContentDialog
 
         var fileName = string.Empty;
 
-        // Event-handler boundary: async void, and every outcome is reported in the dialog itself
-        // - a second ContentDialog cannot open while this one is up.
+        // Event-handler boundary; outcomes are shown inside this dialog, since a second one cannot open.
         try
         {
             var file = await picker.PickSingleFileAsync();
             if (file == null) return;
             fileName = file.Name;
 
-            // Trying a model on the sample pages every way it might want feeding takes a few seconds.
+            // Calibrating a model on the sample pages takes a few seconds.
             AddModelButton.IsEnabled = false;
             ModelProgress.IsActive = true;
             ModelProgress.Visibility = Visibility.Visible;
@@ -426,13 +418,9 @@ public sealed partial class SettingsDialog : ContentDialog
         {
             OrientationModels.Uninstall(model.Id);
 
-            // The saved method goes with its model, whether or not OK is pressed: left pointing
-            // at a file that no longer exists, normalize would refuse to run.
+            // Saved right away, OK or not: the setting must not point at a deleted model.
             if (AppSettings.Current.OrientationMethod == model.Id)
-            {
-                AppSettings.Current.OrientationMethod = OrientationModels.BuiltInId;
-                await AppSettings.SaveAsync();
-            }
+                await AppSettings.UpdateAsync(settings => settings.OrientationMethod = OrientationModels.BuiltInId);
 
             PopulateOrientationMethods(OrientationModels.BuiltInId);
             ShowModelMessage(InfoBarSeverity.Success, string.Format(_resourceLoader.GetString("SettingsModelRemoved"), name));
@@ -465,62 +453,61 @@ public sealed partial class SettingsDialog : ContentDialog
     private void PresetA5_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 0; WidthBox.Value = 148; HeightBox.Value = 210; }
     private void Preset4x6_Click(object sender, RoutedEventArgs e) { UnitCombo.SelectedIndex = 1; WidthBox.Value = 4; HeightBox.Value = 6; }
 
+    /// <summary>Why the last save failed, or null.</summary>
+    /// <remarks>The caller reports it after this dialog closes; a second dialog cannot open now.</remarks>
+    public Exception? SaveFailure { get; private set; }
+
     private async void ContentDialog_PrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
-        AppSettings.Current.PaperSize = (PdfPaperSize)PaperSizeCombo.SelectedIndex;
-        AppSettings.Current.Orientation = (PdfPaperOrientation)OrientationCombo.SelectedIndex;
-        AppSettings.Current.Margin = (PdfPageMargin)MarginCombo.SelectedIndex;
-        AppSettings.Current.ImageCompression = (PdfImageCompression)CompressionCombo.SelectedIndex;
-        AppSettings.Current.ImageCodec = (MethodCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? ImageCodecs.JpegId;
-        AppSettings.Current.OrientationMethod = SelectedOrientationMethod;
-        AppSettings.Current.OrientationTextRecognitionFallback = TextRecognitionFallbackCheck.IsChecked == true;
-
-        // Kept by Windows for this app, not in the settings file: it has to be in force before
-        // the first window is built, which is before the settings file has been read. An empty
-        // value goes back to following Windows. It takes effect from the next start.
-        //
-        // Windows.Globalization, not the App SDK's Microsoft.Windows.Globalization: that one
-        // forwards the value here when it is set, but only remembers it for the current process,
-        // so after a restart it read back empty and Settings showed "Same as Windows" while the
-        // app was in Indonesian - and saving the dialog unchanged would have switched it back.
-        Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride =
-            (LanguageCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? string.Empty;
-
-        if (AppSettings.Current.PaperSize == PdfPaperSize.Custom)
-        {
-            AppSettings.Current.CustomSizeUnit = (UnitSize)UnitCombo.SelectedIndex;
-            AppSettings.Current.CustomWidth = WidthBox.Value;
-            AppSettings.Current.CustomHeight = HeightBox.Value;
-        }
-        if (AppSettings.Current.Margin == PdfPageMargin.Custom)
-        {
-            AppSettings.Current.CustomMarginUnit = (UnitSize)MarginUnitCombo.SelectedIndex;
-            AppSettings.Current.CustomMarginLeft = LeftMarginBox.Value;
-            AppSettings.Current.CustomMarginRight = RightMarginBox.Value;
-            AppSettings.Current.CustomMarginTop = TopMarginBox.Value;
-            AppSettings.Current.CustomMarginBottom = BottomMarginBox.Value;
-        }
+        // Keep the dialog open until the write finishes.
+        var deferral = args.GetDeferral();
+        SaveFailure = null;
 
         try
         {
-            await AppSettings.SaveAsync();
+            // Edit a copy; it replaces Current only once it is on disk.
+            var next = AppSettings.Current.Clone();
+            next.PaperSize = (PdfPaperSize)PaperSizeCombo.SelectedIndex;
+            next.Orientation = (PdfPaperOrientation)OrientationCombo.SelectedIndex;
+            next.Margin = (PdfPageMargin)MarginCombo.SelectedIndex;
+            next.ImageCompression = (PdfImageCompression)CompressionCombo.SelectedIndex;
+            next.ImageCodec = (MethodCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? ImageCodecs.JpegId;
+            next.OrientationMethod = SelectedOrientationMethod;
+            next.OrientationTextRecognitionFallback = TextRecognitionFallbackCheck.IsChecked == true;
+
+            if (next.PaperSize == PdfPaperSize.Custom)
+            {
+                next.CustomSizeUnit = (UnitSize)UnitCombo.SelectedIndex;
+                next.CustomWidth = WidthBox.Value;
+                next.CustomHeight = HeightBox.Value;
+            }
+            if (next.Margin == PdfPageMargin.Custom)
+            {
+                next.CustomMarginUnit = (UnitSize)MarginUnitCombo.SelectedIndex;
+                next.CustomMarginLeft = LeftMarginBox.Value;
+                next.CustomMarginRight = RightMarginBox.Value;
+                next.CustomMarginTop = TopMarginBox.Value;
+                next.CustomMarginBottom = BottomMarginBox.Value;
+            }
+
+            await AppSettings.SaveAsync(next);
+
+            // Stored by Windows, not in the settings file, because it must apply before the first
+            // window is built; takes effect on the next start. Windows.Globalization rather than the
+            // App SDK API, which only remembers the value for the current process. Set after the file
+            // is written so a failed save changes nothing.
+            Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride =
+                (LanguageCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? string.Empty;
         }
+        // Event-handler boundary.
         catch (Exception ex)
         {
             Log.Error(ex, "Failed to save settings");
-            await ShowSaveFailedAsync();
+            SaveFailure = ex;
         }
-    }
-
-    private async Task ShowSaveFailedAsync()
-    {
-        var dialog = new ContentDialog
+        finally
         {
-            Title = _resourceLoader.GetString("DialogTitleError"),
-            Content = _resourceLoader.GetString("DialogContentSettingsNotSaved"),
-            CloseButtonText = _resourceLoader.GetString("DialogButtonOK"),
-            XamlRoot = XamlRoot
-        };
-        await DialogHost.ShowAsync(dialog);
+            deferral.Complete();
+        }
     }
 }

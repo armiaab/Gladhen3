@@ -39,10 +39,14 @@
 
 	<!-- ShellExtension DLL path based on platform and configuration -->
 	<PropertyGroup>
+		<!-- Building the project on its own (dotnet build, the test project) leaves no solution
+		     directory; the solution sits beside this file. -->
+		<SolutionDir Condition="'$(SolutionDir)' == '' Or '$(SolutionDir)' == '*Undefined*'">$(MSBuildProjectDirectory)\</SolutionDir>
 		<ShellExtensionDllPath Condition="'$(Platform)' == 'x64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
 		<ShellExtensionDllPath Condition="'$(Platform)' == 'x86'">$(SolutionDir)Win32\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
-		<ShellExtensionDllPath Condition="'$(Platform)' == 'ARM64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
-		<ShellExtensionDllPathFallback>$(SolutionDir)ShellExtension.dll</ShellExtensionDllPathFallback>
+		<!-- The native project has no ARM64 configuration yet. Its own folder, so an ARM64 build
+		     never picks up an x64 DLL that its Explorer cannot load. -->
+		<ShellExtensionDllPath Condition="'$(Platform)' == 'ARM64'">$(SolutionDir)ARM64\$(Configuration)\ShellExtension.dll</ShellExtensionDllPath>
 	</PropertyGroup>
 	<ItemGroup>
 	  <Compile Remove=".github\**" />
@@ -53,6 +57,12 @@
 	  <None Remove="Gladhen3.Tests\**" />
 	  <Page Remove=".github\**" />
 	  <Page Remove="Gladhen3.Tests\**" />
+	  <!-- Test and benchmark projects: separate assemblies that link these sources. -->
+	  <Compile Remove="tests\**;benchmarks\**" />
+	  <EmbeddedResource Remove="tests\**;benchmarks\**" />
+	  <None Remove="tests\**;benchmarks\**" />
+	  <Page Remove="tests\**;benchmarks\**" />
+	  <Content Remove="tests\**;benchmarks\**" />
 	</ItemGroup>
 	<ItemGroup>
 	  <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
@@ -125,17 +135,24 @@
 	  <Folder Include="Interop\" />
 	</ItemGroup>
 	
-	<!-- Reference ShellExtension.dll from build output or fallback to root -->
+	<!-- ShellExtension.dll from the native build for this architecture, and only from there.
+	     There used to be a fallback to a DLL in the repository root, which is whatever was
+	     built last - x64 here - so an x86 or ARM64 package could ship the wrong architecture. -->
 	<ItemGroup>
 	  <None Include="$(ShellExtensionDllPath)" Condition="Exists('$(ShellExtensionDllPath)')">
 	    <Link>ShellExtension.dll</Link>
 	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	</None>
-	  <None Include="$(ShellExtensionDllPathFallback)" Condition="!Exists('$(ShellExtensionDllPath)') And Exists('$(ShellExtensionDllPathFallback)')">
-	    <Link>ShellExtension.dll</Link>
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
 	  </None>
 	</ItemGroup>
+
+	<!-- A package without the extension has no Explorer menu, so packaging stops; a plain
+	     build (tests, the CLI) only warns, since the app runs without it. -->
+	<Target Name="RequireShellExtensionDll" BeforeTargets="Build">
+		<Error Condition="'$(GenerateAppxPackageOnBuild)' == 'true' And !Exists('$(ShellExtensionDllPath)')"
+		       Text="ShellExtension.dll for $(Platform) is missing at '$(ShellExtensionDllPath)'. Build the ShellExtension project for $(Platform)|$(Configuration) first." />
+		<Warning Condition="'$(GenerateAppxPackageOnBuild)' != 'true' And !Exists('$(ShellExtensionDllPath)')"
+		         Text="ShellExtension.dll for $(Platform) not found at '$(ShellExtensionDllPath)'; this build has no Explorer menu." />
+	</Target>
 
 	<!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
@@ -174,19 +191,6 @@
 		<GenerateTemporaryStoreCertificate>True</GenerateTemporaryStoreCertificate>
 	</PropertyGroup>
 
-	<!-- Copy ShellExtension.dll from C++ build output to Gladhen3 output -->
-	<Target Name="CopyShellExtensionDll" AfterTargets="Build">
-		<PropertyGroup>
-			<ShellExtensionSource Condition="'$(Platform)' == 'x64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionSource>
-			<ShellExtensionSource Condition="'$(Platform)' == 'x86'">$(SolutionDir)Win32\$(Configuration)\ShellExtension.dll</ShellExtensionSource>
-			<ShellExtensionSource Condition="'$(Platform)' == 'ARM64'">$(SolutionDir)x64\$(Configuration)\ShellExtension.dll</ShellExtensionSource>
-			<ShellExtensionFallback>$(SolutionDir)ShellExtension.dll</ShellExtensionFallback>
-		</PropertyGroup>
-		<!-- Copy from C++ build output if exists -->
-		<Copy SourceFiles="$(ShellExtensionSource)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="Exists('$(ShellExtensionSource)')" />
-		<!-- Fallback: copy from solution root if C++ build output doesn't exist -->
-		<Copy SourceFiles="$(ShellExtensionFallback)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" Condition="!Exists('$(ShellExtensionSource)') And Exists('$(ShellExtensionFallback)')" />
-	</Target>
 	<!-- SIZE: iText 9.x ships all 12 modules in one NuGet package. Gladhen3 only touches
 	     iText.IO.Image, iText.Kernel.Pdf and iText.Kernel.Pdf.Canvas. Drop the rest.
 	     itext.commons + itext.bouncy-castle-connector stay: kernel loads them at runtime

@@ -1,0 +1,61 @@
+# Test and benchmark code follows FreeBSD style(9), carried over to C#:
+#
+#   https://man.freebsd.org/cgi/man.cgi?query=style&sektion=9
+#
+#   - Indent with hard tabs, 8 columns wide; continuation lines get 4 more
+#     spaces.  Lines stay within 80 columns.
+#   - A type's or a method's opening brace goes on a line of its own; the
+#     brace of an if, for, while, switch or try stays on the statement's line.
+#   - A space after a keyword (if, for, while, switch, return), none between
+#     a method name and its "(".
+#   - Return values are parenthesised: "return (x);".
+#   - Locals are declared at the top of the method, explicitly typed, not
+#     initialised in the declaration when that can be avoided.
+#   - Comments are complete sentences.  A comment over more than one line is
+#     a "/*" block with a " *" margin; "//" only for one line.
+#   - using directives sorted, System first.
+#
+# The application sources keep their own style; this file applies only under
+# this directory.  Check with:
+#
+#   dotnet format whitespace benchmarks/Gladhen3.Benchmarks --verify-no-changes
+#   dotnet format style benchmarks/Gladhen3.Benchmarks --verify-no-changes
+
+[*.cs]
+indent_style = tab
+indent_size = tab
+tab_width = 8
+max_line_length = 80
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+csharp_new_line_before_open_brace = types, methods, properties, accessors, local_functions, anonymous_types, object_collection_array_initializers
+csharp_new_line_before_else = false
+csharp_new_line_before_catch = false
+csharp_new_line_before_finally = false
+csharp_new_line_before_members_in_object_initializers = true
+
+csharp_space_after_keywords_in_control_flow_statements = true
+csharp_space_between_method_call_name_and_opening_parenthesis = false
+csharp_space_between_method_declaration_name_and_open_parenthesis = false
+csharp_space_after_cast = false
+
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = false
+
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = false
+
+csharp_style_var_for_built_in_types = false:warning
+csharp_style_var_when_type_is_apparent = false:warning
+csharp_style_var_elsewhere = false:warning
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_prefer_braces = when_multiline:warning
+
+dotnet_diagnostic.IDE0007.severity = none
+dotnet_diagnostic.IDE0008.severity = warning
+dotnet_diagnostic.IDE0161.severity = warning
+# IDE0055 is Roslyn's own layout, which cannot express style(9)'s 4-space
+# continuation indent or a return type on its own line; it stays off.
+dotnet_diagnostic.IDE0055.severity = none
